@@ -104,3 +104,15 @@ GL effects are implemented as Jitter shaders (`.jxs`) rather than JS/patcher log
   (blur), `ab.spotmask_mod01.jxs` (spot masking).
 - Each `.jxs` declares its `<param>`s (bound to `vp`/`fp` programs) and its GLSL source either inline
   in a `<program>` CDATA block or via `source="filename.glsl"` pointing into `shaders/shared/`.
+
+## Deep architecture reference
+
+The sections above are a high-level orientation. For a complete, file-by-file map of all 49
+patchers (grouped into 11 functional clusters: app shell, layer engine core, per-layer engine
+instance, layer select/masking/warping, layer GUI/mixing/clips, core video sources, secondary
+video sources, presets/cues, control surfaces, modulation, and scripting/shaders/data), see
+[`docs/architecture/00-overview.md`](docs/architecture/00-overview.md) and the per-cluster docs it
+links to. For a categorized inventory of technical debt (platform gaps, toolchain/version debt,
+closed-source dependencies, dead code, naming inconsistencies, architectural fragility, hardcoded
+limits, missing tests/CI, and licensing constraints) to weigh before any modernization work, see
+[`docs/TECH_DEBT.md`](docs/TECH_DEBT.md).
