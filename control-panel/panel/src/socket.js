@@ -1,4 +1,4 @@
-export function connectControlPlane(url, { onState, onUpdate, onCreate, onDelete, onStatus }) {
+export function connectControlPlane(url, { onState, onUpdate, onCreate, onDelete, onPreview, onStatus }) {
   const socket = new WebSocket(url);
 
   socket.addEventListener("open", () => onStatus?.("connected"));
@@ -11,7 +11,12 @@ export function connectControlPlane(url, { onState, onUpdate, onCreate, onDelete
     else if (message.type === "update") onUpdate(message.path, message.value);
     else if (message.type === "create") onCreate?.(message.path, message.key, message.value);
     else if (message.type === "delete") onDelete?.(message.path);
+    else if (message.type === "preview") onPreview?.(message.screenId, message.frame);
   });
 
-  return socket;
+  function send(message) {
+    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  }
+
+  return { socket, send };
 }

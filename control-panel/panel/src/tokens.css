@@ -1,0 +1,32 @@
+:root {
+  --ink: #0a0c11;
+  --panel: #151922;
+  --panel-raised: #1c212c;
+  --panel-sunken: #0e1117;
+  --hairline: #2a303d;
+  --hairline-soft: #1f242e;
+
+  --text: #e7e9ef;
+  --muted: #838ba0;
+  --muted-dim: #565d70;
+
+  --signal: #3ae0d1;
+  --signal-dim: rgba(58, 224, 209, 0.16);
+
+  --good: #5fd97a;
+  --warn: #e8b23d;
+  --live: #ff5470;
+  --live-dim: rgba(255, 84, 112, 0.16);
+
+  --font-ui: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+}

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPT control panel</title>
+<link rel="stylesheet" href="./src/tokens.css">
+<link rel="stylesheet" href="./src/base.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3) var(--space-5);
+    border-bottom: 1px solid var(--hairline);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .wordmark { font-size: 13px; font-weight: 700; letter-spacing: .04em; }
+  .wordmark span { color: var(--signal); }
+  #audio-owner { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  #status { font-size: 11px; color: var(--muted); }
+
+  .layout { flex: 1; display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
+  #layer-rack { padding: var(--space-4); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .rack-title { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-dim); }
+
+  .strip {
+    display: grid; grid-template-columns: 24px 1fr 150px 110px 130px auto;
+    align-items: center; gap: var(--space-2);
+    padding: var(--space-2); background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+  }
+  .idx { text-align: center; color: var(--muted-dim); font-size: 11px; }
+  .meta .name-input { width: 100%; background: transparent; border: none; font-size: 12px; font-weight: 600; color: var(--text); padding: 4px 0; }
+  .source-group { display: flex; flex-direction: column; gap: 4px; }
+  .source-group select, .source-group input[type="text"] { font-size: 10px; padding: 4px 6px; }
+  .source-group input[type="color"] { width: 100%; height: 24px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: none; padding: 0; }
+  .blend-select { font-size: 10px; padding: 4px 6px; }
+  .opacity-field { display: flex; align-items: center; gap: 6px; }
+  .opacity-field input[type="range"] { flex: 1; }
+  .opacity-val { font-size: 10px; width: 32px; text-align: right; }
+  .toggles { display: flex; gap: 5px; }
+
+  aside { border-left: 1px solid var(--hairline); padding: var(--space-4); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-5); }
+  aside > div h3 { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-dim); margin: 0 0 var(--space-2); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+  .panel-head h3 { margin: 0; }
+  .mode-group { display: flex; gap: 6px; margin-bottom: var(--space-2); flex-wrap: wrap; }
+
+  .stage {
+    position: relative; aspect-ratio: 16/9; border-radius: var(--radius-md); border: 1px solid var(--hairline);
+    background: var(--panel-sunken);
+  }
+  /* Clipping lives on this inner wrapper, NOT .stage itself — handles are siblings of
+     it, positioned directly on .stage, so a handle sitting exactly at a 0/1 corner never
+     has half its hit area clipped away right where corner-pin most needs it draggable. */
+  .stage__frame { position: absolute; inset: 0; overflow: hidden; border-radius: var(--radius-md); }
+  .preview-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .handle {
+    position: absolute; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--ink); border: 2px solid var(--signal); transform: translate(-50%, -50%);
+    cursor: grab; touch-action: none;
+  }
+  .handle[data-active="true"] { background: var(--signal); }
+
+  .pip-box {
+    position: absolute; border: 1px solid var(--signal); border-radius: 3px;
+    background: rgba(58, 224, 209, 0.08);
+  }
+  .pip-box__bar {
+    display: flex; align-items: center; padding: 2px 6px; background: var(--panel-raised);
+    font-size: 9px; cursor: move; touch-action: none; color: var(--text);
+  }
+  .pip-box__resize {
+    position: absolute; bottom: 0; right: 0; width: 12px; height: 12px;
+    border-right: 2px solid var(--signal); border-bottom: 2px solid var(--signal);
+    cursor: nwse-resize; touch-action: none;
+  }
+  .pip-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+  .pip-row input[type="text"] { flex: 1; min-width: 0; }
+
+  #presets-bar .bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .preset {
+    padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid var(--hairline);
+    background: var(--panel); font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .preset-name-input { width: 120px; }
+  .save-btn {
+    padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--hairline);
+    background: var(--panel-raised); color: var(--text); font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="wordmark">room<span>&middot;</span>cast control</div>
+    <div id="audio-owner"></div>
+    <div id="status">connecting…</div>
+  </header>
+
+  <div class="layout">
+    <div id="layer-rack"></div>
+    <aside>
+      <div id="warp-editor"></div>
+      <div id="pip-manager"></div>
+      <div>
+        <h3>Presets</h3>
+        <div id="presets-bar"></div>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
