@@ -162,10 +162,15 @@ go straight to two outlets. It exists purely so `livemodule-vpt7.maxpat` has a s
 
 - `code/tabs.js` — referenced by the `js tabs.js` object in `vpt7project.maxpat` (line 3949,
   `"filename" : "tabs.js"`).
-- `externals/OSC-route.mxo` — every `OSC-route` object in this cluster depends on it:
-  `vpt7project.maxpat`'s three root `OSC-route` dispatchers and `livemodule-vpt7.maxpat`'s
+- `OSC-route.mxo` — **referenced but not bundled.** Every `OSC-route` object in this cluster depends
+  on it: `vpt7project.maxpat`'s three root `OSC-route` dispatchers and `livemodule-vpt7.maxpat`'s
   `OSC-route /a` / `OSC-route /on /rec /recdest`. Both files list it in their Max-generated
-  `dependency_cache` (`vpt7project.maxpat` line 7163; `livemodule-vpt7.maxpat` line 4237).
+  `dependency_cache` (`vpt7project.maxpat` line 7163; `livemodule-vpt7.maxpat` line 4237), but no
+  `OSC-route.mxo` file exists anywhere under `vpt8 source code/externals/` (confirmed enumeration:
+  the directory contains exactly 7 items — `Label.mxo`, `Ldiv.mxo`, `Lmult.mxo`,
+  `imp.artnet.node.mxo`, `jit.gl.syphonclient.mxo`, `jit.gl.syphonserver.mxo`, `o.route.mxo` — none
+  of which is `OSC-route.mxo`). This is a missing/unresolved third-party dependency (likely a
+  separately-installed CNMAT-style OSC object package), not one of the project's bundled externals.
 - Built-in Jitter objects requiring no external: `jit.grab` (`livemodule_d.maxpat`),
   `jit.qt.record`, `jit.gl.texture`, `jit.fpsgui` (`vpt7project.maxpat`).
 - `data/gui.json` — read/written by `vpt7project.maxpat`'s `pattrstorage gui`.
@@ -203,18 +208,25 @@ go straight to two outlets. It exists purely so `livemodule-vpt7.maxpat` has a s
 
 ## Tech-debt findings
 
-1. **[platform-gap]** `OSC-route.mxo` is a Mac-only compiled external (per `CLAUDE.md`, no
-   Windows `.mxe64` externals exist in this repo), yet the root OSC dispatch in
-   `vpt7project.maxpat` and the live-module's OSC control surface both depend directly on
-   `OSC-route` objects for all OSC-address routing. Location: `vpt8 source code/patchers/vpt7project.maxpat`
+1. **[missing-dependency]** `OSC-route.mxo` is referenced by this project's own Max-generated
+   `dependency_cache` metadata, but no such file exists anywhere under
+   `vpt8 source code/externals/` (confirmed enumeration: only 7 externals are actually bundled —
+   `Label.mxo`, `Ldiv.mxo`, `Lmult.mxo`, `imp.artnet.node.mxo`, `jit.gl.syphonclient.mxo`,
+   `jit.gl.syphonserver.mxo`, `o.route.mxo` — `OSC-route.mxo` is not among them). Yet the root OSC
+   dispatch in `vpt7project.maxpat` and the live-module's OSC control surface both depend directly
+   on `OSC-route` objects for all OSC-address routing, so opening either patcher on a machine
+   without this external separately installed (likely a third-party CNMAT-style OSC object package)
+   will produce unresolved-object errors. Location: `vpt8 source code/patchers/vpt7project.maxpat`
    — dependency_cache entry `"name" : "OSC-route.mxo"` (line 7163); `vpt8 source code/patchers/livemodule-vpt7.maxpat`
    — same entry (line 4237). Severity: high. Effort: high.
-2. **[closed-dependency]** `OSC-route.mxo` (and transitively `Label.mxo`, `imp.artnet.node.mxo`,
-   `jit.gl.syphonclient.mxo`/`jit.gl.syphonserver.mxo`, `Lmult.mxo`, `Ldiv.mxo`) are precompiled
+2. **[closed-dependency]** `Label.mxo`, `imp.artnet.node.mxo`,
+   `jit.gl.syphonclient.mxo`/`jit.gl.syphonserver.mxo`, `Lmult.mxo`, `Ldiv.mxo` are precompiled
    binaries with no source anywhere in this repository — even on Mac they cannot be audited,
-   rebuilt, or patched, so the app's entire OSC remote-control surface is permanently coupled to an
-   opaque third-party/unknown-provenance binary. Location: `vpt8 source code/patchers/vpt7project.maxpat`
-   — dependency_cache `"type" : "iLaX"` entries (lines 7163-7189). Severity: medium. Effort: high.
+   rebuilt, or patched. `OSC-route.mxo` compounds this further: unlike these, it is not even bundled
+   (see finding 1 above), so the app's entire OSC remote-control surface is coupled to an opaque
+   third-party/unknown-provenance binary that must be sourced independently. Location:
+   `vpt8 source code/patchers/vpt7project.maxpat` — dependency_cache `"type" : "iLaX"` entries
+   (lines 7163-7189). Severity: medium. Effort: high.
 3. **[hardcoded-limit]** The OSC listen/send ports are literal object arguments with no
    preference or UI anywhere in this cluster to change them (`udpreceive 6661`,
    `udpsend 127.0.0.1 6660`), and the live-record destination path defaults to a

@@ -246,9 +246,10 @@ serial, sensor-input, or Art-Net files.
 
 ## Dependencies
 
-- **`OSC-route.mxo`** (Mac-only external, per Task 1's finding) — `dependency_cache` entry in
-  `ctrl_config-vpt7_01.maxpat` (line 2989); instantiated by the object-box text `OSC-route /a`
-  (obj-19, line 294).
+- **`OSC-route.mxo`** (referenced but not bundled — a missing/unresolved dependency, per Task 1's
+  finding; the repo's `vpt8 source code/externals/` directory contains only 7 items, and
+  `OSC-route.mxo` is not one of them) — `dependency_cache` entry in `ctrl_config-vpt7_01.maxpat`
+  (line 2989); instantiated by the object-box text `OSC-route /a` (obj-19, line 294).
 - **`o.route.mxo`** (a different Mac-only external) — `dependency_cache` entry in `router-vpt7.maxpat`
   (line 1826), but **no object box in that file actually instantiates it** — a stale/orphaned
   dependency reference (see Tech-debt).
@@ -276,9 +277,10 @@ serial, sensor-input, or Art-Net files.
   `(value, index)`-pair shape, but each was hand-written separately: the `pack` argument order/arity
   differs between files (`pack 0. 1` in serial/sensor vs. `pack 0. 0` in Art-Net), and there is no
   shared abstraction/template — convergent design intent, divergent implementation.
-- **Two unrelated OSC-address-matching externals for one job**: `OSC-route.mxo` in `ctrl_config-
-  vpt7_01.maxpat` vs. `o.route.mxo` in `router-vpt7.maxpat` (the latter orphaned — no object uses it
-  in that file).
+- **Two unrelated OSC-address-matching externals for one job, and only one is actually present**:
+  `OSC-route.mxo` in `ctrl_config-vpt7_01.maxpat` (referenced by dependency_cache but missing from
+  `externals/` entirely) vs. `o.route.mxo` in `router-vpt7.maxpat` (bundled, but orphaned — no
+  object in that file actually uses it).
 - **Two parallel internal control buses**: `to_router`/`ctrl` (fed by external controller hardware,
   routed through the ctrlrouter/ctrl_config mapping UI) vs. `engine` (fed by `osc_active`/`osc_pass`,
   used pervasively by the GUI's own on-screen controls) — both ultimately address layers with a
@@ -324,12 +326,15 @@ serial, sensor-input, or Art-Net files.
    @mode 2` (line 412) and `dependency_cache` entry `"name" : "imp.artnet.node.mxo"` (line 563).
    Severity: high. Effort: high (would require sourcing/building a Windows Art-Net external).
 
-3. **[closed-dependency]** OSC-address matching depends on two different closed, Mac-only third-party
-   externals for conceptually the same job — `OSC-route.mxo` (used by `ctrl_config-vpt7_01.maxpat`)
-   and `o.route.mxo` (declared as a dependency of `router-vpt7.maxpat`, per Task 1's cross-cluster
-   finding that `OSC-route.mxo` recurs throughout the app). Location:
-   `vpt8 source code/patchers/ctrl_config-vpt7_01.maxpat:2989` (`OSC-route.mxo`) and
-   `vpt8 source code/patchers/router-vpt7.maxpat:1826` (`o.route.mxo`). Severity: high. Effort: high.
+3. **[missing-dependency]** OSC-address matching depends on two different closed, third-party
+   externals for conceptually the same job, and neither is in a fully healthy state: `OSC-route.mxo`
+   (used by `ctrl_config-vpt7_01.maxpat`) is referenced in that file's `dependency_cache` but is not
+   actually bundled anywhere under `vpt8 source code/externals/` — a missing/unresolved dependency,
+   per Task 1's cross-cluster finding — while `o.route.mxo` (declared as a dependency of
+   `router-vpt7.maxpat`) is genuinely bundled (Mac-only) but orphaned/unused in that file (see
+   finding 4 below). Location: `vpt8 source code/patchers/ctrl_config-vpt7_01.maxpat:2989`
+   (`OSC-route.mxo`) and `vpt8 source code/patchers/router-vpt7.maxpat:1826` (`o.route.mxo`).
+   Severity: high. Effort: high.
 
 4. **[dead-code]** `router-vpt7.maxpat`'s `dependency_cache` lists `o.route.mxo` as a dependency, but
    no object box anywhere in the file's `boxes` array instantiates an `o.route` object — a stale,
