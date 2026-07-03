@@ -19,13 +19,19 @@ elsewhere, from the masking editor (see Dependencies).
 
 ## Key patchers & subpatchers
 
-**`vlayer.maxpat` itself has zero patchcord inlets and zero outlets.** A whole-file search finds no
-root-level `"maxclass":"inlet"`/`"outlet"` box at all — confirmed by the fact `code/vlayer2.js`'s
-`this.patcher.newdefault(0,0,"bpatcher","@name","vlayer",...)` call (Task 2) never wires anything to
-the resulting bpatcher box. Every input (OSC control) and output (the finished texture) crosses this
-bpatcher's boundary through **globally-named `send`/`receive` objects**, disambiguated per instance
-by the numeric argument passed via `@args N`, which Max substitutes for the literal token `#1`
-everywhere inside the patcher (e.g. `r #1layertex`, `s #1multiplier_xy`, `@layer #1`).
+**`vlayer.maxpat` has one root-level outlet and zero inlets — it is not fully I/O-less.** A
+whole-file search finds no root-level `"maxclass":"inlet"` box, but there **is** a single root-level
+`"maxclass":"outlet"` box (`obj-12`, lines 3037-3044). It is wired: the root-scope patchline at lines
+9695-9699 connects `source:["obj-25",0]` → `destination:["obj-12",0]`, where `obj-25` is the bare,
+unnamed `receive` object (lines 8876-8884) that is dynamically re-bound at runtime via a
+`prepend set` message (see Data flow) — so whatever that receive is currently bound to exits the
+bpatcher through a real patchcord, not only through a named `send`. Aside from this one exception,
+`code/vlayer2.js`'s `this.patcher.newdefault(0,0,"bpatcher","@name","vlayer",...)` call (Task 2)
+never wires anything to the resulting bpatcher box (so the one real outlet goes unused at the
+instantiation site), and effectively all other input (OSC control) and output (the finished texture)
+crosses this bpatcher's boundary through **globally-named `send`/`receive` objects**, disambiguated
+per instance by the numeric argument passed via `@args N`, which Max substitutes for the literal
+token `#1` everywhere inside the patcher (e.g. `r #1layertex`, `s #1multiplier_xy`, `@layer #1`).
 
 The per-layer chain is a vertical stack of nine effect modules, each following the same skeleton
 (see Notable patterns): a `pattr on @initial 0 @default_interp off`, an `OSC-route /on /<params>`,
@@ -39,7 +45,7 @@ order** is:
 **`layermask`** (8913/8914, varname `mask`) → **`p edgeblend`** (3014/3015) → **`p mesh`**
 (1816/1817). This was verified directly via root patchlines, e.g. `"destination":["obj-40","1"],
 "source":["obj-23","0"]` (edgeblend → mesh, ~line 9666) and `"destination":["obj-17","1"],
-"source":["obj-34","0"]` (zoom → blur, ~line 9573); the control-message side runs a parallel
+"source":["obj-34","0"]` (zoom → blur, ~line 9879); the control-message side runs a parallel
 **cascade of `OSC-route` objects** — `p tile`'s router feeds its unmatched-message outlet into
 `p zoom`'s router, which feeds `p blur`'s, then `p mblur`'s, `p brcosa`'s, `p edgeblend`'s, and
 finally `p mesh`'s (confirmed via patchlines linking `obj-13`→`obj-35`→`obj-18`→`obj-20`→`obj-32`→
@@ -69,7 +75,7 @@ finally `p mesh`'s (confirmed via patchlines linking `obj-13`→`obj-35`→`obj-
   `slide_up $1`/`slide_down $1` messages (3691/3706) fed back through a bare, unnamed
   `jit.gl.slab` (3676, no `vpt` name arg, no `@file`).
 - **`p blur`** (4844) — the real Gaussian blur, via a nested **`p gauss`** (4628) containing six
-  bare `jit.gl.slab vpt` objects (4248-4250, 4263-4265, 4336-4338, 4351-4353, 4366-4368, 4396-4398)
+  bare `jit.gl.slab vpt` objects (4248-4250, 4263-4265, 4338-4340, 4353-4355, 4368-4370, 4398-4400)
   sharing one shader loaded via `loadmess sendshader read cf.gaussian.2p.jxs` (4188-4190), with
   `sendshader param width $1 0` / `width 0 $1` messages and `* 2.` width-doublers (4218, 4293) —
   the exact same 6-pass, alternating-axis, geometrically-doubling-width structure as
@@ -138,8 +144,11 @@ and the master `OSC-route /cornerpin /fade /rgb /blendmode /color /red /green /b
 
 **Egress / cross-module:** `s osc_out`, `s layers_out`, `s loaded`, `s #1layertex` (final per-layer
 texture, read back internally by `r #1layertex` inside `p cornerpin`). A bare, unnamed `receive`
-(~8883) is dynamically re-bound at runtime via a `prepend set` message into its inlet — Max's
-"rebind a receive's target with `set <name>`" idiom, not a broken/orphaned object.
+(lines 8876-8884) is dynamically re-bound at runtime via a `prepend set` message into its inlet —
+Max's "rebind a receive's target with `set <name>`" idiom, not a broken/orphaned object. Its output
+is also wired straight to the file's one real root-level outlet, `obj-12` (lines 3037-3044), via the
+patchline at lines 9695-9699 — so this receive's current binding exits the bpatcher through an actual
+patchcord, not only through the named-send mechanism (see Key patchers & subpatchers).
 
 **pattr bindings** (no `pattrstorage` object exists anywhere in this file — persistence is owned by
 the parent's `pattrstorage vpt`, keyed by this bpatcher's `@varname`): `on` (repeated per module),
@@ -177,10 +186,13 @@ the parent's `pattrstorage vpt`, keyed by this bpatcher's `@varname`): `on` (rep
 
 ## Notable patterns
 
-- **Zero-I/O bpatcher, all-broadcast communication.** The bpatcher exposes no inlets/outlets;
-  everything in and out travels via globally-named `send`/`receive` disambiguated by the `#1`
-  substitution of the instantiation argument `N`. This matches `enginetab.maxpat`'s `addLayer()`,
-  which never wires patchcords to the newly created bpatcher box.
+- **Near-zero-I/O bpatcher, mostly-broadcast communication.** The bpatcher exposes zero inlets and
+  exactly one outlet (`obj-12`, lines 3037-3044, fed by the dynamically-rebindable bare `receive`
+  `obj-25` via the patchline at lines 9695-9699); apart from that one exception, everything in and
+  out travels via globally-named `send`/`receive` disambiguated by the `#1` substitution of the
+  instantiation argument `N`. This matches `enginetab.maxpat`'s `addLayer()`, which never wires
+  patchcords to the newly created bpatcher box — so the one real outlet is left unconnected at the
+  instantiation site regardless.
 - **Two parallel per-instance naming schemes for the same number.** `@varname "<N>layer"` (used
   externally by `pattrstorage vpt` for keys like `<N>layer::blur`) and the internal `#1` token (used
   for `s/r #1layertex` etc.) both encode the same layer number `N`, but are different mechanisms
@@ -210,7 +222,7 @@ the parent's `pattrstorage vpt`, keyed by this bpatcher's `@varname`): `on` (rep
    instantiating that bpatcher, six bare `jit.gl.slab vpt` objects and a `cf.gaussian.2p.jxs`
    `sendshader`/width-doubling chain are reimplemented inline. Location:
    `vpt8 source code/patchers/vlayer.maxpat` — `p gauss` (line 4628), six slabs at lines 4248-4250,
-   4263-4265, 4336-4338, 4351-4353, 4366-4368, 4396-4398; cf.
+   4263-4265, 4338-4340, 4353-4355, 4368-4370, 4398-4400; cf.
    `vpt8 source code/patchers/jit.gl.slab.gauss6x.maxpat` (whole file). Severity: medium.
    Effort: medium.
 2. **[architectural-fragility]** The nine per-layer effect modules are wired into a single
