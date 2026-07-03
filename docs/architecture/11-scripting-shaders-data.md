@@ -6,10 +6,11 @@ This cluster covers VPT8's three non-`.maxpat` source kinds, all of which are co
 patchers documented in Tasks 1-10 but live as standalone files: (1) the 5 `code/*.js` scripts run
 inside Max `[js]` objects that implement the dynamic per-layer/per-tab bpatcher-instantiation
 lifecycle (`addLayer`/`deleteLayer`/`startupLayers`) and the two `mgraphics` point-editor state
-machines; (2) the ~63 GL shader files under `shaders/` (14 top-level effect shaders, 24 blend-mode
-mixer shaders + companions under `shaders/v001 Mixers/`, 15 shared vertex/fragment includes under
-`shaders/shared/{arb,cg,glsl}/`, and 2 third-party license attributions under
-`shaders/shared/licenses/`) that implement every GL-side visual effect (color correction,
+machines; (2) the 38 `.jxs` GL shader files under `shaders/` (14 top-level effect shaders, 24
+blend-mode mixer shaders + companions under `shaders/v001 Mixers/`) plus 41 non-`.jxs` companion
+files (79 files total in the tree) — 15 shared vertex/fragment includes under
+`shaders/shared/{arb,cg,glsl}/` and 2 third-party license attributions under
+`shaders/shared/licenses/`, among others — that implement every GL-side visual effect (color correction,
 transitions, blend-mode compositing, distortion/masking) as `jit.gl.slab`-loaded `.jxs` programs
 rather than as patcher logic; and (3) the 3 `data/*.json` files, which are `pattrstorage` snapshot
 dumps (generated state, not hand-authored source) plus the project manifest (`vpt8.maxproj`),
@@ -353,8 +354,9 @@ documented in `sourcebank.maxpat`); read back at project-load/preset-recall time
 - `externals/Lmult.mxo` ↔ `patchers/enginetab.maxpat`.
 - `externals/o.route.mxo` ↔ no confirmed instantiating patcher (dependency_cache-only in 5 files;
   see Tech-debt finding 10).
-- `data/gui.json` ↔ `pattrstorage gui` in `patchers/layersbank.maxpat` (`globalpatchername":"gui"`,
-  per Task 5).
+- `data/gui.json` ↔ `pattrstorage gui` in `patchers/vpt7project.maxpat` (line 740); `layersbank.maxpat`
+  only scopes into this domain via `pattrmarker gui` (`globalpatchername":"gui"`) — it does not own a
+  `pattrstorage` object of its own (per Task 5's and Task 1's docs).
 - `data/presets.json` ↔ `pattrstorage vpt` (the app-wide preset store; slot `sources` keys
   cross-reference `data/sources.json` slot IDs — see Tech-debt finding 5).
 - `data/sources.json` ↔ `pattrstorage sources`, referenced by `videobankNN`/`solidN`/`camN`/

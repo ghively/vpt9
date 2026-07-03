@@ -220,8 +220,11 @@ message; `"prepend playlist"`; `"slide_length $1"`.
 - `code/dummylayers02c.js` — the `[js dummylayers02c.js]` object inside `layersbank.maxpat`
   (obj-4, line 246); declared in `layersbank.maxpat`'s `dependency_cache` (line 353).
 - `externals/o.route.mxo` — declared in both `layersbank.maxpat`'s (line 359) and
-  `controltabs.maxpat`'s (line 647) `dependency_cache`; backs the plain `route` objects used
-  throughout this cluster (a Mac-only compiled external per `CLAUDE.md`).
+  `controltabs.maxpat`'s (line 647) `dependency_cache`, but **not** actually instantiated by either
+  file (or by any patcher in the codebase — see Task 11's doc and `docs/TECH_DEBT.md` finding 10);
+  a stale/orphaned `dependency_cache` entry. The plain `route` objects used throughout this cluster
+  (e.g. `loopback_clip_vpt7.maxpat`'s `route 1 2 3 4 5 6 7 8`) are Max's built-in `route`, unrelated
+  to this external.
 - `shaders/v001 Mixers/*.jxs` (24 files: `additive`, `alphablend`, `average`, `brightlight`,
   `burn`, `darken`, `difference`, `dodge`, `exclude`, `freeze`, `glow`, `hardlight`, `heat`,
   `inverse`, `lighten`, `lumablend`, `multiply`, `negate`, `overlay`, `reflect`, `screen`,

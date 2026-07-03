@@ -23,7 +23,7 @@ For the tech-debt catalog compiled across all eleven modules, see [`../TECH_DEBT
 | 8 | Presets & cue automation | [08-presets-cues.md](08-presets-cues.md) | The three parallel whole-app automation paths — the preset store/recall front end (`presetmodule`/`preset_cellblock`), the line-oriented cue-script interpreter (`cuelist-vpt7`), and the 15-alarm wall-clock timer bank — plus per-layer `copypaste`, all reaching the one real `pattrstorage vpt`. |
 | 9 | Control surfaces | [09-control-surfaces.md](09-control-surfaces.md) | Every external-controller pathway (hardware + soft MIDI, OSC-over-UDP, serial/sensor, Art-Net/DMX), all normalizing to the shared `to_router` bus, plus the central three-file 100-row router that maps them onto VPT's `/dest<nr>/param` parameter-address namespace. |
 | 10 | Modulation (LFOs) | [10-modulation-lfo.md](10-modulation-lfo.md) | A fixed 10-slot rack of 6 oscillators + 4 waveform mixers (`lfomodule`/`lfomix`/`lforack`) whose gated, range-scaled values broadcast on `to_router` tagged with a VPT-controller index, letting any addressable parameter be driven by an oscillating value. |
-| 11 | Scripting, shaders & data | [11-scripting-shaders-data.md](11-scripting-shaders-data.md) | The three non-`.maxpat` source kinds: the 5 `code/*.js` scripts (layer-lifecycle drivers + `mgraphics` point editors), the ~63 GL shader files under `shaders/`, and the 3 `data/*.json` pattrstorage dumps — plus the project manifest and the 7 bundled Mac-only externals. |
+| 11 | Scripting, shaders & data | [11-scripting-shaders-data.md](11-scripting-shaders-data.md) | The three non-`.maxpat` source kinds: the 5 `code/*.js` scripts (layer-lifecycle drivers + `mgraphics` point editors), the 38 `.jxs` GL shaders (79 files total under `shaders/`), and the 3 `data/*.json` pattrstorage dumps — plus the project manifest and the 7 bundled Mac-only externals. |
 
 ## Cross-cutting conventions
 
@@ -94,7 +94,7 @@ never by patchcord:
 | pattrstorage name | Owner patcher | On-disk dump | Scope | Doc |
 |---|---|---|---|---|
 | `vpt` | `enginetab.maxpat` | `data/presets.json` | All layer/preset state, keyed `<N>layer::<param>` | Tasks 2, 8, 11 |
-| `gui` | `layersbank.maxpat` (scoped from `vpt7project.maxpat`) | `data/gui.json` | GUI/tab UI state | Tasks 1, 5, 11 |
+| `gui` | `vpt7project.maxpat` (scoped into by `layersbank.maxpat` via `pattrmarker gui`) | `data/gui.json` | GUI/tab UI state | Tasks 1, 5, 11 |
 | `sources` | `sourcebank.maxpat` | `data/sources.json` | Per-bank source type + settings, keyed `videobankNN::<param>` | Tasks 7, 11 |
 | `router` | `router-vpt7.maxpat` | `router.json` | Whole controller-mapping "router setups" | Task 9 |
 

@@ -1,6 +1,7 @@
 # VPT8 Technical Debt Catalog
 
-Compiled from a full read of all 49 patchers, 5 `code/*.js` scripts, ~63 GL shader files + 3
+Compiled from a full read of all 49 patchers, 5 `code/*.js` scripts, 38 `.jxs` GL shaders (79 files
+total under `shaders/`, including shared GLSL/ARB/Cg includes and license attributions) + 3
 `pattrstorage` data dumps, and the 7 bundled Mac-only externals — the same source audit that produced
 the eleven module docs under [`architecture/`](architecture/) and the
 [architecture overview](architecture/00-overview.md). Each finding cites its concrete source
