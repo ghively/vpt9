@@ -208,7 +208,7 @@ go straight to two outlets. It exists purely so `livemodule-vpt7.maxpat` has a s
 
 ## Tech-debt findings
 
-1. **[missing-dependency]** `OSC-route.mxo` is referenced by this project's own Max-generated
+1. **[closed-dependency]** `OSC-route.mxo` is referenced by this project's own Max-generated
    `dependency_cache` metadata, but no such file exists anywhere under
    `vpt8 source code/externals/` (confirmed enumeration: only 7 externals are actually bundled —
    `Label.mxo`, `Ldiv.mxo`, `Lmult.mxo`, `imp.artnet.node.mxo`, `jit.gl.syphonclient.mxo`,

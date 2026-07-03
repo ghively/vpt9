@@ -326,7 +326,7 @@ serial, sensor-input, or Art-Net files.
    @mode 2` (line 412) and `dependency_cache` entry `"name" : "imp.artnet.node.mxo"` (line 563).
    Severity: high. Effort: high (would require sourcing/building a Windows Art-Net external).
 
-3. **[missing-dependency]** OSC-address matching depends on two different closed, third-party
+3. **[closed-dependency]** OSC-address matching depends on two different closed, third-party
    externals for conceptually the same job, and neither is in a fully healthy state: `OSC-route.mxo`
    (used by `ctrl_config-vpt7_01.maxpat`) is referenced in that file's `dependency_cache` but is not
    actually bundled anywhere under `vpt8 source code/externals/` — a missing/unresolved dependency,
