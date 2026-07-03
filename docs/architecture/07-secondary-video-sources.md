@@ -33,7 +33,7 @@ The still-image counterpart to `xfadesource.maxpat` (video crossfade, Task 6): l
   selector, not an automatic fit.
 - `jit.gl.slab vpt @file co.xfade.jxs` (`obj-61`) performs the actual crossfade between the two
   textures, driven by a `param xfade $1` message and a `pattr xfade` (default 0.5).
-- `p playlist` subpatcher (nested inside `p adapt`, ~`xfadestill.maxpat:3556`) implements slideshow
+- `p playlist` subpatcher (nested inside `p adapt`, ~`xfadestill.maxpat:3566`) implements slideshow
   auto-advance: a `counter`/`umenu` combo iterating a `#1playlist` list, gated by `#1play`, feeding a
   `delay 3000` / `line 0.` audio-taper (`p audioline`, using `snapshot~`/`line~`) for the "how long
   the still image is on before fade in playlist mode" (`xfadestill.maxpat:3237`) hold time, itself
@@ -231,11 +231,11 @@ input, `solid1`/`solid2`, `syphon1`…`syphon4`, `syphonout`).
    (videobank01) through 2640-2810 (videobank08); confirmed 8 occurrences of `sel V H S M` and 32
    `script sendbox … replace` messages via grep. Severity: medium. Effort: medium (would need a
    single parameterized subpatcher taking the slot number as an argument).
-4. **[dead-code]** `xfadestill.maxpat` contains a `pattr on @default_interp off` object (`obj-27`)
-   annotated with the comment "not used, included to be compatible with xfadesource" — a parameter
-   kept only for pattrstorage/interface parity with a sibling patcher, not because it does anything
-   in this patcher. Location: `vpt8 source code/patchers/xfadestill.maxpat:2283` (comment), object
-   near `xfadestill.maxpat:1093`. Severity: low. Effort: low.
+4. **[dead-code]** `xfadestill.maxpat` contains a `pattr on` object (`obj-27`, `saved_object_attributes`
+   `{"parameter_enable": 0}`) annotated with the comment "not used, included to be compatible with
+   xfadesource" — a parameter kept only for pattrstorage/interface parity with a sibling patcher, not
+   because it does anything in this patcher. Location: `vpt8 source code/patchers/xfadestill.maxpat:2283`
+   (comment), object at `xfadestill.maxpat:2743`. Severity: low. Effort: low.
 5. **[dead-code]** Leftover debug `print` objects are wired into live signal/message paths:
    `print #1dim`, `print #1adapted`, `print #1fra`, and `print xfades` in `xfadestill.maxpat`
    (lines 950, 1453, 1467, 2618) and `print dumpout` in `syphon_vpt7.maxpat` (line 757, tapping the
