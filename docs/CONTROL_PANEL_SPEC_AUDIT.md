@@ -1,6 +1,6 @@
 # VPT Control-Panel Spec-Compliance Audit
 
-Date: 2026-07-03
+Date: 2026-07-03 (findings below fixed same day — see "Fix log")
 
 ## Scope
 
@@ -29,7 +29,7 @@ verification; everything else checked out or was minor/undocumented-but-harmless
 
 ## Confirmed defects
 
-### 1. BUG (high) — PiP audio never respects `audioOwnerScreenId`
+### 1. FIXED — BUG (high) — PiP audio never respects `audioOwnerScreenId`
 `render-client/src/pip.js:48` hardcodes `mute=1` in the YouTube embed URL with no
 `enablejsapi`/postMessage wiring to unmute later, and `audioOwnerScreenId` is never
 even passed into `PipOverlay` (`render-client/src/main.js:17` constructs it with only
@@ -42,7 +42,7 @@ path is broken.
 the embed URL, and toggle mute via the YouTube iframe postMessage API when ownership
 changes.
 
-### 2. BUG (high) — Docker deployment's cast→PiP push cannot work as documented
+### 2. FIXED — BUG (high) — Docker deployment's cast→PiP push cannot work as documented
 `docker-compose.yml` sets `network_mode: host` for `cast-receiver` (line 38) but gives
 it `CONTROL_PLANE_URL=http://control-plane:8080` (line 29) — a Compose service-name
 hostname that only resolves on the Compose-managed bridge network. A host-networked
@@ -59,7 +59,7 @@ environment" caveat exists to flag.
 already publishes `8080:8080` to the host, and cast-receiver shares the host's network
 namespace).
 
-### 3. GAP (minor) — `CAST_RECEIVER_HOST` is not the env var the code reads
+### 3. FIXED — GAP (minor) — `CAST_RECEIVER_HOST` is not the env var the code reads
 README says the receiver "reads `CAST_RECEIVER_HOST`"; the code
 (`cast-receiver/src/index.js`) actually reads `ADVERTISE_HOST`. It works today only
 because `docker-compose.yml` translates `CAST_RECEIVER_HOST` → `ADVERTISE_HOST` via
@@ -69,7 +69,7 @@ LAN IP (silently defaults to `localhost`, which won't work for a phone on the LA
 **Fix:** either rename the code's env var to `CAST_RECEIVER_HOST` for consistency, or
 correct the README to say `ADVERTISE_HOST` and document it for the non-Docker path too.
 
-### 4. GAP (medium) — Panel provides no way to reorder layers
+### 4. FIXED — GAP (medium) — Panel provides no way to reorder layers
 `panel/src/layer-rack.js` renders `layer.order` as a read-only, zero-padded index with no
 drag handle or move-up/down control, and no action in `panel/src/app.js` ever sends an
 `update` to `layers.<id>.order`. The state shape makes `order` the explicit,
@@ -138,3 +138,42 @@ itself, in the documented Docker deployment). #3 and #4 are smaller: #3 is a doc
 naming mismatch that happens to work today, #4 is a real missing operator capability
 (layer reordering) worth adding before this replaces VPT8's `layertab`/`layergui`
 reordering support.
+
+## Fix log
+
+All four findings above were repaired the same day:
+
+1. **PiP audio-owner** — `render-client/src/pip.js`'s `PipOverlay.sync`/`_upsert` now
+   take an `isAudioOwner` flag (passed from `main.js`'s existing
+   `state.audioOwnerScreenId === screenId` check, previously computed but never reused
+   for PiP). The embed URL's `mute` param now reflects it, `enablejsapi=1` was added, and
+   a same-video mute-state change is applied live via the YouTube IFrame API's
+   `postMessage({event:"command",func:"mute"|"unMute"})` instead of reloading the iframe
+   (which would restart playback). Verified by code inspection and `node --check`; real
+   YouTube playback inside the PiP iframe remains unverified in this environment for the
+   same reason the original README flags it as untestable here.
+2. **Docker cast→PiP networking** — `docker-compose.yml`'s `cast-receiver.environment`
+   now sets `CONTROL_PLANE_URL=http://localhost:8080` (reachable via the host-published
+   port, since the container shares the host's network namespace) instead of the
+   Compose-only service name `http://control-plane:8080`. Verified with
+   `docker compose config`, confirming `control-plane` still publishes `8080:8080` to the
+   host and `cast-receiver` resolves `localhost:8080` correctly under `network_mode: host`.
+3. **`CAST_RECEIVER_HOST` naming** — `cast-receiver/src/index.js` now reads
+   `process.env.CAST_RECEIVER_HOST` directly (was `ADVERTISE_HOST`); `docker-compose.yml`
+   passes it straight through without renaming; the README's "Locally without Docker"
+   section now documents setting `CAST_RECEIVER_HOST` for that path too, with its
+   `localhost`-only-reachable default called out explicitly. Verified with
+   `docker compose config` showing `CAST_RECEIVER_HOST: 192.168.1.50` reaching the
+   container environment unchanged.
+4. **Layer reordering** — `panel/src/layer-rack.js` now renders move-up/move-down
+   buttons per layer strip (disabled at the top/bottom of the stack), wired to a new
+   `actions.moveLayer(layer, neighbor)` in `panel/src/app.js` that swaps the two layers'
+   `order` values via two `update` messages (no renumbering needed, since `order` only
+   needs a total order, not contiguous integers — matching how `server/src/state.js`
+   already assigns it). `panel/index.html`'s `.strip` grid gained a column for the new
+   buttons. Verified end-to-end against a live server: sent the same two `update`
+   messages the new action sends, confirmed `layers.layer-1.order`/`layers.layer-2.order`
+   swapped correctly in server state.
+
+All four fixes were syntax-checked (`node --check`) and, where a live server/protocol
+claim was involved, exercised against a running instance rather than only read.

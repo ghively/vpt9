@@ -19,10 +19,11 @@ const pipOverlay = new PipOverlay(pipRoot, screenId);
 let state = { layers: {}, screens: {}, pip: {}, audioOwnerScreenId: null };
 
 function applyDerivedState() {
+  const isAudioOwner = state.audioOwnerScreenId === screenId;
   compositor.setLayers(state.layers);
   compositor.setWarp(state.screens?.[screenId]?.warp);
-  compositor.setMuted(state.audioOwnerScreenId !== screenId);
-  pipOverlay.sync(state.pip);
+  compositor.setMuted(!isAudioOwner);
+  pipOverlay.sync(state.pip, isAudioOwner);
 }
 
 const socket = connectControlPlane(wsUrl, {

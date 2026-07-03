@@ -118,8 +118,12 @@ CAST_RECEIVER_HOST=<this-machine's-LAN-IP> docker compose up --build
 cd server && npm install && npm start                          # control-plane on :8080
 cd render-client && npx serve -l 8081 .                         # any static server works
 cd panel && npx serve -l 8082 .
-cd cast-receiver && CONTROL_PLANE_URL=http://localhost:8080 npm start
+cd cast-receiver && CONTROL_PLANE_URL=http://localhost:8080 CAST_RECEIVER_HOST=<this-machine's-LAN-IP> npm start
 ```
+
+`CAST_RECEIVER_HOST` defaults to `localhost` if omitted, which only a phone running on
+the same machine could reach — set it to the machine's real LAN IP so phones elsewhere
+on the network can discover and load the DIAL device description.
 
 Open the panel and a render client side by side — dragging a warp handle or an opacity
 slider in the panel should visibly change the render client's output live, and the

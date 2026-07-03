@@ -7,10 +7,20 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-function buildStrip(layer, actions) {
+function buildStrip(layer, actions, neighbors = {}) {
   const strip = el("div", { className: "strip" });
 
   const idx = el("div", { className: "idx mono", textContent: String(layer.order ?? 0).padStart(2, "0") });
+
+  // order is ascending bottom -> top (see render-client/src/compositor.js), so "up"
+  // (toward the front of the projected stack) swaps order with the next-higher neighbor.
+  const moveUpBtn = el("button", { className: "toggle-sq move-btn", textContent: "▲", title: "Move toward front" });
+  moveUpBtn.disabled = !neighbors.above;
+  moveUpBtn.addEventListener("click", () => actions.moveLayer(layer, neighbors.above));
+
+  const moveDownBtn = el("button", { className: "toggle-sq move-btn", textContent: "▼", title: "Move toward back" });
+  moveDownBtn.disabled = !neighbors.below;
+  moveDownBtn.addEventListener("click", () => actions.moveLayer(layer, neighbors.below));
 
   const nameInput = el("input", { type: "text", className: "name-input", value: layer.name ?? "" });
   nameInput.addEventListener("change", () => actions.updateLayer(layer.id, "name", nameInput.value));
@@ -71,6 +81,7 @@ function buildStrip(layer, actions) {
 
   strip.append(
     idx,
+    el("div", { className: "move-group" }, [moveUpBtn, moveDownBtn]),
     el("div", { className: "meta" }, [nameInput]),
     el("div", { className: "source-group" }, [sourceType, sourceField]),
     blendSelect,
@@ -86,7 +97,11 @@ export function renderLayerRack(container, state, actions) {
   const displayOrder = [...layers].reverse(); // top of stack shown first, like the mockup
 
   container.appendChild(el("div", { className: "rack-title", textContent: "Layer rack — top of stack first" }));
-  for (const layer of displayOrder) container.appendChild(buildStrip(layer, actions));
+  for (const layer of displayOrder) {
+    const ascIndex = layers.findIndex((l) => l.id === layer.id);
+    const neighbors = { above: layers[ascIndex + 1] ?? null, below: layers[ascIndex - 1] ?? null };
+    container.appendChild(buildStrip(layer, actions, neighbors));
+  }
 
   const addBtn = el("button", { className: "btn", textContent: "+ Add layer" });
   addBtn.addEventListener("click", () => actions.addLayer());

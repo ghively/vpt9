@@ -3,7 +3,7 @@ import { createDialHttpServer } from "./dial-http.js";
 
 const PORT = Number(process.env.PORT || 8090);
 const HOST = process.env.HOST || "0.0.0.0";
-const ADVERTISE_HOST = process.env.ADVERTISE_HOST || "localhost";
+const ADVERTISE_HOST = process.env.CAST_RECEIVER_HOST || "localhost";
 const CONTROL_PLANE_URL = process.env.CONTROL_PLANE_URL || "http://localhost:8080";
 const PIP_ID = process.env.PIP_ID || "pip-1";
 const FRIENDLY_NAME = process.env.FRIENDLY_NAME || "Room Cast";

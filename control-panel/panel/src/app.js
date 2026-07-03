@@ -81,6 +81,13 @@ const actions = {
   removeLayer(id) {
     send({ type: "delete", path: `layers.${id}` });
   },
+  moveLayer(layer, neighbor) {
+    if (!neighbor) return;
+    // Swap `order` values rather than renumbering the whole stack — order only needs
+    // to sort correctly, not be contiguous (see server/src/state.js's nextLayerOrder).
+    send({ type: "update", path: `layers.${layer.id}.order`, value: neighbor.order });
+    send({ type: "update", path: `layers.${neighbor.id}.order`, value: layer.order });
+  },
   selectScreen(id) {
     selectedScreenId = id;
     renderAll();
