@@ -95,6 +95,16 @@ mesh-warp objects "found in vlayer" when entering/leaving fullscreen (`s nrb`); 
 `p set-pattr-interp` (line ~4192), `p pattrcom` (inside `p VPT`, line ~6200), `p router_osc`
 (line ~7476), `p serialout` (line ~9119) and `p esc` (line ~22566).
 
+**Oddity: a lone toplevel `ezdac~`.** At `vpt8 source code/patchers/enginetab.maxpat:12527`
+(obj-20, `numinlets 2`, `numoutlets 0`) sits a bare `ezdac~` — the stereo audio-output toggle DAC
+object — as a toplevel box (a sibling of the nearby `p mousetracking_preview`, not contained in it).
+It is wired from the same global `r onoff` (obj-25, line ~12642) used elsewhere in the file via a
+toplevel patchcord (`"source" : [ "obj-25", 0 ]` / `"destination" : [ "obj-20", 0 ]`, line ~22746 in
+the toplevel `"lines"` array) — but nothing feeds signal into its inlets. It is the *only*
+audio/DSP object (`ezdac~`/`adc~`/`sig~`) anywhere in this 23,229-line, otherwise purely
+video-control patcher, and with no signal chain behind it, it does nothing at runtime. It reads as
+dead/vestigial debug residue rather than an intentional feature.
+
 ## Data flow
 
 Every entry below is a literal `send`/`receive`/`route`/OSC string present in the file.
@@ -151,8 +161,8 @@ only two `pattr`-family objects in the file; both are quoted above.
 - Jitter GL runtime objects: `jit.world` (obj-58), `jit.gl.render` (obj-56), `jit.gl.videoplane`
   (obj-3), `jit.gl.sketch` (obj-1, line ~1238), `jit.fpsgui` (obj-1), and `jit.gl.nurbs` (referenced
   in comment). All depend on Jitter/OpenGL being present.
-- `OSC-route` object is used pervasively (a dozen instances) as the OSC message router; it is an
-  OSC/odot-family object that must be on the Max search path for the tab to load.
+- `OSC-route` object is used pervasively (11 instances, per `grep -c "OSC-route"`) as the OSC message
+  router; it is an OSC/odot-family object that must be on the Max search path for the tab to load.
 - `s syphon_output` routes the composited output to the Syphon server external (a Mac-only
   `externals/*.mxo`, per `CLAUDE.md`) that lives in another patcher — so the Syphon output path is
   reachable only on macOS.
@@ -233,4 +243,20 @@ only two `pattr`-family objects in the file; both are quoted above.
 7. **[toolchain-version]** The patcher is saved for Max 7.3.5, 64-bit (`"major":7,"minor":3,"revision":5,"architecture":"x64"`)
    and has been untouched since VPT8's 2018 release; the deeply nested GL/`pattrstorage` wiring has no
    guaranteed forward compatibility with Max 8/9. Location: `enginetab.maxpat` — `appversion` block,
-   lines 4–9. Severity: low. Effort: high.
+   lines 4–9.
+8. **[dead-code]** A lone `ezdac~` (obj-20, stereo audio-output toggle) sits as a toplevel object,
+   wired only from the same global `r onoff` (obj-25) that gates the video engine elsewhere in the
+   file, via a toplevel patchcord. Nothing feeds signal into it, and it is the *only* audio/DSP object
+   (`ezdac~`/`adc~`/`sig~`) in this entire 23,229-line, otherwise purely video-control file — an
+   unexplained cross-domain artifact with no signal chain behind it, consistent with leftover
+   debug/test residue rather than an intentional feature. Location: `vpt8 source code/patchers/enginetab.maxpat` —
+   `ezdac~` (obj-20, line 12527), `r onoff` (obj-25, line ~12642), connecting patchcord (line ~22746).
+   Severity: low. Effort: low.
+9. **[hardcoded-limit]** The corner-hit-test logic that decides how close a mouse click must be to a
+   mesh corner to grab it hardcodes a lookup table of mesh gridsize → radius threshold in a plain
+   comment, not in code: `"corner-radius \n8:0.03\n12: 0.04\n15:0.06\n20:0.07\n25 0.08"`, consumed by
+   a nearby `expr`/`if` chain. The mapping is undocumented anywhere else, so adding a new supported
+   `mesh::gridsize` value silently falls outside the table with no defined radius. Location:
+   `vpt8 source code/patchers/enginetab.maxpat` — comment at line 20735, inside the corner-pin/
+   mesh-warp editor (`p incdec_corners`/`p cornerpin-calculations` region, lines ~19106–22417).
+   Severity: medium. Effort: low. Severity: low. Effort: high.
