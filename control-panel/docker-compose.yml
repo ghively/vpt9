@@ -1,0 +1,41 @@
+services:
+  control-plane:
+    build: ./server
+    ports:
+      - "8080:8080"
+    volumes:
+      - state-data:/data
+    restart: unless-stopped
+
+  render-client:
+    build: ./render-client
+    ports:
+      - "8081:80"
+    depends_on:
+      - control-plane
+    restart: unless-stopped
+
+  panel:
+    build: ./panel
+    ports:
+      - "8082:80"
+    depends_on:
+      - control-plane
+    restart: unless-stopped
+
+  cast-receiver:
+    build: ./cast-receiver
+    environment:
+      - CONTROL_PLANE_URL=http://control-plane:8080
+      - PIP_ID=pip-1
+      - ADVERTISE_HOST=${CAST_RECEIVER_HOST:-localhost} # set to this machine's real LAN IP so phones can reach it
+      - FRIENDLY_NAME=Room Cast
+    depends_on:
+      - control-plane
+    restart: unless-stopped
+    # SSDP multicast discovery needs the container to be on the real LAN, not an
+    # isolated bridge network — host networking is the simplest way to get that.
+    network_mode: host
+
+volumes:
+  state-data:
