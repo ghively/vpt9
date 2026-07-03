@@ -193,7 +193,7 @@ the repo for `source="<filename>"`:**
 | `arb/sh.basic.vp.arb`, `arb/sh.passthru.fp.arb` | 0 `.jxs` files | dead |
 | `cg/sh.passthru.fp.cg`, `cg/sh.passthru.vp.cg` | 0 `.jxs` files | dead |
 
-i.e. **12 of the 15 shared vertex/fragment includes are never `source=`-referenced by any of the 62
+i.e. **12 of the 15 shared vertex/fragment includes are never `source=`-referenced by any of the 38
 `.jxs` files in this repo** (see Tech-debt finding 3). `arb/sh.passthru.fp.arb` is additionally a
 literal **0-byte empty file** (verified: `wc -l` → 0 lines, `ls -la` → 0 bytes) — even if some future
 shader did reference it as its fragment program, it could not compile.
@@ -418,7 +418,7 @@ documented in `sourcebank.maxpat`); read back at project-load/preset-recall time
    matches for each): `ab.spotmask_mod01.jxs`, `cc.alphaglue01.jxs`, `cc.scalebias.jxs`,
    `cc.uyvy2rgba.lite.jxs`, `tr.edgeblend.jxs`. Additionally, of the 15 shared vertex/fragment
    includes under `shaders/shared/{arb,cg,glsl}/`, **12** are never `source="..."`-referenced by any
-   of the 62 `.jxs` files in the repo: `cf.box8.vp.glsl`, `cf.box9.vp.glsl`, `cf.cross5.vp.glsl`,
+   of the 38 `.jxs` files in the repo: `cf.box8.vp.glsl`, `cf.box9.vp.glsl`, `cf.cross5.vp.glsl`,
    `cf.diag5.vp.glsl`, `op.binary.vp.glsl`, `op.unary.vp.glsl`, `sh.basic.vp.glsl`,
    `sh.passthru.color.fp.glsl`, `sh.basic.vp.arb`, `sh.passthru.fp.arb`, `sh.passthru.fp.cg`,
    `sh.passthru.vp.cg` (verified by grepping every `.jxs` file for each include's filename in a
