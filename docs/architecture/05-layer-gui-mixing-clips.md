@@ -71,7 +71,7 @@ Notable structure:
   sync. The result feeds two parallel per-layer blendmode broadcasts: the live user-edit path
   `"sprintf /%ilayer/blendmode %s"` (obj-40, line 497), and a separate `r dummy`-driven copy/paste
   replay path `"sprintf /%ilayer/blendmode %i"` (obj-27, line 689). Only 3 blend choices are exposed
-  here (see Tech-debt finding 6), versus the ~20 dedicated blend shaders under
+  here (see Tech-debt finding 6), versus the ~24 dedicated blend shaders under
   `shaders/v001 Mixers/` (reachable only via `mix-vpt7.maxpat`, below).
 - Per-instance OSC init: `r to_dummylayer` (obj-15, line 912) → `OSC-route /a /initdone` (obj-19,
   line 897) → `osc_pass #1 fade` (obj-8, line 971) on one outlet and `sprintf set 1 /%ilayer`
@@ -222,11 +222,11 @@ message; `"prepend playlist"`; `"slide_length $1"`.
 - `externals/o.route.mxo` — declared in both `layersbank.maxpat`'s (line 359) and
   `controltabs.maxpat`'s (line 647) `dependency_cache`; backs the plain `route` objects used
   throughout this cluster (a Mac-only compiled external per `CLAUDE.md`).
-- `shaders/v001 Mixers/*.jxs` (20 files: `additive`, `alphablend`, `average`, `brightlight`,
+- `shaders/v001 Mixers/*.jxs` (24 files: `additive`, `alphablend`, `average`, `brightlight`,
   `burn`, `darken`, `difference`, `dodge`, `exclude`, `freeze`, `glow`, `hardlight`, `heat`,
   `inverse`, `lighten`, `lumablend`, `multiply`, `negate`, `overlay`, `reflect`, `screen`,
   `softlight`, `stamp`, `subtractive`) — hot-loaded by name from `mix-vpt7.maxpat`'s
-  `jit.gl.slab vpt @file v001.co2.<name>.jxs`; only 17 of the 20 are reachable from the `mixtype`
+  `jit.gl.slab vpt @file v001.co2.<name>.jxs`; only 17 of the 24 are reachable from the `mixtype`
   umenu's items list (`difference`, `dodge`, `exclude`, `glow`, `inverse`, `negate`, `reflect` are
   not umenu items and so are unreachable from this file — see Tech-debt finding 8).
 - `externals/OSC-route.mxo` — used by `mix-vpt7.maxpat`'s `OSC-route /A /B /out /mix /mixtype` and
@@ -317,7 +317,7 @@ message; `"prepend playlist"`; `"slide_length $1"`.
    Severity: low. Effort: low.
 6. **[hardcoded-limit]** `layergui.maxpat`'s per-layer blend-mode selector exposes only 3 choices
    via an icon-only umenu (items `[6,7,",",6,1,",",2,7]`, Max built-in icon indices, no text; a
-   linked plain-text proxy shows `"=","+","x"`), while ~20 dedicated blend-mode shaders exist under
+   linked plain-text proxy shows `"=","+","x"`), while ~24 dedicated blend-mode shaders exist under
    `shaders/v001 Mixers/` and are exposed with a full 17-item text menu one file over, in
    `mix-vpt7.maxpat`'s `mixtype` selector. A layer's own blend mode and the source-mixer's blend
    mode are two different, inconsistently-sized option sets addressing conceptually the same
@@ -333,7 +333,7 @@ message; `"prepend playlist"`; `"slide_length $1"`.
    `shaders/v001 Mixers/*.jxs` from `mix-vpt7.maxpat`). This mirrors the same gap Task 4 found in
    `gridcontroller.maxpat`. Location: the 5 files named above (whole files — no `dependency_cache`
    key present in any of them). Severity: low. Effort: low.
-8. **[dead-code]** 7 of the 20 shader files under `shaders/v001 Mixers/` — `difference`, `dodge`,
+8. **[dead-code]** 7 of the 24 shader files under `shaders/v001 Mixers/` — `difference`, `dodge`,
    `exclude`, `glow`, `inverse`, `negate`, `reflect` — are never listed as items in
    `mix-vpt7.maxpat`'s `mixtype` umenu (which only offers 17 named modes), so they cannot be
    selected from this file's UI at all; whether they are reachable from elsewhere in the app is
