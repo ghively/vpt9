@@ -53,7 +53,7 @@ either as a statically-placed bpatcher or as a dynamically-created instance.
   - `p layerorder` (line 4983) — reads `r nlayers` to bound a layer-position control, unpacks a
     pair of indices (`unpack 1 0`), packs them as `pack movelayer 1 1`, and sends
     `prepend /movelayer` into `s engine`.
-- The tab strip `obj-229` (`varname "tab"`, line 1013) lists 12 tabs:
+- The tab strip `obj-229` (`varname "tab"`, line 1015) lists 12 tabs:
   `"active", "cuelist", "router", "midi", "lfo", "artnet", "osc", "serial", "clock", "clip", "keys", "info"`.
   The last two surface `vpt7_keys.maxpat` and `vpt7_info.maxpat`'s content; the actual show/open
   logic for those two tabs lives inside `controltabs.maxpat` (outside this cluster) — neither file
@@ -118,7 +118,7 @@ live camera source and optionally recording it. Notable substructure:
   further nests a second sub-window (`p livesettings`) opened/closed via a `pcontrol` object driven
   by `open`/`close` message boxes — a two-level floating-window nesting pattern.
 
-**`livemodule_d.maxpat`** is a trivial 4-object wrapper: two inlets feed
+**`livemodule_d.maxpat`** is a trivial 5-object wrapper: two inlets feed
 `jit.grab @adapt 1 @unique 1 @engine viddll`, whose two outlets (`jit_matrix` texture, dimensions)
 go straight to two outlets. It exists purely so `livemodule-vpt7.maxpat` has a single reusable
 "grab a webcam frame" building block.
@@ -206,28 +206,28 @@ go straight to two outlets. It exists purely so `livemodule-vpt7.maxpat` has a s
 1. **[platform-gap]** `OSC-route.mxo` is a Mac-only compiled external (per `CLAUDE.md`, no
    Windows `.mxe64` externals exist in this repo), yet the root OSC dispatch in
    `vpt7project.maxpat` and the live-module's OSC control surface both depend directly on
-   `OSC-route` objects for all OSC-address routing. Location: `vpt7 source code/patchers/vpt7project.maxpat`
-   — dependency_cache entry `"name" : "OSC-route.mxo"` (line 7163); `vpt7 source code/patchers/livemodule-vpt7.maxpat`
+   `OSC-route` objects for all OSC-address routing. Location: `vpt8 source code/patchers/vpt7project.maxpat`
+   — dependency_cache entry `"name" : "OSC-route.mxo"` (line 7163); `vpt8 source code/patchers/livemodule-vpt7.maxpat`
    — same entry (line 4237). Severity: high. Effort: high.
 2. **[closed-dependency]** `OSC-route.mxo` (and transitively `Label.mxo`, `imp.artnet.node.mxo`,
    `jit.gl.syphonclient.mxo`/`jit.gl.syphonserver.mxo`, `Lmult.mxo`, `Ldiv.mxo`) are precompiled
    binaries with no source anywhere in this repository — even on Mac they cannot be audited,
    rebuilt, or patched, so the app's entire OSC remote-control surface is permanently coupled to an
-   opaque third-party/unknown-provenance binary. Location: `vpt7 source code/patchers/vpt7project.maxpat`
+   opaque third-party/unknown-provenance binary. Location: `vpt8 source code/patchers/vpt7project.maxpat`
    — dependency_cache `"type" : "iLaX"` entries (lines 7163-7189). Severity: medium. Effort: high.
 3. **[hardcoded-limit]** The OSC listen/send ports are literal object arguments with no
    preference or UI anywhere in this cluster to change them (`udpreceive 6661`,
    `udpsend 127.0.0.1 6660`), and the live-record destination path defaults to a
    machine-specific development path left in as a message-box literal. Location:
-   `vpt7 source code/patchers/vpt7project.maxpat` — `"text" : "udpreceive 6661"` (line 3334),
-   `"text" : "udpsend 127.0.0.1 6660"` (line 3297); `vpt7 source code/patchers/livemodule-vpt7.maxpat`
+   `vpt8 source code/patchers/vpt7project.maxpat` — `"text" : "udpreceive 6661"` (line 3334),
+   `"text" : "udpsend 127.0.0.1 6660"` (line 3297); `vpt8 source code/patchers/livemodule-vpt7.maxpat`
    — `"text" : "HCHD:/moovs/videomlyd/"` (line 774). Severity: medium. Effort: low.
 4. **[architectural-fragility]** `vpt7project.maxpat` is a single flat 7194-line root patcher:
    window-lifecycle boilerplate, OSC routing, layer-lifecycle dispatch, and prefs-refresh wiring
    nearly all live directly at the top level — only four named subpatchers exist
    (`p keyboard_selectlayers`, `p solo`, `p layers_add-delete`, `p layerorder`) among several
    hundred toplevel boxes, giving edits in this file an unusually large blast radius. Location:
-   `vpt7 source code/patchers/vpt7project.maxpat` — entire toplevel `boxes` array (lines 41-5309).
+   `vpt8 source code/patchers/vpt7project.maxpat` — entire toplevel `boxes` array (lines 41-5309).
    Severity: medium. Effort: high.
 5. **[dead-code]** `vpt7_keys.maxpat` has zero patch cords — every box is a `comment` and the
    file's own connection list is empty — so it is a pure static reference card with no link back
