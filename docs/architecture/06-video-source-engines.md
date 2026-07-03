@@ -9,7 +9,7 @@ codec engine; `xfadesource.maxpat` is the same engine built around the generic (
 engine. Both are argument-parameterized abstractions instantiated once per source-bank slot.
 
 ## Files in this cluster
-- `vpt8 source code/patchers/hapsource.maxpat` (10351 lines) — HAP-codec two-clip video source; one of only two TOPLEVEL patchers in `vpt8.maxproj` (alongside `vpt7project.maxpat`).
+- `vpt8 source code/patchers/hapsource.maxpat` (10351 lines) — HAP-codec two-clip video source; the second patcher listed in `vpt8.maxproj`'s `contents.patchers`, without a `toplevel` flag (only `vpt7project.maxpat`'s entry carries `"toplevel" : 1`).
 - `vpt8 source code/patchers/xfadesource.maxpat` (10478 lines) — generic-engine (`viddll`) two-clip video source; near-identical twin of `hapsource`.
 
 Neither file hardcodes a "videobank" name or a bank count. Each is a reusable abstraction whose
@@ -90,7 +90,7 @@ The global side of this address space is `sprintf /sources/%ivideo/%s` in `clipc
 `pattrstorage` bindings. The pattr varnames inside each source are `video`, `xfade`, `loop`,
 `volume`, `on`, `rate`, `alpha`, `resolution`, `videopath`, `autotrig`, `refreshrate`, `in`, `out`.
 Because the hosting bpatcher's scripting name is `videobankNN`, these are namespaced as
-`videobankNN::<name>` in the saved project. Concretely, `vpt7project.maxpat`'s stored state contains
+`videobankNN::<name>` in the saved project. Concretely, `sourcebank.maxpat`'s stored state contains
 `videobank01::loop`, `videobank01::video`, `videobank01::on`, `videobank01::alpha`,
 `videobank01::resolution`, `videobank01::videopath` (lines 3643–3648) — exactly the single-source
 pattr set these two patchers expose (contrast `videobank05::A`/`::B`/`::mixtype`, a `mix-vpt7` bank).
