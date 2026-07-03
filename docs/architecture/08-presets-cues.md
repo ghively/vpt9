@@ -91,13 +91,14 @@ is a single flat patcher (no subpatchers, no bpatchers). It is triggered by `r c
 124) and `r pastetolayer` (line 109) — matching the `;copyfromlayer #1`/`;pastetolayer #1` messages
 Task 5 found in `layergui.maxpat`'s per-layer "c"/"p" mini-buttons — plus a pair of grey-colored,
 seemingly-legacy `r lcopy` (line 230) / `r lpaste` (line 214) receives. A `umenu` (obj-16, line
-663-674) enumerates ~30 copyable per-layer parameter names (`fade`, `rgb`, `blendmode`, `source`,
+663-674) enumerates 38 copyable per-layer parameter names (`fade`, `rgb`, `blendmode`, `source`,
 `flip::on`, `flip::fliptype`, `mask::on/source/inv/blur_on/blur/moving`,
 `cornerpin::upper_left/lower_left/upper_right/lower_right`,
 `brcosa::on/brightness/contrast/saturation`, `mblur::mblur/on`, `blur::on/blur`,
 `tile::on/xtile/ytile`, `zoom::on/xzoom/yzoom/xanchor/yanchor`,
-`edgeblend::on/left/up/right/down/inv`) — closely matching, but not identical to, the `1layer::*`
-namespace in `data/presets.json` (it omits `mesh::*`, `layername`, and `layerorder`; see Tech-debt
+`edgeblend::on/left/up/right/down/inv`) — closely matching, but not identical to, the 45-key
+`1layer::*` namespace in `data/presets.json` (it omits `mesh::gridsize`, `mesh::on`,
+`mesh::position`, `layername`, `layerorder`, `mask::points`, and `zoom::rota`; see Tech-debt
 finding 7). Two `uzi` objects (obj-25, obj-43) iterate that list, and for each parameter build
 `sprintf getstoredvalue %ilayer::%s 0` (obj-13, line 686) to read the source layer's value and
 `sprintf setstoredvalue %i%s 0` (obj-34, line 362) to write it to the destination layer — Max
@@ -293,13 +294,16 @@ Cross-cluster couplings (all via send/receive or shared pattrstorage, never file
    ever broadcasts a numeric frame-rate on the same bus name. Location: `vpt8 source code/patchers/presetmodule-vpt7.maxpat`
    — `r fps` (line 2782), feeding `route slotname delete read write recall current` (obj-98, line
    2812). Severity: low. Effort: low.
-7. **[naming-inconsistency]** `copypaste.maxpat`'s copyable-parameter `umenu` (obj-16) enumerates ~30
-   per-layer parameter names but omits `mesh::*`, `layername`, and `layerorder` — three fields that
-   *do* exist in the `1layer::*` namespace dumped in `data/presets.json`. Copy/paste therefore silently
-   skips a layer's mesh warp state and its name/stacking order, with no indication to the user that
-   the operation is partial. Location: `vpt8 source code/patchers/copypaste.maxpat` — obj-16 `umenu`
-   items list (line 663-674); compare `vpt8 source code/data/presets.json` — `"1layer::mesh::gridsize"`,
-   `"1layer::layername"`, `"1layer::layerorder"` keys. Severity: low. Effort: low.
+7. **[naming-inconsistency]** `copypaste.maxpat`'s copyable-parameter `umenu` (obj-16) enumerates 38
+   per-layer parameter names but omits 7 fields that *do* exist in the 45-key `1layer::*` namespace
+   dumped in `data/presets.json`: `mesh::gridsize`, `mesh::on`, `mesh::position`, `layername`,
+   `layerorder`, `mask::points`, and `zoom::rota`. Copy/paste therefore silently skips a layer's mesh
+   warp state, its name/stacking order, its mask-shape points, and its zoom rotation, with no
+   indication to the user that the operation is partial. Location:
+   `vpt8 source code/patchers/copypaste.maxpat` — obj-16 `umenu` items list (line 663-674); compare
+   `vpt8 source code/data/presets.json` — `"1layer::mesh::gridsize"`, `"1layer::mesh::on"`,
+   `"1layer::mesh::position"`, `"1layer::layername"`, `"1layer::layerorder"`,
+   `"1layer::mask::points"`, `"1layer::zoom::rota"` keys. Severity: low. Effort: low.
 8. **[architectural-fragility]** `timermodule.maxpat`'s hour/minute equality check relies on a
    deliberate but entirely uncommented sentinel-value trick (`if $i1==$i2 then 1 else -1` paired with
    `if $i1==$i2 then 1 else 0`, so a final `==` only ever fires on a true double-match, never on a
