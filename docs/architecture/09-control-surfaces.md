@@ -154,7 +154,7 @@ cam, serial, vpt`), a `number` **"destination_nr"** (obj-37), and a dynamically-
 **"parameter"** (obj-13) let the user pick a target; a static subpatcher `p parameters` (obj-132,
 lines 543-2037) contains a `sel 0 1 2 ... 10` dispatcher (line 961) that emits, per destination
 category, the curated legal parameter-token list for that category (see Data flow) on a per-instance
-`s #1param_out`. The final address string is built by `sprintf /%s/%s \$1` (obj-18, line 2375) and
+`s #1param_out`. The final address string is built by `sprintf /%s/%s \$1` (obj-18, line 2377) and
 fired on `s ctrl` (obj-4, line 2236) — confirmed received elsewhere in the app by `r ctrl` in
 `enginetab.maxpat` (line 9640), tying this cluster directly to the layer engine documented in Tasks
 2-3.
@@ -191,7 +191,7 @@ two-segment address (target-object name = category + 1-based index, then the spe
 followed by the value as a separate trailing atom (not embedded as an OSC-typed argument). Built by
 concatenating the `destination` umenu value + `destination_nr` number via `sprintf %i%s`/`gate 2 1`
 (fixed literals `OFF`/`vpt` for the two non-indexed categories), then combined with the chosen
-`parameter` token via `sprintf /%s/%s \$1` (obj-18, line 2375), and fired on `s ctrl`. One category
+`parameter` token via `sprintf /%s/%s \$1` (obj-18, line 2377), and fired on `s ctrl`. One category
 ("cam"/sources) breaks the grammar: `sprintf sources/%s` (obj-10, line 384) produces a bare
 `sources/N` token with no leading slash, unlike every other category.
 
@@ -309,6 +309,13 @@ serial, sensor-input, or Art-Net files.
   58-285) reimplements — with different quantization math (`/1024.` vs. the bpatcher module's
   `scale 0 1024 0. 1.`) and a different controller-id range cap — the same job as the
   `sensorinput_module_vpt7.maxpat` bpatchers it also hosts six copies of.
+- **Undocumented but functional: an OSC script sequencer inside `osceditor-vpt7.maxpat`.** A
+  self-contained, working feature (not dead code — confirmed wired) lives alongside the file's OSC
+  transport/config UI: a Max `text` object backing a load/edit/save text file of line-based messages,
+  stepped via `counter`, auto-played via `metro 1000` (tempo number box, `minimum 30`) with a 3-way
+  `umenu` (`up`, `down`, `up&down` — ping-pong) direction selector (roughly lines 1729-2242). It is not
+  mentioned anywhere in the file's own help-popup comments (`p osc`, obj-72), so its existence is only
+  recoverable by reading the patch directly.
 
 ## Tech-debt findings
 
@@ -387,16 +394,17 @@ serial, sensor-input, or Art-Net files.
     inconsistent within the same file: most destination categories build a `/<name><nr>/<param>`
     slash-prefixed path, but the "cam"/sources category builds a bare `sources/N` token with no
     leading slash. Location: `vpt8 source code/patchers/ctrl_config-vpt7_01.maxpat:384` (`sprintf
-    sources/%s`) vs. `ctrl_config-vpt7_01.maxpat:2375` (`sprintf /%s/%s \$1`). Severity: low.
+    sources/%s`) vs. `ctrl_config-vpt7_01.maxpat:2377` (`sprintf /%s/%s \$1`). Severity: low.
     Effort: low.
 
-12. **[dead-code]** Three hidden, unwired manual-trigger message boxes exist alongside the production
-    debug/instrumentation surface of this cluster: `serial_VPT7.maxpat` has three live-wired debug
-    `print` objects left in the production signal path (`print serialO`, `print serialin`, and a bare
-    `print`), and `osceditor-vpt7.maxpat` has an undocumented, in-patch-help-unmentioned OSC script
-    sequencer feature whose maintenance status is unclear. Location:
-    `vpt8 source code/patchers/serial_VPT7.maxpat` — `print serialO` (line 625), `print serialin`
-    (line 671), bare `print` (line 1692); `vpt8 source code/patchers/osceditor-vpt7.maxpat` —
-    sequencer objects roughly lines 1729-2242 (`text`, `textedit varname:"textedit"`, `counter`,
-    `metro 1000`), not mentioned anywhere in the file's own help-popup comments. Severity: low.
+12. **[dead-code]** `serial_VPT7.maxpat` contains three debug `print` objects, but only one is
+    actually wired: the bare `print` (obj-63, line 1692) has a genuine incoming patchline (from a
+    `t 0 b` (obj-55) → `"serialport ready"` message box (obj-65, line 1678), fed by the serial-port
+    connection logic), so it does fire live during normal operation, printing serial-port-open status
+    to the Max console — this one is not dead code. `print serialO` (obj-79, line 625) and
+    `print serialin` (obj-74, line 671), by contrast, have zero patchline references anywhere in the
+    file (confirmed by searching for both object IDs as source and destination across the entire
+    `"lines"` patchcord array) — these two are genuinely unwired, dead debug instrumentation. Location:
+    `vpt8 source code/patchers/serial_VPT7.maxpat` — `print` (obj-63, line 1692, wired); `print
+    serialO` (obj-79, line 625, unwired); `print serialin` (obj-74, line 671, unwired). Severity: low.
     Effort: low.
