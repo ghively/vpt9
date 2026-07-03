@@ -1,0 +1,19 @@
+services:
+  control-plane:
+    build: ./server
+    ports:
+      - "8080:8080"
+    volumes:
+      - state-data:/data
+    restart: unless-stopped
+
+  render-client:
+    build: ./render-client
+    ports:
+      - "8081:80"
+    depends_on:
+      - control-plane
+    restart: unless-stopped
+
+volumes:
+  state-data:
