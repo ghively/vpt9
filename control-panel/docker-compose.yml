@@ -26,9 +26,12 @@ services:
   cast-receiver:
     build: ./cast-receiver
     environment:
-      - CONTROL_PLANE_URL=http://control-plane:8080
+      # host networking (below) means this container is NOT on the compose bridge
+      # network, so the "control-plane" service-name DNS doesn't resolve here — reach
+      # it via the host-published port instead.
+      - CONTROL_PLANE_URL=http://localhost:8080
       - PIP_ID=pip-1
-      - ADVERTISE_HOST=${CAST_RECEIVER_HOST:-localhost} # set to this machine's real LAN IP so phones can reach it
+      - CAST_RECEIVER_HOST=${CAST_RECEIVER_HOST:-localhost} # set to this machine's real LAN IP so phones can reach it
       - FRIENDLY_NAME=Room Cast
     depends_on:
       - control-plane

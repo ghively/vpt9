@@ -26,11 +26,13 @@
   .rack-title { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-dim); }
 
   .strip {
-    display: grid; grid-template-columns: 24px 1fr 150px 110px 130px auto;
+    display: grid; grid-template-columns: 24px 26px 1fr 150px 110px 130px auto;
     align-items: center; gap: var(--space-2);
     padding: var(--space-2); background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-md);
   }
   .idx { text-align: center; color: var(--muted-dim); font-size: 11px; }
+  .move-group { display: flex; flex-direction: column; gap: 2px; }
+  .move-group .move-btn { width: 26px; height: 12px; font-size: 8px; }
   .meta .name-input { width: 100%; background: transparent; border: none; font-size: 12px; font-weight: 600; color: var(--text); padding: 4px 0; }
   .source-group { display: flex; flex-direction: column; gap: 4px; }
   .source-group select, .source-group input[type="text"] { font-size: 10px; padding: 4px 6px; }
