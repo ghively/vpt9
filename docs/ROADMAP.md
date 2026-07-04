@@ -1,120 +1,108 @@
-# VPT Modernization Roadmap & Track Reconciliation
+# VPT Modernization Roadmap
 
-This doc reconciles the two pieces of work in this repo and records, in writing, a decision that
-was previously only made in conversation. It also records what was actually verified live on a
-real (non-sandboxed) machine, as of 2026-07-04.
+This is the current source of truth for what's built, what direction was chosen, and what work
+remains. It supersedes the earlier `docs/ROADMAP.md` (written 2026-07-04, first pass).
+`docs/TECH_DEBT.md` and `docs/CONTROL_PANEL_SPEC_AUDIT.md` remain as closed historical audit
+records — this doc doesn't repeat their findings, it points to them.
 
-## The two tracks, and the decision between them
+## Status Quo
 
-[`docs/superpowers/specs/2026-07-02-vpt8-architecture-audit-design.md`](superpowers/specs/2026-07-02-vpt8-architecture-audit-design.md)
-scoped a **read-only audit** of the original Max/MSP app and deliberately left one question open:
-*"Direction (stay-in-Max-and-upgrade vs. eventually port to another stack) is intentionally left
-open, to be decided later using this audit as evidence."* That audit produced
-[`architecture/00-overview.md`](architecture/00-overview.md), 11 module docs, and
-[`TECH_DEBT.md`](TECH_DEBT.md) (78 findings).
+**VPT8 architecture audit (Track A) — closed.** Read-only audit of the original Max/MSP app:
+[`docs/architecture/00-overview.md`](architecture/00-overview.md) plus 11 module docs covering all
+49 patchers, and [`docs/TECH_DEBT.md`](TECH_DEBT.md) (78 findings). Verified via
+[`docs/architecture/VERIFICATION-LOG.md`](architecture/VERIFICATION-LOG.md) (8/8 spot-checks
+passed). Known coverage gaps admitted by the audit itself: camera sources (`cam1`/`cam2`) never got
+a deep-dive, and the final `s ctrl` dispatch was only traced from the engine side.
 
-The very next day, work began on `control-panel/` — a browser/Node/WebGL2 replacement — without
-ever writing down the direction decision the audit called for. Commit messages reference "the
-earlier design conversation" for scope calls (e.g. hardware control surfaces out of scope), but
-that conversation isn't captured anywhere in this repo's history.
+**`control-panel/` web replacement (Track B) — actively built, partially verified.** A Node/
+WebSocket server, WebGL2 render client, operator panel, and DIAL/SSDP cast-receiver. Built in two
+passes (Phase 1 scaffold, then the full stack), then spec-audited against its own README
+([`docs/CONTROL_PANEL_SPEC_AUDIT.md`](CONTROL_PANEL_SPEC_AUDIT.md)) — 4 bugs found and fixed same
+day. On 2026-07-04, live on a real (non-sandboxed) Windows machine: all 20 JS files pass
+`node --check`; all four services boot; the WebSocket state-sync protocol was exercised with two
+real clients (update broadcast confirmed); the DIAL device description and the
+`POST /api/pip/:pipId/cast` → PiP-visible hook both confirmed working end-to-end. Still unverified
+anywhere: real WebGL visual rendering in an actual browser, real YouTube iframe playback, real
+phone-to-DIAL discovery, Docker/GPU execution, real Chromecast hardware.
 
-**This doc makes it explicit: the direction chosen is "port to a web stack" (`control-panel/`),
-superseding "stay in Max."** Nobody should have to reconstruct that from commit messages again.
+## Direction Decision
 
-## What porting to `control-panel/` resolves vs. inherits from `TECH_DEBT.md`
+Direction has shifted from "stay in Max and upgrade" to **port to `control-panel/`** — a decision
+originally made only in an unrecorded conversation, first written down in the 2026-07-04
+`ROADMAP.md`, and carried forward here. This doc does not re-litigate that choice.
 
-Going category by category (see `TECH_DEBT.md` for the 78 individual findings):
+## Subsystem Inventory
 
-- **platform-gap** — Mostly resolved by construction. Syphon (Mac-only GPU sharing), the hardcoded
-  `viddll`/`hap` decode engines, and the macOS-only serial defaults are all VPT8-specific; a
-  browser/WebGL stack has no equivalent dependency. **Exception:** Art-Net/DMX and MIDI/OSC/serial
-  hardware control surfaces are explicitly out of scope for `control-panel` per its own README —
-  this category isn't fixed, it's deferred with no replacement built yet.
-- **toolchain-version** (Max 7.3.5 pin, mixed 32/64-bit saves) — Moot if VPT8 is fully retired;
-  still live if any Max-side work continues in parallel.
-- **closed-dependency** (missing `OSC-route.mxo`, `Ldiv`/`Lmult`/`Label` externals with no source) —
-  Moot for `control-panel` (no Max runtime involved at all); only matters if VPT8 keeps running.
-- **dead-code / naming-inconsistency** — VPT8-specific, orthogonal to the new stack.
-- **architectural-fragility** — This is `control-panel`'s biggest structural win. VPT8's layer
-  system is three parallel bpatcher representations (engine/GUI/tabs) kept in sync only by
-  convention across three separate scripts. `control-panel`'s server state is a single
-  id-keyed source of truth (`server/src/state.js`) — that whole class of bug can't recur.
-- **hardcoded-limit** (fixed `videobank01`-`videobank08` enumeration) — Resolved: `control-panel`'s
-  create/delete-by-id protocol has no fixed slot count.
-- **no-tests-ci** — **Not** resolved. `control-panel` has zero automated tests, same as VPT8. All
-  verification so far (both in the prior sandboxed session and in this one) has been manual/agent-
-  driven exercise, not a test suite that runs on its own.
-- **licensing** (VPT8 is CC BY-NC-SA 3.0, non-commercial) — Does not automatically transfer to new
-  code. If `control-panel` is ever meant to be distributed, its own license is still an open
-  decision — nothing currently states one.
+Three subsystems remain before `control-panel` reaches functional parity with VPT8. Two categories
+that might look like a fourth and fifth "subsystem" are deliberately folded into the three below
+rather than tracked separately: verification/testing (part of each subsystem's own definition of
+done) and the `control-panel` license choice (a standalone one-time decision to make before ever
+distributing it, not a build project).
 
-## Gaps neither track has touched
+### 1. Per-layer visual effects chain — Priority 1
 
-- **Camera sources (`cam1`/`cam2`).** Track A's own overview doc flags this as a coverage gap it
-  never deep-dived. `control-panel`'s state model only knows `source.type: "video" | "color"` —
-  no camera source exists there either. If live camera input matters for a real installation, this
-  is unaddressed on both sides.
-- **Hardware control surfaces & the LFO modulation rack.** VPT8's 100-row control router and
-  10-slot LFO rack (MIDI, OSC, Art-Net, serial/sensor input) have no `control-panel` equivalent at
-  all yet — deliberately deferred, per the README, not attempted.
-- **Real Chromecast hardware / a real phone casting** — the DIAL/SSDP implementation is
-  spec-correct for the subset of the protocol YouTube uses, but has never been exercised against
-  actual hardware.
+VPT8's `vlayer.maxpat` runs each layer through 9 stages: flip, tile, zoom, blur, motion-blur/slide,
+brightness/contrast/saturation ("brcosa"), mask, edge-blend, mesh. `control-panel`'s
+`render-client/src/compositor.js` implements exactly 2: shape-based mask (rect/ellipse + feather)
+and blend-mode compositing.
 
-## What was verified live on this machine today (not a cloud sandbox)
+**Gap:** flip, tile, zoom, blur, motion-blur, brcosa, edge-blend — 7 of 9 stages missing.
+**Size:** medium-large — each stage is a new WebGL shader pass, plus per-layer UI controls in
+`panel/` and new fields in the server's layer state schema.
+**Why first:** highest-impact gap — it's most of what makes a layer look "processed" like VPT8
+rather than a flat video plane.
 
-Everything `control-panel/README.md` previously called "verified" happened in a different,
-sandboxed Linux agent environment. On this Windows machine, today:
+### 2. Whole-app automation — Priority 2
 
-- `npm install` succeeded for `server` (needs `ws`) and `cast-receiver` (no deps).
-- All 20 JS source files across `server`, `render-client`, `panel`, and `cast-receiver` pass
-  `node --check`.
-- All four services started cleanly and stayed up: control-plane (`:8080`), render-client static
-  serve (`:8081`), panel static serve (`:8082`), cast-receiver (SSDP `:1900` + DIAL HTTP `:8090`).
-- The WebSocket protocol was exercised with two real independent client connections: one sent an
-  `update`, the other received the broadcast, confirming the core state-sync loop actually works
-  outside the original sandbox.
-- The DIAL device description (`/dd.xml`) served correctly.
-- `POST /api/pip/:pipId/cast` was called directly and correctly flipped `pip-1` to
-  `visible: true` with the posted `videoId` — the cast-to-PiP hook works end-to-end.
+VPT8 has three automation paths: the preset module, a sequential cue-list script interpreter
+(`C`/`F`/`D`/`L`/`S`/`R`/`O` letter codes), and a 15-alarm wall-clock timer bank, plus per-layer
+`copypaste`. `control-panel` only has presets (`presetSave`/`presetRecall`).
 
-**Still not verifiable here:** real WebGL rendering/visual compositing, drag-based warp editing,
-real YouTube iframe playback, and real phone-to-DIAL discovery — this environment has no working
-browser automation (the Chrome extension wasn't connected, and installing Playwright's Chrome
-channel failed for lack of admin rights, which wasn't pursued further). See "Try it yourself"
-below — this is the one class of behavior that needs a human with a browser.
+**Gap:** cue-list interpreter, timer bank, copy-paste.
+**Size:** medium — the cue interpreter is a small scripting language to parse and step through; the
+timer bank is simpler (scheduled triggers); copy-paste is close to trivial once the layer state
+schema is stable.
 
-## The untracked-source risk, now with a decision to make
+### 3. Input sources & control surfaces — Priority 3
 
-`vpt8 source code/` — the actual Max project — has never been committed to this git repo (no
-history on that path at all). Now that direction has explicitly shifted to replacing it, decide:
-commit it as a historical reference (recommended — it's the only copy, and every Track A doc cites
-file:line references into it that will silently rot if the folder changes or is lost), or
-explicitly `.gitignore` it with a note explaining why not.
+VPT8 has camera sources (`cam1`/`cam2`), hardware + soft MIDI, OSC, Art-Net/DMX, serial/sensor
+input, a 100-row control router, and a 10-slot LFO modulation rack. `control-panel` has none of
+this.
 
-## Suggested next steps, in priority order
+**Gap:** everything in this category.
+**Size:** large — browsers only reach MIDI/serial hardware via WebMIDI/WebSerial (Chrome-only,
+user-permission-gated), and Art-Net/DMX or camera capture would need a small local bridge service
+outside the browser sandbox.
+**Open question (flagged, not assumed):** does the actual installation this is meant to run need
+physical hardware control at all? If not, this subsystem may be permanently low-priority rather
+than a deferred "someday" — that's a call for whoever runs the installation, not an engineering
+one.
 
-1. Decide on committing (or explicitly ignoring) `vpt8 source code/` — it's currently one wrong
-   command away from being unrecoverable.
-2. Open the running services in a real browser yourself (below) to confirm actual visual
-   compositing/warp/masking — the one thing this session couldn't check by tool.
-3. Decide whether camera sources and hardware control surfaces are ever in scope for
-   `control-panel`, or permanently out — right now that's an implicit "no one's decided."
-4. If in scope, write a spec for them the way Track A specced the audit and Phase 1 specced the
-   scaffold — this repo's pattern so far is "spec before build" for the audit and "build then
-   audit" for control-panel; either is fine, but pick one on purpose per feature.
-5. Add a minimal automated test (even just `node --check` + one scripted WS round-trip like the
-   one used above) to close the no-tests-ci gap for at least the server, since that's cheap and
-   this session just proved it's easy to script.
+## Sequencing
 
-## Try it yourself right now
+Ordered by visible impact, not by a separate risk-reduction phase: **1) per-layer effects chain →
+2) whole-app automation → 3) input sources & control surfaces.** Each subsystem's own "done"
+includes exercising its new pieces in a real browser (and a cheap scripted check where feasible,
+the way the WebSocket protocol was verified this session) — that's part of finishing the
+subsystem, not a separate blocking phase before starting it.
 
-The four services are still running locally from this session:
+## Non-Goals
 
-- Control-plane: `http://localhost:8080` (state at `/state`, health at `/health`)
-- Render client: `http://localhost:8081/index.html?screen=screen-1&ws=ws://localhost:8080`
-- Panel: `http://localhost:8082/index.html?ws=ws://localhost:8080`
-- Cast-receiver: DIAL on `:8090`, SSDP on UDP `1900`
+- No new code in `control-panel/` or `vpt8 source code/` — this document only plans.
+- No full spec for the effects chain, automation, or input/control subsystems yet — each gets its
+  own brainstorm → spec → plan cycle, one at a time, starting with whichever the user picks next.
+- No license chosen for `control-panel` — flagged as a one-time open decision to make before ever
+  distributing it, not resolved here.
 
-Open the panel and the render client side by side in your own browser and drag an opacity slider —
-that's the one behavior this session verified at the protocol level but couldn't confirm visually.
+## Superseded / Related Documents
+
+- This file supersedes the 2026-07-04 first-pass `ROADMAP.md`.
+- [`docs/TECH_DEBT.md`](TECH_DEBT.md) — closed audit, 78 findings against the original VPT8 source.
+  Still the reference for VPT8-specific debt if any Max-side work ever continues in parallel with
+  `control-panel`.
+- [`docs/CONTROL_PANEL_SPEC_AUDIT.md`](CONTROL_PANEL_SPEC_AUDIT.md) — closed spec-compliance audit
+  of `control-panel/` (4 bugs found and fixed 2026-07-03).
+- [`docs/architecture/00-overview.md`](architecture/00-overview.md) and its 11 module docs — the
+  full VPT8 map this roadmap's subsystem gaps are derived from.
+- [`docs/superpowers/specs/2026-07-04-master-roadmap-design.md`](superpowers/specs/2026-07-04-master-roadmap-design.md)
+  — the design spec this document implements.
