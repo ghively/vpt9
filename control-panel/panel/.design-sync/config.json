@@ -1,5 +1,12 @@
 {
+  "projectId": "8418729a-f9a1-42b9-a3af-eb413b0f7576",
+  "pkg": "vpt-control-panel",
+  "globalName": "VPTPanelKit",
   "shape": "storybook",
   "storybookConfigDir": ".storybook",
+  "storybookStatic": ".design-sync/sb-reference",
+  "entry": "src/components/index.ts",
+  "cssEntry": "src/styles.css",
+  "buildCmd": "npm run build",
   "readmeHeader": ".design-sync/conventions.md"
 }
