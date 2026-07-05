@@ -14,9 +14,9 @@ repo — it's new code for the replacement system.
 
 | Service | What it is | VPT8 analogue |
 |---|---|---|
-| `server/` | State store (file-persisted) + WebSocket broadcast hub + a small HTTP hook for the cast receiver. | `pattrstorage` + the app-wide send/receive bus |
-| `render-client/` | Browser WebGL2 compositor: multi-layer stack, blend modes, per-layer masking, per-screen warp (corner-pin or mesh), a YouTube PiP overlay, and an audio-owner mute policy. One instance runs per physical screen, addressed by `?screen=<id>` in its URL. | `enginetab.maxpat` + `vlayer.maxpat` + the corner-pin/mesh warp editors |
-| `panel/` | The actual operator UI: layer rack, warp editor (drag corner/mesh handles against a live low-res preview pulled from the render client), PiP window manager, presets bar, audio-owner selector. | `layergui`/`layertab` + `activelayer.maxpat`'s point editors + the preset module |
+| `server/` | State store (file-persisted) + WebSocket broadcast hub + the automation engine (cue-list interpreter, wall-clock timers, preset fades, LFO rack), an OSC/UDP listener, and a small HTTP hook for the cast receiver. | `pattrstorage` + the app-wide send/receive bus + the cuelist/timer/LFO modules |
+| `render-client/` | Browser WebGL2 compositor: multi-layer stack, per-layer effects chain (flip, tile, zoom/pan, blur, motion-trail, brightness/contrast/saturation, edge-blend), blend modes, per-layer masking, per-screen warp (corner-pin or mesh), video/color/camera sources, a YouTube PiP overlay, and an audio-owner mute policy. One instance runs per physical screen, addressed by `?screen=<id>` in its URL. | `enginetab.maxpat` + `vlayer.maxpat` (all 9 stages) + the corner-pin/mesh warp editors + `cam1`/`cam2` |
+| `panel/` | The actual operator UI: layer rack with per-strip FX drawer and layer-look copy/paste, warp editor (drag corner/mesh handles against a live low-res preview pulled from the render client), PiP window manager, presets bar, audio-owner selector, cue-list editor + transport, timer bank, LFO rack, and a WebMIDI learn-based CC map. | `layergui`/`layertab` + `activelayer.maxpat`'s point editors + the preset/cuelist/timer modules + the MIDI control surface |
 | `cast-receiver/` | A DIAL/SSDP responder so a phone's YouTube app sees this as a "Cast" target; casting a video populates a PiP window's state. | *(no VPT8 equivalent — new capability)* |
 
 ## Architecture decisions made along the way
@@ -55,7 +55,13 @@ repo — it's new code for the replacement system.
       "id": "layer-1", "name": "...", "order": 1,
       "source": { "type": "video", "url": "..." } ,
       "opacity": 1, "blendMode": "screen",
-      "mask": { "enabled": false, "shape": "ellipse", "cx": 0.5, "cy": 0.5, "rx": 0.4, "ry": 0.4, "feather": 0.08 }
+      "mask": { "enabled": false, "shape": "ellipse", "cx": 0.5, "cy": 0.5, "rx": 0.4, "ry": 0.4, "feather": 0.08 },
+      "fx": {
+        "flipH": false, "flipV": false, "tileX": 1, "tileY": 1,
+        "zoom": 1, "panX": 0, "panY": 0, "blur": 0, "motionBlur": 0,
+        "brightness": 1, "contrast": 1, "saturation": 1,
+        "edgeBlend": { "left": 0, "right": 0, "top": 0, "bottom": 0, "gamma": 2 }
+      }
     }
   },
   "screens": {
@@ -63,15 +69,34 @@ repo — it's new code for the replacement system.
   },
   "pip": { "pip-1": { "id": "pip-1", "screenId": "screen-1", "title": "...", "videoId": null, "x": 0.55, "y": 0.12, "width": 0.36, "height": 0.2, "visible": false } },
   "audioOwnerScreenId": "screen-1",
-  "presets": { "preset-1": { "id": "preset-1", "name": "Evening chill", "snapshot": { "layers": {...}, "screens": {...}, "pip": {...}, "audioOwnerScreenId": "..." } } }
+  "presets": { "preset-1": { "id": "preset-1", "name": "Evening chill", "snapshot": { "layers": {...}, "screens": {...}, "pip": {...}, "audioOwnerScreenId": "..." } } },
+  "automation": {
+    "cues": [ { "id": "cue-1", "label": "Build", "type": "fade", "presetId": "preset-1", "seconds": 12 } ],
+    "cursor": -1, "running": false,
+    "timers": { "timer-1": { "id": "timer-1", "enabled": true, "time": "18:30", "action": "cueGo", "presetId": "" } }
+  },
+  "lfos": { "lfo-1": { "id": "lfo-1", "enabled": true, "wave": "sine", "rateHz": 0.25, "min": 0.4, "max": 0.9, "target": "layers.layer-1.opacity" } },
+  "midiMap": { "map-1": { "id": "map-1", "channel": 0, "controller": 21, "target": "layers.layer-1.opacity", "min": 0, "max": 1 } }
 }
 ```
 
 - All collections are keyed by **id**, not array index — layer stack order is the
   explicit `order` field, not object-key insertion order.
-- `source.type` is `"video"` (needs `url`) or `"color"` (needs `color: [r,g,b]`, 0–1).
+- `source.type` is `"video"` (needs `url`), `"color"` (needs `color: [r,g,b]`, 0–1), or
+  `"camera"` (getUserMedia; Chrome prompts once per origin, video only, never owns audio).
 - `layers`/`screens`/`pip`/`audioOwnerScreenId` together form a preset snapshot;
-  `presets` itself is excluded (recalling a preset doesn't recursively touch presets).
+  `presets` itself is excluded (recalling a preset doesn't recursively touch presets),
+  and so are `automation`/`lfos`/`midiMap` (a preset shouldn't rewrite your cue list).
+- `layer.fx` is the per-layer effects chain, applied in vlayer.maxpat's stage order:
+  flip → tile → zoom/pan → brightness/contrast/saturation + edge-blend → blur →
+  motion-trail. All values above are the "stage off" defaults; the server backfills
+  missing `fx` (and the other new containers) into older `state.json` files on load.
+- Cue `type`s: `recall` (cut to preset), `fade` (interpolate every numeric leaf toward
+  the preset over `seconds`, then land exactly), `wait` (delay), `goto` (jump to cue
+  index — loops are a `goto` backwards). Transport state (`cursor`/`running`) always
+  boots as stopped.
+- LFO waves: `sine`, `triangle`, `square`, `saw`, `random` (sample-and-hold per cycle).
+  LFO/fade ticks are broadcast but never trigger disk persistence.
 
 ## WebSocket protocol
 
@@ -91,11 +116,30 @@ repo — it's new code for the replacement system.
 - `{"type":"preview","screenId":"screen-1","frame":"data:image/jpeg;base64,..."}` — a
   render client's live low-res confidence-monitor frame, relayed to every *other*
   connected client (never persisted, never sent back to its own sender).
+- `{"type":"batch","updates":[{"path":"...","value":...},...]}` — server → clients;
+  one message per 30 Hz engine tick carrying every fade/LFO value change at once.
+  Clients apply all patches, then re-derive once.
+- `{"type":"cueGo"}` / `{"type":"cueStop"}` / `{"type":"cueJump","index":2}` — cue-list
+  transport. GO starts the interpreter (or skips ahead if already running — an active
+  fade completes instantly first); STOP halts where it is; JUMP arms the cursor so the
+  next GO runs `cues[index]`.
 
 `GET /state` returns the current state as JSON; `GET /health` is a liveness check;
 `POST /api/pip/:pipId/cast` with `{"videoId": "...", "title": "..."}` is the hook the
 cast-receiver (or anything else outside the WS protocol) uses to push a video into a PiP
 window without needing its own WebSocket client.
+
+### OSC
+
+The server also listens for OSC over UDP (default port `9000`, set `OSC_PORT`, `0`
+disables) so TouchOSC/QLab/anything OSC can drive it without a WebSocket client:
+
+- `/layers/layer-1/opacity 0.8` — any address maps to the dotted state path, first
+  argument (f/i/d/s/T/F supported, `#bundle` unwrapped) is the value.
+- `/cue/go`, `/cue/stop`, `/cue/jump 2`, `/preset/recall preset-1` — transport controls.
+
+This WS + OSC pair is also the integration surface any future hardware bridge
+(Art-Net/DMX, serial sensors) would target from outside the browser sandbox.
 
 ## Running it
 
@@ -145,13 +189,17 @@ default autoplay gesture requirement.)
 
 ## What's verified vs. spec-complete-but-untested-live
 
-Everything above was exercised end-to-end in a sandboxed dev environment (no Docker
-daemon, no GPU, no real network) using plain Node processes and headless Chromium via
-Playwright: state create/update/delete/preset-save/recall, multi-layer blend+mask+warp
-compositing (visually confirmed via screenshots), the live preview loop from render
-client to panel, drag-based warp/PiP editing through the real UI, the audio-owner mute
-toggle, and the DIAL receiver's SSDP response + HTTP app-launch flow (via a real UDP
-M-SEARCH and a simulated launch POST).
+Everything above was exercised end-to-end with plain Node processes and headless
+Chromium via Playwright: state create/update/delete/preset-save/recall, multi-layer
+blend+mask+warp compositing, the full per-layer fx chain (edge-blend/brcosa/zoom/pan
+confirmed at the pixel level via screenshots), the cue-list interpreter (fade
+interpolation ticks, exact landing on the preset, wait, goto, transport), the timer
+bank firing on a wall-clock minute, LFO batch ticks staying inside [min,max], OSC
+datagrams landing as state updates, the live preview loop from render client to panel,
+the new panel sections driving real state, drag-based warp/PiP editing through the real
+UI, the audio-owner mute toggle, hardened patch paths (primitive-leaf walks and
+`__proto__` injection are rejected without crashing), and the DIAL receiver's SSDP
+response + HTTP app-launch flow (via a real UDP M-SEARCH and a simulated launch POST).
 
 Not verifiable from this environment, by nature of what they are:
 
@@ -163,5 +211,9 @@ Not verifiable from this environment, by nature of what they are:
   documented) hasn't been tested against a real device.
 - **Docker/GPU execution** — the Dockerfiles and compose file are written and reviewed
   but not run in this environment (no Docker daemon available).
-- **Real Chromecast hardware and hardware control surfaces (MIDI/OSC/Art-Net)** —
-  deliberately out of scope for this pass, per the earlier design conversation.
+- **Real hardware at the edges** — a physical camera on a projector machine (the
+  getUserMedia path is written but headless has no camera), a hardware MIDI controller
+  against the learn flow (WebMIDI needs Chrome + a device), real Chromecast hardware,
+  and Art-Net/DMX/serial (no browser API exists — these need a small bridge process
+  speaking the WS/OSC protocol above, which is deliberately left until hardware is
+  actually in the room).

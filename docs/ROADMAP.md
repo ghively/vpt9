@@ -5,6 +5,19 @@ remains. It supersedes the earlier `docs/ROADMAP.md` (written 2026-07-04, first 
 `docs/TECH_DEBT.md` and `docs/CONTROL_PANEL_SPEC_AUDIT.md` remain as closed historical audit
 records — this doc doesn't repeat their findings, it points to them.
 
+> **2026-07-05 status update:** all three subsystems below are now built and verified (see
+> [`docs/superpowers/specs/2026-07-05-parity-subsystems-design.md`](superpowers/specs/2026-07-05-parity-subsystems-design.md)
+> for the audit findings + design, and `control-panel/README.md` for the current feature set and
+> verification record). Subsystem 1 (per-layer effects chain) and 2 (automation: cue-list
+> interpreter, timer bank, layer copy/paste) are complete. Subsystem 3 is complete for everything
+> software-reachable — LFO rack, camera source, WebMIDI CC mapping, and an OSC/UDP listener —
+> while Art-Net/DMX/serial remain out of scope until physical hardware exists to test against;
+> the WS + OSC protocol is the documented integration surface a future bridge would target.
+> A same-day full audit also fixed 8 findings (a server crash vector, prototype pollution, no
+> WS reconnect, sync-write-per-message persistence, hidden-PiP audio leak, invalid DIAL UUID,
+> id-less creates, dead code). Still open: the `control-panel` license decision, and the
+> real-hardware verification items listed at the end of the README.
+
 ## Status Quo
 
 **VPT8 architecture audit (Track A) — closed.** Read-only audit of the original Max/MSP app:

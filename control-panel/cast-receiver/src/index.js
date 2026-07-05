@@ -9,7 +9,8 @@ const PIP_ID = process.env.PIP_ID || "pip-1";
 const FRIENDLY_NAME = process.env.FRIENDLY_NAME || "Room Cast";
 // Fixed by default (not random) so this device keeps the same identity across restarts —
 // real DIAL senders otherwise treat a new UUID as a brand-new, never-before-seen device.
-const DEVICE_UUID = process.env.DEVICE_UUID || "6f9d2e1a-6b7e-4b6b-9d9a-vptcastreceiver1";
+// Must be a syntactically valid UUID (hex only): strict senders validate the UDN format.
+const DEVICE_UUID = process.env.DEVICE_UUID || "6f9d2e1a-6b7e-4b6b-9d9a-1c3e5a7b9d0f";
 
 const deviceUrl = `http://${ADVERTISE_HOST}:${PORT}`;
 
