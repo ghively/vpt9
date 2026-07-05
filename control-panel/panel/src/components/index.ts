@@ -30,11 +30,15 @@ export { WarpEditor } from "./WarpEditor";
 export type { WarpEditorProps } from "./WarpEditor";
 export { WarpHandle } from "./WarpHandle";
 export type { WarpHandleProps } from "./WarpHandle";
-export { PipManager } from "./PipManager";
-export type { PipManagerProps } from "./PipManager";
+export { PipWindows } from "./PipWindows";
+export type { PipWindowsProps } from "./PipWindows";
 export { PipBox } from "./PipBox";
 export type { PipBoxProps } from "./PipBox";
 export { PresetsBar } from "./PresetsBar";
 export type { PresetsBarProps } from "./PresetsBar";
+
+// Preview/provider wrapper (design-sync cfg.provider) — not a card component itself.
+export { VenueGround } from "./VenueGround";
+export type { VenueGroundProps } from "./VenueGround";
 
 export * from "./types";

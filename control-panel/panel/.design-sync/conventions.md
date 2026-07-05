@@ -51,7 +51,7 @@ Primitives: `Chip`, `ToggleSquare`, `Fader`, `Button`, `Select`, `TextField`, `S
 Composites: `Faceplate`, `AudioOwner`, `ChannelRack`, `LayerStrip`, `ConfidenceMonitor`
 (the signature — a projection confidence monitor with a recessed well, registration grid,
 and cyan corner crop-marks; a `forwardRef` exposes `setFrame(dataUrl)` for live preview),
-`WarpEditor`, `WarpHandle`, `PipManager`, `PipBox`, `PresetsBar`.
+`WarpEditor`, `WarpHandle`, `PipWindows`, `PipBox`, `PresetsBar`.
 
 ## One idiomatic snippet
 

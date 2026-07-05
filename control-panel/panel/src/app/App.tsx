@@ -3,7 +3,7 @@ import {
   AudioOwner,
   ChannelRack,
   Faceplate,
-  PipManager,
+  PipWindows,
   PresetsBar,
   StatusLamp,
   WarpEditor,
@@ -118,7 +118,7 @@ export function App() {
             onMovePoint={(index, x, y) => actions.moveWarpPoint(sid, index, x, y)}
             onDragEnd={endDrag}
           />
-          <PipManager
+          <PipWindows
             ref={preview.pipMonitor}
             screenId={sid}
             pips={pips}

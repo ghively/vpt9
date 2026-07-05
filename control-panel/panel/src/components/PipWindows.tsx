@@ -6,7 +6,7 @@ import { TextField } from "./primitives/TextField";
 import { Button } from "./primitives/Button";
 import type { Pip } from "./types";
 
-export interface PipManagerProps {
+export interface PipWindowsProps {
   screenId: string;
   /** PiP windows belonging to this screen. */
   pips: Pip[];
@@ -22,8 +22,8 @@ export interface PipManagerProps {
 
 /** Manages the PiP (cast) windows for a screen: a monitor with draggable boxes plus a
  *  row of controls per window. */
-export const PipManager = forwardRef<ConfidenceMonitorHandle, PipManagerProps>(
-  function PipManager(
+export const PipWindows = forwardRef<ConfidenceMonitorHandle, PipWindowsProps>(
+  function PipWindows(
     { screenId, pips, previewFrame, onDragStart, onDragEnd, onUpdatePip, onMovePip, onResizePip, onRemovePip, onAddPip },
     ref,
   ) {

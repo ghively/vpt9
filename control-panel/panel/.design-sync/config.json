@@ -5,8 +5,15 @@
   "shape": "storybook",
   "storybookConfigDir": ".storybook",
   "storybookStatic": ".design-sync/sb-reference",
-  "entry": "src/components/index.ts",
-  "cssEntry": "src/styles.css",
-  "buildCmd": "npm run build",
+  "entry": "dist-lib/index.js",
+  "cssEntry": "dist-lib/vpt-panel.css",
+  "buildCmd": "npm run build:lib",
+  "provider": { "component": "VenueGround" },
+  "overrides": {
+    "ChannelRack": { "cardMode": "column" },
+    "LayerStrip": { "cardMode": "column" },
+    "PresetsBar": { "cardMode": "column" },
+    "WarpHandle": { "cardMode": "column" }
+  },
   "readmeHeader": ".design-sync/conventions.md"
 }
