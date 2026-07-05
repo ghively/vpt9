@@ -8,6 +8,10 @@ export interface ChannelRackProps {
   onMoveLayer?: (id: string, dir: "up" | "down") => void;
   onRemoveLayer?: (id: string) => void;
   onAddLayer?: () => void;
+  /** Layer-look copy/paste (opacity/blend/mask/fx) — clipboard lives in the container. */
+  onCopyLayer?: (id: string) => void;
+  onPasteLayer?: (id: string) => void;
+  canPaste?: boolean;
 }
 
 /** The full layer rack: strips shown top-of-stack first, plus an add button. */
@@ -17,6 +21,9 @@ export function ChannelRack({
   onMoveLayer,
   onRemoveLayer,
   onAddLayer,
+  onCopyLayer,
+  onPasteLayer,
+  canPaste,
 }: ChannelRackProps) {
   // `order` ascends bottom→top; show the top of the stack first, like the vanilla panel.
   const ascending = [...layers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -36,6 +43,9 @@ export function ChannelRack({
             onUpdate={(field, value) => onUpdateLayer?.(layer.id, field, value)}
             onMove={(dir) => onMoveLayer?.(layer.id, dir)}
             onRemove={() => onRemoveLayer?.(layer.id)}
+            onCopy={() => onCopyLayer?.(layer.id)}
+            onPaste={() => onPasteLayer?.(layer.id)}
+            canPaste={canPaste}
           />
         );
       })}

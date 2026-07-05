@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Fader } from "./primitives/Fader";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
+import { FxDrawer } from "./FxDrawer";
 import { BLEND_MODES, type Layer } from "./types";
 
 export interface LayerNeighbors {
@@ -16,6 +18,11 @@ export interface LayerStripProps {
   onUpdate?: (field: string, value: unknown) => void;
   onMove?: (dir: "up" | "down") => void;
   onRemove?: () => void;
+  /** Copy this layer's look (opacity/blend/mask/fx) to the rack clipboard. */
+  onCopy?: () => void;
+  /** Paste the rack clipboard onto this layer; hidden while the clipboard is empty. */
+  onPaste?: () => void;
+  canPaste?: boolean;
 }
 
 function rgbToHex([r, g, b]: [number, number, number]): string {
@@ -24,12 +31,13 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 }
 
 /** One layer as a mixer channel strip: index, reorder, name, source, blend, opacity,
- *  mask toggles, remove. */
-export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove }: LayerStripProps) {
+ *  mask/fx toggles, copy/paste, remove. The FX button expands the effects drawer. */
+export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCopy, onPaste, canPaste }: LayerStripProps) {
   const isColor = layer.source?.type === "color";
+  const [fxOpen, setFxOpen] = useState(false);
 
   return (
-    <div className="strip">
+    <div className="strip" data-fx-open={fxOpen}>
       <div className="idx mono">{String(layer.order ?? 0).padStart(2, "0")}</div>
 
       <div className="move-group">
@@ -64,18 +72,23 @@ export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove }: Lay
           options={[
             { value: "video", label: "Video URL" },
             { value: "color", label: "Solid color" },
+            { value: "camera", label: "Camera" },
           ]}
           onChange={(v) =>
             onUpdate?.(
               "source",
               v === "color"
                 ? { type: "color", color: layer.source?.color ?? [0.5, 0.5, 0.5] }
-                : { type: "video", url: layer.source?.url ?? "" },
+                : v === "camera"
+                  ? { type: "camera" }
+                  : { type: "video", url: layer.source?.url ?? "" },
             )
           }
         />
         <div className="source-field">
-          {isColor ? (
+          {layer.source?.type === "camera" ? (
+            <span className="mono source-note">live capture</span>
+          ) : isColor ? (
             <input
               type="color"
               value={rgbToHex(layer.source.color ?? [0.5, 0.5, 0.5])}
@@ -132,8 +145,18 @@ export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove }: Lay
             })
           }
         />
+        <ToggleSquare
+          label="FX"
+          title="Effects chain"
+          active={fxOpen}
+          onClick={() => setFxOpen((open) => !open)}
+        />
+        <ToggleSquare label="⧉" title="Copy layer look" onClick={onCopy} />
+        <ToggleSquare label="⇩" title="Paste layer look" disabled={!canPaste} onClick={onPaste} />
         <ToggleSquare className="remove-btn" label="×" title="Remove layer" onClick={onRemove} />
       </div>
+
+      {fxOpen && layer.fx && <FxDrawer fx={layer.fx} onUpdate={onUpdate} />}
     </div>
   );
 }

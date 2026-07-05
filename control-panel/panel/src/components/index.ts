@@ -36,6 +36,16 @@ export { PipBox } from "./PipBox";
 export type { PipBoxProps } from "./PipBox";
 export { PresetsBar } from "./PresetsBar";
 export type { PresetsBarProps } from "./PresetsBar";
+export { FxDrawer } from "./FxDrawer";
+export type { FxDrawerProps } from "./FxDrawer";
+export { CueList } from "./CueList";
+export type { CueListProps } from "./CueList";
+export { TimerBank } from "./TimerBank";
+export type { TimerBankProps } from "./TimerBank";
+export { LfoRack } from "./LfoRack";
+export type { LfoRackProps } from "./LfoRack";
+export { MidiMapPanel } from "./MidiMapPanel";
+export type { MidiMapPanelProps } from "./MidiMapPanel";
 
 // Preview/provider wrapper (design-sync cfg.provider) — not a card component itself.
 export { VenueGround } from "./VenueGround";

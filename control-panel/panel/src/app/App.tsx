@@ -2,17 +2,26 @@ import { useCallback, useMemo, useReducer, useRef, useState } from "react";
 import {
   AudioOwner,
   ChannelRack,
+  CueList,
   Faceplate,
+  LfoRack,
+  MidiMapPanel,
   PipWindows,
   PresetsBar,
   StatusLamp,
+  TimerBank,
   WarpEditor,
   type ConnectionState,
+  type Layer,
 } from "../components";
-import { applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
+import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
+import { useMidi } from "./useMidi";
 import { createActions } from "./actions";
+
+/** The layer-look fields copy/paste moves between layers (not source/name/order). */
+type LayerLook = Pick<Layer, "opacity" | "blendMode" | "mask" | "fx">;
 
 export function App() {
   const stateRef = useRef<PanelState>(emptyState());
@@ -25,6 +34,8 @@ export function App() {
     state: "connecting",
     label: "connecting…",
   });
+  const clipboardRef = useRef<LayerLook | null>(null);
+  const [canPaste, setCanPaste] = useState(false);
 
   const preview = usePreviewBus(() => selectedRef.current);
 
@@ -58,6 +69,9 @@ export function App() {
     onDelete(path) {
       if (applyDelete(stateRef.current, path)) rerender();
     },
+    onBatch(updates) {
+      if (applyBatch(stateRef.current, updates)) rerender();
+    },
     onPreview(screenId, frame) {
       preview.push(screenId, frame);
     },
@@ -66,7 +80,9 @@ export function App() {
     },
   });
 
-  const actions = useMemo(() => createActions(send, () => stateRef.current), [send]);
+  const getState = useCallback(() => stateRef.current, []);
+  const actions = useMemo(() => createActions(send, getState), [send, getState]);
+  const midi = useMidi(getState, send);
 
   const beginDrag = useCallback(() => {
     isDraggingRef.current = true;
@@ -76,6 +92,29 @@ export function App() {
     forceRender();
   }, []);
 
+  const copyLayer = useCallback((id: string) => {
+    const layer = stateRef.current.layers[id];
+    if (!layer) return;
+    clipboardRef.current = structuredClone({
+      opacity: layer.opacity,
+      blendMode: layer.blendMode,
+      mask: layer.mask,
+      fx: layer.fx,
+    });
+    setCanPaste(true);
+  }, []);
+
+  const pasteLayer = useCallback(
+    (id: string) => {
+      const look = clipboardRef.current;
+      if (!look) return;
+      for (const [field, value] of Object.entries(look)) {
+        if (value !== undefined) actions.updateLayer(id, field, structuredClone(value));
+      }
+    },
+    [actions],
+  );
+
   const state = stateRef.current;
   const sid = selectedScreenId ?? "";
   const layers = Object.values(state.layers ?? {});
@@ -83,6 +122,7 @@ export function App() {
   const screen = selectedScreenId ? state.screens[selectedScreenId] : undefined;
   const pips = Object.values(state.pip ?? {}).filter((p) => p.screenId === selectedScreenId);
   const presets = Object.values(state.presets ?? {});
+  const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
 
   return (
     <>
@@ -104,6 +144,9 @@ export function App() {
           onMoveLayer={actions.moveLayer}
           onRemoveLayer={actions.removeLayer}
           onAddLayer={actions.addLayer}
+          onCopyLayer={copyLayer}
+          onPasteLayer={pasteLayer}
+          canPaste={canPaste}
         />
         <aside>
           <WarpEditor
@@ -140,6 +183,43 @@ export function App() {
             />
           </div>
         </aside>
+      </div>
+
+      <div className="layout-lower">
+        <CueList
+          cues={automation.cues ?? []}
+          cursor={automation.cursor ?? -1}
+          running={!!automation.running}
+          presets={presets}
+          onGo={actions.cueGo}
+          onStop={actions.cueStop}
+          onJump={actions.cueJump}
+          onSetCues={actions.setCues}
+        />
+        <TimerBank
+          timers={Object.values(automation.timers ?? {})}
+          presets={presets}
+          onAdd={actions.addTimer}
+          onUpdate={actions.updateTimer}
+          onRemove={actions.removeTimer}
+        />
+        <div className="mod-column">
+          <LfoRack
+            lfos={Object.values(state.lfos ?? {})}
+            onAdd={actions.addLfo}
+            onUpdate={actions.updateLfo}
+            onRemove={actions.removeLfo}
+          />
+          <MidiMapPanel
+            mappings={Object.values(state.midiMap ?? {})}
+            learningId={midi.learningId}
+            midiAvailable={midi.available}
+            onAdd={actions.addMidiMapping}
+            onUpdate={actions.updateMidiMapping}
+            onRemove={actions.removeMidiMapping}
+            onLearn={midi.learn}
+          />
+        </div>
       </div>
     </>
   );

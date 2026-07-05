@@ -1,4 +1,4 @@
-import type { Point } from "../components/types";
+import type { Cue, Fx, Point } from "../components/types";
 import type { PanelState } from "./store";
 import type { SocketMessage } from "./useSocket";
 
@@ -8,6 +8,25 @@ const IDENTITY_CORNERS: Point[] = [
   { x: 1, y: 1 },
   { x: 0, y: 1 },
 ];
+
+// Mirrors server/src/state.js defaultFx() — every value is "stage off".
+function defaultFx(): Fx {
+  return {
+    flipH: false,
+    flipV: false,
+    tileX: 1,
+    tileY: 1,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    blur: 0,
+    motionBlur: 0,
+    brightness: 1,
+    contrast: 1,
+    saturation: 1,
+    edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2 },
+  };
+}
 
 function identityMeshPoints(size: number): Point[] {
   const points: Point[] = [];
@@ -33,6 +52,7 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
           opacity: 1,
           blendMode: "normal",
           mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
+          fx: defaultFx(),
         },
       });
     },
@@ -110,6 +130,68 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     },
     setAudioOwner(screenId: string) {
       send({ type: "update", path: "audioOwnerScreenId", value: screenId });
+    },
+
+    // ── Cue-list transport + editing ─────────────────────────────────────────
+    cueGo() {
+      send({ type: "cueGo" });
+    },
+    cueStop() {
+      send({ type: "cueStop" });
+    },
+    cueJump(index: number) {
+      send({ type: "cueJump", index });
+    },
+    // The cue list is one state leaf; edits replace the whole array.
+    setCues(cues: Cue[]) {
+      send({ type: "update", path: "automation.cues", value: cues });
+    },
+
+    // ── Timer bank ───────────────────────────────────────────────────────────
+    // New entries carry every editable field: applyUpdate only patches leaves that
+    // already exist, so a missing presetId could never be filled in later.
+    addTimer() {
+      send({
+        type: "create",
+        path: "automation.timers",
+        value: { id: `timer-${Date.now()}`, enabled: false, time: "18:00", action: "cueGo", presetId: "" },
+      });
+    },
+    updateTimer(id: string, field: string, value: unknown) {
+      send({ type: "update", path: `automation.timers.${id}.${field}`, value });
+    },
+    removeTimer(id: string) {
+      send({ type: "delete", path: `automation.timers.${id}` });
+    },
+
+    // ── LFO rack ─────────────────────────────────────────────────────────────
+    addLfo() {
+      send({
+        type: "create",
+        path: "lfos",
+        value: { id: `lfo-${Date.now()}`, enabled: false, wave: "sine", rateHz: 0.2, min: 0, max: 1, target: "" },
+      });
+    },
+    updateLfo(id: string, field: string, value: unknown) {
+      send({ type: "update", path: `lfos.${id}.${field}`, value });
+    },
+    removeLfo(id: string) {
+      send({ type: "delete", path: `lfos.${id}` });
+    },
+
+    // ── MIDI map ─────────────────────────────────────────────────────────────
+    addMidiMapping() {
+      send({
+        type: "create",
+        path: "midiMap",
+        value: { id: `map-${Date.now()}`, channel: 0, controller: 1, target: "", min: 0, max: 1 },
+      });
+    },
+    updateMidiMapping(id: string, field: string, value: unknown) {
+      send({ type: "update", path: `midiMap.${id}.${field}`, value });
+    },
+    removeMidiMapping(id: string) {
+      send({ type: "delete", path: `midiMap.${id}` });
     },
   };
 }
