@@ -7,41 +7,63 @@ body {
   font-size: 13px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 button, select, input { font-family: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 
+/* Focus is the tungsten beam — a machined bracket, not a fuzzy web glow. */
+:focus-visible { outline: 1.5px solid var(--beam); outline-offset: 2px; }
+
+/* Nameplate labeling: mono, uppercase, tracked. The panel's structural voice. */
 .label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--muted);
 }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
+/* Section eyebrow — mono label preceded by a beam registration tick. Reused by h3 /
+ * .rack-title in index.html; the tick is applied there so it can attach to real nodes. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted-dim);
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 6px; }
+::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted-dim); }
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 5px 10px;
+  padding: 5px 11px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--hairline);
   background: var(--panel-raised);
   color: var(--muted);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
   transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
 .chip:hover { border-color: var(--muted-dim); color: var(--text); }
-.chip[data-active="true"] { border-color: var(--signal); color: var(--signal); background: var(--signal-dim); }
+.chip[data-active="true"] {
+  border-color: var(--beam);
+  color: var(--beam);
+  background: var(--signal-dim);
+}
 
 .toggle-sq {
   width: 26px; height: 26px;
@@ -50,36 +72,58 @@ button, select, input { font-family: inherit; color: inherit; }
   border: 1px solid var(--hairline);
   background: var(--panel-raised);
   color: var(--muted-dim);
-  font-size: 10px; font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 700;
   cursor: pointer;
   transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
-.toggle-sq[data-active="true"] { border-color: var(--signal); color: var(--signal); background: var(--signal-dim); }
+.toggle-sq:hover { border-color: var(--muted-dim); color: var(--muted); }
+.toggle-sq[data-active="true"] { border-color: var(--beam); color: var(--beam); background: var(--signal-dim); }
 .toggle-sq[data-tone="live"][data-active="true"] { border-color: var(--live); color: var(--live); background: var(--live-dim); }
-.toggle-sq:disabled { opacity: .35; cursor: not-allowed; }
+.toggle-sq:disabled { opacity: .3; cursor: not-allowed; }
 
+/* Faders — the thumb is a machined cap on a recessed rail, like a mixer channel. */
 input[type="range"] {
   -webkit-appearance: none; appearance: none;
-  height: 6px; border-radius: 3px;
+  height: 6px; border-radius: 2px;
   background: var(--panel-sunken);
   border: 1px solid var(--hairline-soft);
 }
 input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 12px; height: 18px; border-radius: 2px;
-  background: var(--text); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.5);
+  -webkit-appearance: none; width: 11px; height: 20px; border-radius: 2px;
+  background: linear-gradient(180deg, #35373f, #1a1b20);
+  border: 1px solid #43454e;
+  border-top-color: #55575f;
+  cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.6);
 }
-input[type="range"]:focus-visible { outline: 2px solid var(--signal); }
+input[type="range"]::-webkit-slider-thumb:hover { border-color: var(--beam); }
+input[type="range"]:focus-visible { outline: 1.5px solid var(--beam); }
 
 input[type="text"], input[type="number"], select {
-  background: var(--panel-raised);
+  background: var(--panel-sunken);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   padding: 6px 8px;
   font-size: 11px;
+  color: var(--text);
+  transition: border-color 120ms ease;
 }
+input[type="text"]:hover, input[type="number"]:hover, select:hover { border-color: var(--muted-dim); }
+input[type="text"]:focus, input[type="number"]:focus, select:focus {
+  outline: none; border-color: var(--beam);
+}
+input::placeholder { color: var(--muted-dim); }
 
 button.btn {
-  padding: 7px 14px; border-radius: var(--radius-md); border: 1px solid var(--hairline);
-  background: var(--panel-raised); color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 7px 14px; border-radius: var(--radius-sm); border: 1px solid var(--hairline);
+  background: var(--panel-raised); color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
-button.btn:hover { border-color: var(--signal); color: var(--signal); }
+button.btn:hover { border-color: var(--beam); color: var(--beam); background: var(--beam-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

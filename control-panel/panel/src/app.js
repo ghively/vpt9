@@ -32,6 +32,7 @@ const statusEl = document.getElementById("status");
 const { send } = connectControlPlane(wsUrl, {
   onStatus(status) {
     statusEl.textContent = `${status} · ${wsUrl}`;
+    statusEl.dataset.state = status; // drives the faceplate lamp colour in index.html
   },
   onState(newState) {
     state = newState;
