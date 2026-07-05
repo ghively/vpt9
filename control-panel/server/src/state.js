@@ -26,6 +26,27 @@ function identityMeshPoints(size) {
   return points;
 }
 
+// Per-layer effects chain defaults — every value here is "stage off". Mirrors
+// vlayer.maxpat's stage order (flip → tile → zoom/pan → brcosa/edge-blend → blur →
+// motion-blur); leaves are flat so LFO/MIDI/OSC targets are simple dotted paths.
+export function defaultFx() {
+  return {
+    flipH: false,
+    flipV: false,
+    tileX: 1,
+    tileY: 1,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    blur: 0,
+    motionBlur: 0,
+    brightness: 1,
+    contrast: 1,
+    saturation: 1,
+    edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2 },
+  };
+}
+
 const DEFAULT_STATE = {
   layers: {
     "layer-1": {
@@ -36,6 +57,7 @@ const DEFAULT_STATE = {
       opacity: 0.82,
       blendMode: "screen",
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
+      fx: defaultFx(),
     },
     "layer-2": {
       id: "layer-2",
@@ -45,6 +67,7 @@ const DEFAULT_STATE = {
       opacity: 0.46,
       blendMode: "multiply",
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
+      fx: defaultFx(),
     },
   },
 
@@ -82,12 +105,56 @@ const DEFAULT_STATE = {
   audioOwnerScreenId: "screen-1",
 
   presets: {},
+
+  // Whole-app automation: the cue-list interpreter + wall-clock timer bank. `cursor`
+  // and `running` are transport state — persisted for visibility but reset to stopped
+  // on boot (a power-cycled installation shouldn't resume mid-cue-list on its own).
+  automation: { cues: [], cursor: -1, running: false, timers: {} },
+
+  // Modulation rack: each slot oscillates one numeric state path between min/max.
+  lfos: {},
+
+  // WebMIDI CC bindings (the panel browser owns the MIDI hardware; mappings live in
+  // shared state so they survive reloads and can be edited from any panel).
+  midiMap: {},
 };
+
+// `applyUpdate` only patches EXISTING leaves, so state loaded from an older
+// state.json (or a layer created by an older client) must be backfilled with any
+// fields this version knows about — otherwise the new controls would have nothing
+// to patch. Also applied to preset snapshots, which are just captured layer maps.
+function fillMissing(target, defaults) {
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!(key in target)) {
+      target[key] = structuredClone(value);
+    } else if (value && typeof value === "object" && !Array.isArray(value) && target[key] && typeof target[key] === "object") {
+      fillMissing(target[key], value);
+    }
+  }
+}
+
+export function ensureLayerDefaults(layer) {
+  fillMissing(layer, { fx: defaultFx() });
+}
+
+export function ensureStateDefaults(state) {
+  fillMissing(state, {
+    automation: { cues: [], cursor: -1, running: false, timers: {} },
+    lfos: {},
+    midiMap: {},
+  });
+  for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
+  for (const preset of Object.values(state.presets ?? {})) {
+    for (const layer of Object.values(preset?.snapshot?.layers ?? {})) ensureLayerDefaults(layer);
+  }
+  state.automation.running = false;
+  return state;
+}
 
 export function loadState(filePath) {
   if (existsSync(filePath)) {
     try {
-      return JSON.parse(readFileSync(filePath, "utf8"));
+      return ensureStateDefaults(JSON.parse(readFileSync(filePath, "utf8")));
     } catch (err) {
       console.error(`[state] failed to parse ${filePath}, falling back to defaults:`, err.message);
     }
@@ -99,10 +166,20 @@ export function saveState(filePath, state) {
   writeFileSync(filePath, JSON.stringify(state, null, 2));
 }
 
+// Paths come from untrusted LAN clients: refuse segments that would walk into the
+// prototype chain ("__proto__", "constructor.prototype") instead of the state tree.
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+function isUnsafePath(keys) {
+  return keys.some((key) => UNSAFE_KEYS.has(key));
+}
+
 function walkToParent(state, keys) {
   let node = state;
   for (const key of keys) {
-    if (node == null) return null;
+    // Only traverse actual containers; a path that dots through a primitive leaf
+    // (e.g. "layers.layer-1.opacity.x") is invalid, not a crash.
+    if (node == null || typeof node !== "object" || !Object.hasOwn(node, key)) return null;
     node = node[key];
   }
   return node;
@@ -113,21 +190,25 @@ function walkToParent(state, keys) {
 export function applyUpdate(state, path, value) {
   const keys = path.split(".");
   const last = keys.pop();
+  if (isUnsafePath(keys) || UNSAFE_KEYS.has(last)) return false;
   const node = walkToParent(state, keys);
-  if (node == null || !(last in node)) return false;
+  if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   if (node[last] === value) return false;
   node[last] = value;
   return true;
 }
 
 // Creates a new entry at a container path ("layers", "pip", "presets"), keyed by
-// value.id (falls back to the next path segment if given as "layers.layer-3").
-// Returns the created key, or null if the container path doesn't resolve to an object.
+// value.id. Returns the created key, or null if the container path doesn't resolve
+// to an object or the value has no usable id (downstream code assumes entries carry
+// their own id).
 export function applyCreate(state, containerPath, value) {
   const keys = containerPath.split(".");
+  if (isUnsafePath(keys)) return null;
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object") return null;
-  const key = value?.id ?? String(Date.now());
+  const key = value?.id;
+  if (typeof key !== "string" || !key || UNSAFE_KEYS.has(key)) return null;
   node[key] = value;
   return key;
 }
@@ -136,8 +217,9 @@ export function applyCreate(state, containerPath, value) {
 export function applyDelete(state, path) {
   const keys = path.split(".");
   const last = keys.pop();
+  if (isUnsafePath(keys) || UNSAFE_KEYS.has(last)) return false;
   const node = walkToParent(state, keys);
-  if (node == null || !(last in node)) return false;
+  if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   delete node[last];
   return true;
 }

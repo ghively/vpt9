@@ -3,6 +3,7 @@ services:
     build: ./server
     ports:
       - "8080:8080"
+      - "9000:9000/udp" # OSC listener (set OSC_PORT=0 to disable)
     volumes:
       - state-data:/data
     restart: unless-stopped

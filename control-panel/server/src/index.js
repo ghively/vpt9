@@ -1,9 +1,12 @@
 import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
-import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder } from "./state.js";
+import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults } from "./state.js";
+import { createAutomationEngine } from "./automation.js";
+import { startOsc } from "./osc.js";
 
 const PORT = process.env.PORT || 8080;
 const STATE_FILE = process.env.STATE_FILE || "./state.json";
+const OSC_PORT = Number(process.env.OSC_PORT ?? 9000); // 0 disables the OSC listener
 
 const state = loadState(STATE_FILE);
 
@@ -11,6 +14,30 @@ const state = loadState(STATE_FILE);
 // recalling a preset to also move audio ownership around unless it's explicitly part
 // of the snapshot fields listed below).
 const PRESET_FIELDS = ["layers", "screens", "pip", "audioOwnerScreenId"];
+
+// Drags emit updates at pointer-move rate; writing the file synchronously per message
+// would block the event loop for no benefit. Trailing debounce, flushed on shutdown.
+let saveTimer = null;
+function scheduleSave() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveState(STATE_FILE, state);
+  }, 250);
+}
+
+function flushSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  saveState(STATE_FILE, state);
+}
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    flushSave();
+    process.exit(0);
+  });
+}
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -69,7 +96,7 @@ const httpServer = createServer(async (req, res) => {
     applyUpdate(state, `pip.${pipId}.videoId`, body.videoId);
     applyUpdate(state, `pip.${pipId}.visible`, true);
     if (typeof body.title === "string") applyUpdate(state, `pip.${pipId}.title`, body.title);
-    saveState(STATE_FILE, state);
+    scheduleSave();
     broadcast({ type: "update", path: `pip.${pipId}.videoId`, value: body.videoId });
     broadcast({ type: "update", path: `pip.${pipId}.visible`, value: true });
     if (typeof body.title === "string") broadcast({ type: "update", path: `pip.${pipId}.title`, value: body.title });
@@ -94,17 +121,22 @@ function broadcast(message, exclude) {
 
 function handleCreate(socket, message) {
   const value = message.value ?? {};
-  if (message.path === "layers" && value.order == null) value.order = nextLayerOrder(state);
+  if (message.path === "layers") {
+    if (value.order == null) value.order = nextLayerOrder(state);
+    // Backfill fields an older client's create might not know about (e.g. fx) so
+    // every layer in state always has the full set of patchable leaves.
+    ensureLayerDefaults(value);
+  }
   const key = applyCreate(state, message.path, value);
   if (key == null) return;
   const stored = state[message.path]?.[key] ?? value;
-  saveState(STATE_FILE, state);
+  scheduleSave();
   broadcast({ type: "create", path: message.path, key, value: stored });
 }
 
 function handleDelete(message) {
   if (!applyDelete(state, message.path)) return;
-  saveState(STATE_FILE, state);
+  scheduleSave();
   broadcast({ type: "delete", path: message.path });
 }
 
@@ -113,17 +145,22 @@ function handlePresetSave(message) {
   for (const field of PRESET_FIELDS) snapshot[field] = structuredClone(state[field]);
   const preset = { id: message.id || `preset-${Date.now()}`, name: message.name || "Untitled", snapshot };
   const key = applyCreate(state, "presets", preset);
-  saveState(STATE_FILE, state);
+  scheduleSave();
   broadcast({ type: "create", path: "presets", key, value: preset });
 }
 
-function handlePresetRecall(message) {
-  const preset = state.presets[message.presetId];
-  if (!preset) return;
+// Shared by the WS message handler, the automation engine (recall/fade cues, timers)
+// and OSC. Returns false when the preset doesn't exist so callers can warn.
+function recallPreset(presetId) {
+  const preset = state.presets[presetId];
+  if (!preset) return false;
   for (const field of PRESET_FIELDS) state[field] = structuredClone(preset.snapshot[field]);
-  saveState(STATE_FILE, state);
+  scheduleSave();
   broadcast({ type: "state", state });
+  return true;
 }
+
+const engine = createAutomationEngine({ state, broadcast, scheduleSave, recallPreset });
 
 wss.on("connection", (socket) => {
   socket.send(JSON.stringify({ type: "state", state }));
@@ -140,7 +177,7 @@ wss.on("connection", (socket) => {
       case "update": {
         if (typeof message.path !== "string") return;
         if (applyUpdate(state, message.path, message.value)) {
-          saveState(STATE_FILE, state);
+          scheduleSave();
           broadcast({ type: "update", path: message.path, value: message.value });
         }
         return;
@@ -155,7 +192,16 @@ wss.on("connection", (socket) => {
         handlePresetSave(message);
         return;
       case "presetRecall":
-        if (typeof message.presetId === "string") handlePresetRecall(message);
+        if (typeof message.presetId === "string") recallPreset(message.presetId);
+        return;
+      case "cueGo":
+        engine.cueGo();
+        return;
+      case "cueStop":
+        engine.cueStop();
+        return;
+      case "cueJump":
+        if (Number.isInteger(message.index)) engine.cueJump(message.index);
         return;
       case "preview":
         // Confidence-monitor frames for the warp editor: relayed live, never persisted
@@ -169,6 +215,33 @@ wss.on("connection", (socket) => {
     }
   });
 });
+
+// OSC routing: transport addresses map to their protocol messages; anything else is
+// an address → dotted-state-path update with the first argument as the value.
+function handleOscMessage(address, args) {
+  if (address === "/cue/go") return engine.cueGo();
+  if (address === "/cue/stop") return engine.cueStop();
+  if (address === "/cue/jump") {
+    if (Number.isInteger(args[0])) engine.cueJump(args[0]);
+    return;
+  }
+  if (address === "/preset/recall") {
+    if (typeof args[0] === "string" && !recallPreset(args[0])) {
+      console.warn(`[osc] /preset/recall: no preset "${args[0]}"`);
+    }
+    return;
+  }
+
+  const path = address.replace(/^\//, "").replaceAll("/", ".");
+  const value = args[0];
+  if (value === undefined) return;
+  if (applyUpdate(state, path, value)) {
+    scheduleSave();
+    broadcast({ type: "update", path, value });
+  }
+}
+
+if (OSC_PORT > 0) startOsc({ port: OSC_PORT, handle: handleOscMessage });
 
 httpServer.listen(PORT, () => {
   console.log(`[control-plane] listening on :${PORT}`);
