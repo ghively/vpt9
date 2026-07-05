@@ -117,7 +117,7 @@ CAST_RECEIVER_HOST=<this-machine's-LAN-IP> docker compose up --build
 ```sh
 cd server && npm install && npm start                          # control-plane on :8080
 cd render-client && npx serve -l 8081 .                         # any static server works
-cd panel && npx serve -l 8082 .
+cd panel && npm install && npm run dev                          # React/Vite panel on :8082
 cd cast-receiver && CONTROL_PLANE_URL=http://localhost:8080 CAST_RECEIVER_HOST=<this-machine's-LAN-IP> npm start
 ```
 

@@ -1,0 +1,6 @@
+/* design-sync entry stylesheet: rendered designs receive only this file's transitive
+ * @import closure, so every layer of the panel's look is reachable from here —
+ * tokens (the palette), base (primitives/reset), and the composite/layout CSS. */
+@import "./tokens/tokens.css";
+@import "./tokens/base.css";
+@import "./components/panel.css";
