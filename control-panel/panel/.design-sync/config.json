@@ -1,0 +1,5 @@
+{
+  "shape": "storybook",
+  "storybookConfigDir": ".storybook",
+  "readmeHeader": ".design-sync/conventions.md"
+}
