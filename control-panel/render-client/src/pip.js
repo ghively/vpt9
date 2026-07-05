@@ -50,7 +50,9 @@ export class PipOverlay {
     const muted = !isAudioOwner;
     // enablejsapi=1 lets us toggle mute live via postMessage below instead of reloading
     // the iframe (which would restart playback) whenever audio ownership changes.
-    const wantedSrc = pip.videoId
+    // A hidden window unloads its iframe entirely — display:none does NOT stop a
+    // YouTube embed, so a hidden PiP that owned audio would keep sounding.
+    const wantedSrc = pip.videoId && pip.visible
       ? `https://www.youtube.com/embed/${encodeURIComponent(pip.videoId)}?autoplay=1&mute=${muted ? 1 : 0}&loop=1&playlist=${encodeURIComponent(pip.videoId)}&enablejsapi=1`
       : "";
     if (iframe.dataset.src !== wantedSrc) {

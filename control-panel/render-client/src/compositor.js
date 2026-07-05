@@ -7,7 +7,10 @@ const INTERNAL_HEIGHT = 720;
 export class Compositor {
   constructor(canvas) {
     this.canvas = canvas;
-    const gl = canvas.getContext("webgl2");
+    // preserveDrawingBuffer: capturePreview() reads the canvas back via drawImage on a
+    // ~250ms interval, outside the rAF that drew the frame — without preservation the
+    // buffer contents are undefined after compositing and the preview goes blank.
+    const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true });
     if (!gl) throw new Error("WebGL2 is not available in this browser");
     this.gl = gl;
 
@@ -41,13 +44,6 @@ export class Compositor {
 
     this.layers = incoming;
     this._applyMute();
-  }
-
-  updateLayerField(layerId, field, value) {
-    const layer = this.layers.find((l) => l.id === layerId);
-    if (!layer) return;
-    if (field === "source") this.layerStack.setLayerSource(layerId, value);
-    else layer[field] = value;
   }
 
   setWarp(warp) {

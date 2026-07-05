@@ -1,7 +1,7 @@
 import { Compositor } from "./compositor.js";
 import { connectControlPlane } from "./socket.js";
 import { PipOverlay } from "./pip.js";
-import { applyUpdate, applyCreate, applyDelete } from "./patch.js";
+import { applyUpdate, applyCreate, applyDelete, applyBatch } from "./patch.js";
 
 const canvas = document.getElementById("stage");
 const statusEl = document.getElementById("status");
@@ -43,6 +43,9 @@ const socket = connectControlPlane(wsUrl, {
   onDelete(path) {
     if (applyDelete(state, path)) applyDerivedState();
   },
+  onBatch(updates) {
+    if (applyBatch(state, updates)) applyDerivedState();
+  },
 });
 
 // Preview pusher for the control panel's warp editor: a small, infrequent JPEG of this
@@ -53,6 +56,7 @@ setInterval(() => {
   if (socket.readyState !== WebSocket.OPEN) return;
   socket.send(JSON.stringify({ type: "preview", screenId, frame: compositor.capturePreview(320) }));
 }, 250);
+
 
 document.addEventListener("dblclick", () => {
   if (!document.fullscreenElement) canvas.requestFullscreen?.();

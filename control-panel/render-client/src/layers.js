@@ -1,4 +1,5 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
+import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
 
 const BLEND_MODES = ["normal", "multiply", "screen", "overlay", "difference", "add"];
 const BLEND_INDEX = Object.fromEntries(BLEND_MODES.map((mode, i) => [mode, i]));
@@ -74,7 +75,8 @@ export class LayerStack {
     this.height = 0;
     this.pingpong = [null, null];
     this.groundColor = [0x0a / 255, 0x0c / 255, 0x11 / 255];
-    this.entries = new Map(); // layer id -> { texture, videoEl, currentUrl }
+    this.fxPasses = new FxPasses(gl);
+    this.entries = new Map(); // layer id -> { texture, videoEl, stream, currentUrl, fxChain }
   }
 
   resize(width, height) {
@@ -83,13 +85,32 @@ export class LayerStack {
     this.height = height;
     const gl = this.gl;
     this.pingpong = [createFramebuffer(gl, width, height), createFramebuffer(gl, width, height)];
+    // Fx chains carry render targets at the old size; rebuild lazily at the new one.
+    for (const entry of this.entries.values()) {
+      entry.fxChain?.dispose();
+      entry.fxChain = null;
+    }
   }
 
   _entry(id) {
     if (!this.entries.has(id)) {
-      this.entries.set(id, { texture: createTexture(this.gl), videoEl: null, currentUrl: null });
+      this.entries.set(id, { texture: createTexture(this.gl), videoEl: null, stream: null, currentUrl: null, fxChain: null });
     }
     return this.entries.get(id);
+  }
+
+  _stopSource(entry) {
+    if (entry.videoEl) {
+      entry.videoEl.pause();
+      entry.videoEl.srcObject = null;
+      entry.videoEl.removeAttribute("src");
+      entry.videoEl.load();
+      entry.videoEl = null;
+    }
+    if (entry.stream) {
+      for (const track of entry.stream.getTracks()) track.stop();
+      entry.stream = null;
+    }
   }
 
   setLayerSource(id, source) {
@@ -97,11 +118,7 @@ export class LayerStack {
     if (source?.type === "video") {
       if (entry.currentUrl === source.url) return;
       entry.currentUrl = source.url;
-      if (entry.videoEl) {
-        entry.videoEl.pause();
-        entry.videoEl.removeAttribute("src");
-        entry.videoEl.load();
-      }
+      this._stopSource(entry);
       const video = document.createElement("video");
       video.src = source.url;
       video.crossOrigin = "anonymous";
@@ -110,10 +127,32 @@ export class LayerStack {
       video.playsInline = true;
       video.play().catch((err) => console.warn(`[layers] could not play "${source.url}":`, err.message));
       entry.videoEl = video;
+    } else if (source?.type === "camera") {
+      // Live camera input (VPT8's cam1/cam2). Chrome requires a secure context
+      // (localhost counts) and prompts once per origin. Video only — a camera layer
+      // never participates in the audio-owner policy.
+      if (entry.currentUrl === "camera:") return;
+      entry.currentUrl = "camera:";
+      this._stopSource(entry);
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      entry.videoEl = video;
+      navigator.mediaDevices
+        ?.getUserMedia({ video: true, audio: false })
+        .then((stream) => {
+          if (entry.currentUrl !== "camera:") {
+            for (const track of stream.getTracks()) track.stop();
+            return; // source changed while the permission prompt was open
+          }
+          entry.stream = stream;
+          video.srcObject = stream;
+          video.play().catch((err) => console.warn("[layers] camera play failed:", err.message));
+        })
+        .catch((err) => console.warn("[layers] camera unavailable:", err.message));
     } else {
       entry.currentUrl = null;
-      if (entry.videoEl) entry.videoEl.pause();
-      entry.videoEl = null;
+      this._stopSource(entry);
     }
   }
 
@@ -124,7 +163,9 @@ export class LayerStack {
 
   removeLayer(id) {
     const entry = this.entries.get(id);
-    if (entry?.videoEl) entry.videoEl.pause();
+    if (!entry) return;
+    this._stopSource(entry);
+    entry.fxChain?.dispose();
     this.entries.delete(id);
   }
 
@@ -151,13 +192,29 @@ export class LayerStack {
     gl.clearColor(...this.groundColor, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.useProgram(this.program);
-    bindFullscreenQuad(gl, this.program, this.quad);
-
     for (const layer of layers) {
       const entry = this._entry(layer.id);
       const isColor = layer.source?.type === "color";
       if (!isColor) this._uploadVideoFrame(entry);
+
+      // Effects chain: only entered when some stage is active. For color layers the
+      // chain's point pass synthesizes the fill, so the blend pass then treats the
+      // result as an ordinary texture.
+      let layerTexture = entry.texture;
+      let blendAsColor = isColor;
+      if (fxNeedsChain(layer.fx)) {
+        if (!entry.fxChain) entry.fxChain = new FxChain(gl, this.fxPasses, this.width, this.height);
+        layerTexture = entry.fxChain.process(entry.texture, layer.fx, {
+          isColor,
+          color: isColor ? layer.source.color : [0, 0, 0],
+        });
+        blendAsColor = false;
+      }
+
+      // (Re)bind the blend program per layer — the fx passes above use their own
+      // programs and attribute state.
+      gl.useProgram(this.program);
+      bindFullscreenQuad(gl, this.program, this.quad);
 
       const writeIdx = 1 - readIdx;
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.pingpong[writeIdx].framebuffer);
@@ -168,13 +225,13 @@ export class LayerStack {
       gl.uniform1i(u.prev, 0);
 
       gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+      gl.bindTexture(gl.TEXTURE_2D, layerTexture);
       gl.uniform1i(u.layer, 1);
 
       gl.uniform1f(u.opacity, layer.opacity ?? 1);
       gl.uniform1i(u.blendMode, BLEND_INDEX[layer.blendMode] ?? 0);
-      gl.uniform1i(u.isColor, isColor ? 1 : 0);
-      gl.uniform3fv(u.layerColor, isColor ? layer.source.color : [0, 0, 0]);
+      gl.uniform1i(u.isColor, blendAsColor ? 1 : 0);
+      gl.uniform3fv(u.layerColor, blendAsColor ? layer.source.color : [0, 0, 0]);
 
       const mask = layer.mask || {};
       gl.uniform1i(u.maskEnabled, mask.enabled ? 1 : 0);
