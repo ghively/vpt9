@@ -104,6 +104,11 @@ const DEFAULT_STATE = {
   // Only this screen's render client plays audio; every other client mutes itself.
   audioOwnerScreenId: "screen-1",
 
+  // Master dim: every render client multiplies its final output by this (0 = blackout).
+  // Deliberately NOT in PRESET_FIELDS — preset recalls and cue fades must never yank
+  // the house blackout around; only the operator (or an explicit LFO/OSC target) moves it.
+  master: 1,
+
   presets: {},
 
   // Whole-app automation: the cue-list interpreter + wall-clock timer bank. `cursor`
@@ -142,6 +147,7 @@ export function ensureStateDefaults(state) {
     automation: { cues: [], cursor: -1, running: false, timers: {} },
     lfos: {},
     midiMap: {},
+    master: 1,
   });
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
   for (const preset of Object.values(state.presets ?? {})) {

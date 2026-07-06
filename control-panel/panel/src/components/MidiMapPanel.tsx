@@ -1,7 +1,8 @@
 import { TextField } from "./primitives/TextField";
+import { TargetPicker } from "./primitives/TargetPicker";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
-import type { MidiMapping } from "./types";
+import type { MidiMapping, TargetOption } from "./types";
 
 export interface MidiMapPanelProps {
   mappings: MidiMapping[];
@@ -9,6 +10,9 @@ export interface MidiMapPanelProps {
   learningId?: string | null;
   /** False when the browser has no WebMIDI (anything but Chrome/Edge, or no permission). */
   midiAvailable?: boolean;
+  /** Numeric state paths for the target picker (built by the container from live state).
+   *  When empty/omitted, targets fall back to a free-text path field. */
+  targetOptions?: TargetOption[];
   onAdd?: () => void;
   onUpdate?: (id: string, field: string, value: unknown) => void;
   onRemove?: (id: string) => void;
@@ -17,7 +21,7 @@ export interface MidiMapPanelProps {
 
 /** WebMIDI CC bindings: hardware knobs → state paths. The panel's browser owns the MIDI
  *  hardware; mappings live in shared state so they survive reloads. */
-export function MidiMapPanel({ mappings, learningId, midiAvailable = true, onAdd, onUpdate, onRemove, onLearn }: MidiMapPanelProps) {
+export function MidiMapPanel({ mappings, learningId, midiAvailable = true, targetOptions, onAdd, onUpdate, onRemove, onLearn }: MidiMapPanelProps) {
   const num = (v: string, fallback: number) => (Number.isFinite(Number(v)) && v !== "" ? Number(v) : fallback);
 
   return (
@@ -55,12 +59,21 @@ export function MidiMapPanel({ mappings, learningId, midiAvailable = true, onAdd
             placeholder="max"
             onCommit={(v) => onUpdate?.(mapping.id, "max", num(v, 1))}
           />
-          <TextField
-            className="midi-target"
-            value={mapping.target ?? ""}
-            placeholder="layers.layer-1.opacity"
-            onCommit={(v) => onUpdate?.(mapping.id, "target", v)}
-          />
+          {targetOptions?.length ? (
+            <TargetPicker
+              className="midi-target"
+              value={mapping.target ?? ""}
+              options={targetOptions}
+              onChange={(v) => onUpdate?.(mapping.id, "target", v)}
+            />
+          ) : (
+            <TextField
+              className="midi-target"
+              value={mapping.target ?? ""}
+              placeholder="layers.layer-1.opacity"
+              onCommit={(v) => onUpdate?.(mapping.id, "target", v)}
+            />
+          )}
           <ToggleSquare className="remove-btn" label="×" title="Remove binding" onClick={() => onRemove?.(mapping.id)} />
         </div>
       ))}

@@ -156,7 +156,7 @@ export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCop
         <ToggleSquare className="remove-btn" label="×" title="Remove layer" onClick={onRemove} />
       </div>
 
-      {fxOpen && layer.fx && <FxDrawer fx={layer.fx} onUpdate={onUpdate} />}
+      {fxOpen && layer.fx && <FxDrawer fx={layer.fx} mask={layer.mask} onUpdate={onUpdate} />}
     </div>
   );
 }

@@ -144,6 +144,14 @@ export interface MidiMapping {
 
 export type ConnectionState = "connected" | "connecting" | "disconnected" | "error";
 
+/** One selectable modulation/binding target — a numeric dotted state path with a
+ *  human-readable label, optgrouped (usually per layer) in the TargetPicker. */
+export interface TargetOption {
+  value: string;
+  label: string;
+  group: string;
+}
+
 export const BLEND_MODES = [
   "normal",
   "multiply",

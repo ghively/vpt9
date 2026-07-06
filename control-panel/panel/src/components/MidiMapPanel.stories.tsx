@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { MidiMapPanel } from "./MidiMapPanel";
-import { sampleMidiMappings, noop } from "./fixtures";
+import { sampleMidiMappings, sampleTargetOptions, noop } from "./fixtures";
 
 const meta: Meta<typeof MidiMapPanel> = {
   title: "Panel/MidiMapPanel",
@@ -15,6 +15,7 @@ export const Default: Story = {
     mappings: sampleMidiMappings,
     learningId: "map-2",
     midiAvailable: true,
+    targetOptions: sampleTargetOptions,
     onAdd: noop,
     onUpdate: noop,
     onRemove: noop,

@@ -128,8 +128,51 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     recallPreset(id: string) {
       send({ type: "presetRecall", presetId: id });
     },
+    renamePreset(id: string, name: string) {
+      send({ type: "update", path: `presets.${id}.name`, value: name });
+    },
+    removePreset(id: string) {
+      send({ type: "delete", path: `presets.${id}` });
+    },
     setAudioOwner(screenId: string) {
       send({ type: "update", path: "audioOwnerScreenId", value: screenId });
+    },
+    setMaster(value: number) {
+      send({ type: "update", path: "master", value: Math.min(1, Math.max(0, value)) });
+    },
+
+    // ── Screens ──────────────────────────────────────────────────────────────
+    addScreen() {
+      // Smallest free screen-N: render clients address themselves by ?screen=<id>, so
+      // predictable ids beat Date.now() ones here.
+      let n = 1;
+      const screens = getState().screens;
+      while (screens[`screen-${n}`]) n += 1;
+      send({
+        type: "create",
+        path: "screens",
+        value: {
+          id: `screen-${n}`,
+          name: `Screen ${n}`,
+          warp: {
+            mode: "corner",
+            corners: IDENTITY_CORNERS.map((p) => ({ ...p })),
+            mesh: { size: 4, points: identityMeshPoints(4) },
+          },
+        },
+      });
+    },
+    renameScreen(screenId: string, name: string) {
+      send({ type: "update", path: `screens.${screenId}.name`, value: name });
+    },
+    setMeshSize(screenId: string, size: number) {
+      // A different grid size makes the old points meaningless — reset to identity.
+      // One atomic update: size and points must never disagree, even for a frame.
+      send({
+        type: "update",
+        path: `screens.${screenId}.warp.mesh`,
+        value: { size, points: identityMeshPoints(size) },
+      });
     },
 
     // ── Cue-list transport + editing ─────────────────────────────────────────

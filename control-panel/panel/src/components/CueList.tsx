@@ -1,4 +1,3 @@
-import { Chip } from "./primitives/Chip";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { ToggleSquare } from "./primitives/ToggleSquare";
@@ -56,13 +55,32 @@ export function CueList({ cues, cursor, running, presets, onGo, onStop, onJump, 
     onSetCues?.(cues.filter((_, i) => i !== index));
   };
 
+  // What the next GO will run — the transport readout's whole job.
+  const nextIndex = cursor + 1;
+  const nextCue = cues[nextIndex];
+
   return (
     <div id="cue-list">
       <div className="panel-head">
         <h3>Cue list</h3>
-        <div className="mode-group">
-          <Chip label={running ? "RUNNING" : "GO"} active={running} onClick={onGo} />
-          <Chip label="STOP" onClick={onStop} />
+      </div>
+
+      <div className="transport">
+        <button className="go-btn mono" onClick={onGo} data-running={running}>
+          GO
+        </button>
+        <button className="stop-btn mono" onClick={onStop}>
+          STOP
+        </button>
+        <div className="transport-readout mono" data-running={running}>
+          <span className="transport-state">{running ? "RUNNING" : "STANDBY"}</span>
+          <span className="transport-next">
+            {nextCue
+              ? `next ${String(nextIndex).padStart(2, "0")} — ${nextCue.label || nextCue.type}`
+              : cues.length
+                ? "end of list"
+                : "no cues"}
+          </span>
         </div>
       </div>
 

@@ -21,6 +21,7 @@ export class Compositor {
     this.layers = []; // sorted by `order` ascending
     this.warp = null;
     this.muted = true;
+    this.master = 1; // final-output dim; 0 = blackout
 
     this._resize();
     window.addEventListener("resize", () => this._resize());
@@ -55,6 +56,10 @@ export class Compositor {
     this._applyMute();
   }
 
+  setMaster(master) {
+    this.master = typeof master === "number" ? master : 1;
+  }
+
   _applyMute() {
     for (const layer of this.layers) this.layerStack.setLayerMuted(layer.id, this.muted);
   }
@@ -62,7 +67,7 @@ export class Compositor {
   start() {
     const loop = () => {
       const scene = this.layerStack.render(this.layers);
-      this.screenWarp.render(scene, this.warp, this.canvas.width, this.canvas.height);
+      this.screenWarp.render(scene, this.warp, this.canvas.width, this.canvas.height, this.master);
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);

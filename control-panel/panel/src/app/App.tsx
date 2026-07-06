@@ -5,6 +5,7 @@ import {
   CueList,
   Faceplate,
   LfoRack,
+  MasterControl,
   MidiMapPanel,
   PipWindows,
   PresetsBar,
@@ -13,6 +14,7 @@ import {
   WarpEditor,
   type ConnectionState,
   type Layer,
+  type TargetOption,
 } from "../components";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket } from "./useSocket";
@@ -22,6 +24,43 @@ import { createActions } from "./actions";
 
 /** The layer-look fields copy/paste moves between layers (not source/name/order). */
 type LayerLook = Pick<Layer, "opacity" | "blendMode" | "mask" | "fx">;
+
+/** Numeric per-layer paths offered by the LFO/MIDI target pickers. */
+const LAYER_TARGET_FIELDS: Array<[string, string]> = [
+  ["opacity", "opacity"],
+  ["fx.zoom", "zoom"],
+  ["fx.panX", "pan x"],
+  ["fx.panY", "pan y"],
+  ["fx.blur", "blur"],
+  ["fx.motionBlur", "trail"],
+  ["fx.brightness", "brightness"],
+  ["fx.contrast", "contrast"],
+  ["fx.saturation", "saturation"],
+  ["fx.tileX", "tile x"],
+  ["fx.tileY", "tile y"],
+  ["fx.edgeBlend.left", "edge left"],
+  ["fx.edgeBlend.right", "edge right"],
+  ["fx.edgeBlend.top", "edge top"],
+  ["fx.edgeBlend.bottom", "edge bottom"],
+  ["fx.edgeBlend.gamma", "edge gamma"],
+  ["mask.cx", "mask center x"],
+  ["mask.cy", "mask center y"],
+  ["mask.rx", "mask size x"],
+  ["mask.ry", "mask size y"],
+  ["mask.feather", "mask feather"],
+];
+
+function buildTargetOptions(state: PanelState): TargetOption[] {
+  const options: TargetOption[] = [{ value: "master", label: "master dim", group: "Global" }];
+  const layers = Object.values(state.layers ?? {}).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+  for (const layer of layers) {
+    const group = layer.name || layer.id;
+    for (const [field, label] of LAYER_TARGET_FIELDS) {
+      options.push({ value: `layers.${layer.id}.${field}`, label, group });
+    }
+  }
+  return options;
+}
 
 export function App() {
   const stateRef = useRef<PanelState>(emptyState());
@@ -36,6 +75,8 @@ export function App() {
   });
   const clipboardRef = useRef<LayerLook | null>(null);
   const [canPaste, setCanPaste] = useState(false);
+  // Pre-blackout master level, restored by the blackout toggle.
+  const preBlackoutRef = useRef(1);
 
   const preview = usePreviewBus(() => selectedRef.current);
 
@@ -115,6 +156,16 @@ export function App() {
     [actions],
   );
 
+  const toggleBlackout = useCallback(() => {
+    const current = stateRef.current.master ?? 1;
+    if (current > 0) {
+      preBlackoutRef.current = current;
+      actions.setMaster(0);
+    } else {
+      actions.setMaster(preBlackoutRef.current || 1);
+    }
+  }, [actions]);
+
   const state = stateRef.current;
   const sid = selectedScreenId ?? "";
   const layers = Object.values(state.layers ?? {});
@@ -123,31 +174,99 @@ export function App() {
   const pips = Object.values(state.pip ?? {}).filter((p) => p.screenId === selectedScreenId);
   const presets = Object.values(state.presets ?? {});
   const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
+  const targetOptions = buildTargetOptions(state);
 
   return (
     <>
       <Faceplate
         center={
-          <AudioOwner
-            screens={screens}
-            ownerId={state.audioOwnerScreenId}
-            onSelect={actions.setAudioOwner}
-          />
+          <div className="faceplate-center">
+            <AudioOwner
+              screens={screens}
+              ownerId={state.audioOwnerScreenId}
+              onSelect={actions.setAudioOwner}
+            />
+            <MasterControl
+              master={state.master ?? 1}
+              onChange={actions.setMaster}
+              onToggleBlackout={toggleBlackout}
+            />
+          </div>
         }
         right={<StatusLamp state={status.state} label={status.label} />}
       />
 
       <div className="layout">
-        <ChannelRack
-          layers={layers}
-          onUpdateLayer={actions.updateLayer}
-          onMoveLayer={actions.moveLayer}
-          onRemoveLayer={actions.removeLayer}
-          onAddLayer={actions.addLayer}
-          onCopyLayer={copyLayer}
-          onPasteLayer={pasteLayer}
-          canPaste={canPaste}
-        />
+        {/* Left column: the scene (layer rack) + the show (presets/cues/timers/modulation). */}
+        <main className="workspace">
+          <ChannelRack
+            layers={layers}
+            onUpdateLayer={actions.updateLayer}
+            onMoveLayer={actions.moveLayer}
+            onRemoveLayer={actions.removeLayer}
+            onAddLayer={actions.addLayer}
+            onCopyLayer={copyLayer}
+            onPasteLayer={pasteLayer}
+            canPaste={canPaste}
+          />
+
+          <div className="show-control">
+            <section className="sc-card sc-presets">
+              <h3>Presets</h3>
+              <PresetsBar
+                presets={presets}
+                onRecall={actions.recallPreset}
+                onSave={actions.savePreset}
+                onRename={actions.renamePreset}
+                onRemove={actions.removePreset}
+              />
+            </section>
+            <section className="sc-card">
+              <CueList
+                cues={automation.cues ?? []}
+                cursor={automation.cursor ?? -1}
+                running={!!automation.running}
+                presets={presets}
+                onGo={actions.cueGo}
+                onStop={actions.cueStop}
+                onJump={actions.cueJump}
+                onSetCues={actions.setCues}
+              />
+            </section>
+            <section className="sc-card">
+              <TimerBank
+                timers={Object.values(automation.timers ?? {})}
+                presets={presets}
+                onAdd={actions.addTimer}
+                onUpdate={actions.updateTimer}
+                onRemove={actions.removeTimer}
+              />
+            </section>
+            <section className="sc-card">
+              <LfoRack
+                lfos={Object.values(state.lfos ?? {})}
+                targetOptions={targetOptions}
+                onAdd={actions.addLfo}
+                onUpdate={actions.updateLfo}
+                onRemove={actions.removeLfo}
+              />
+            </section>
+            <section className="sc-card">
+              <MidiMapPanel
+                mappings={Object.values(state.midiMap ?? {})}
+                learningId={midi.learningId}
+                midiAvailable={midi.available}
+                targetOptions={targetOptions}
+                onAdd={actions.addMidiMapping}
+                onUpdate={actions.updateMidiMapping}
+                onRemove={actions.removeMidiMapping}
+                onLearn={midi.learn}
+              />
+            </section>
+          </div>
+        </main>
+
+        {/* Right column: the screen machines — warp + PiP windows (cyan territory). */}
         <aside>
           <WarpEditor
             ref={preview.warpMonitor}
@@ -155,7 +274,10 @@ export function App() {
             screens={screens}
             previewFrame={preview.frameFor(selectedScreenId)}
             onSelectScreen={setSelectedScreenId}
+            onAddScreen={actions.addScreen}
+            onRenameScreen={(name) => actions.renameScreen(sid, name)}
             onSetMode={(mode) => actions.setWarpMode(sid, mode)}
+            onSetMeshSize={(size) => actions.setMeshSize(sid, size)}
             onReset={() => actions.resetWarp(sid)}
             onDragStart={beginDrag}
             onMovePoint={(index, x, y) => actions.moveWarpPoint(sid, index, x, y)}
@@ -174,52 +296,7 @@ export function App() {
             onRemovePip={actions.removePip}
             onAddPip={() => actions.addPip(sid)}
           />
-          <div>
-            <h3>Presets</h3>
-            <PresetsBar
-              presets={presets}
-              onRecall={actions.recallPreset}
-              onSave={actions.savePreset}
-            />
-          </div>
         </aside>
-      </div>
-
-      <div className="layout-lower">
-        <CueList
-          cues={automation.cues ?? []}
-          cursor={automation.cursor ?? -1}
-          running={!!automation.running}
-          presets={presets}
-          onGo={actions.cueGo}
-          onStop={actions.cueStop}
-          onJump={actions.cueJump}
-          onSetCues={actions.setCues}
-        />
-        <TimerBank
-          timers={Object.values(automation.timers ?? {})}
-          presets={presets}
-          onAdd={actions.addTimer}
-          onUpdate={actions.updateTimer}
-          onRemove={actions.removeTimer}
-        />
-        <div className="mod-column">
-          <LfoRack
-            lfos={Object.values(state.lfos ?? {})}
-            onAdd={actions.addLfo}
-            onUpdate={actions.updateLfo}
-            onRemove={actions.removeLfo}
-          />
-          <MidiMapPanel
-            mappings={Object.values(state.midiMap ?? {})}
-            learningId={midi.learningId}
-            midiAvailable={midi.available}
-            onAdd={actions.addMidiMapping}
-            onUpdate={actions.updateMidiMapping}
-            onRemove={actions.removeMidiMapping}
-            onLearn={midi.learn}
-          />
-        </div>
       </div>
     </>
   );

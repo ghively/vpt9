@@ -9,6 +9,8 @@ export interface PanelState {
   pip: Record<string, Pip>;
   presets: Record<string, Preset>;
   audioOwnerScreenId: string | null;
+  /** Master output dim (0 = blackout, 1 = full); mirrored by every render client. */
+  master: number;
   automation: Automation;
   lfos: Record<string, Lfo>;
   midiMap: Record<string, MidiMapping>;
@@ -21,6 +23,7 @@ export function emptyState(): PanelState {
     pip: {},
     presets: {},
     audioOwnerScreenId: null,
+    master: 1,
     automation: { cues: [], cursor: -1, running: false, timers: {} },
     lfos: {},
     midiMap: {},

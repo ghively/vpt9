@@ -16,26 +16,35 @@ export interface ConfidenceMonitorProps {
 }
 
 /** The signature element: a projectionist's confidence monitor — recessed well, faint
- *  registration grid, cyan corner crop-marks, and an edge-blend-feathered preview. */
+ *  registration grid, cyan corner crop-marks, and an edge-blend-feathered preview.
+ *  Until a frame arrives it reads NO SIGNAL, so an idle monitor never looks broken. */
 export const ConfidenceMonitor = forwardRef<ConfidenceMonitorHandle, ConfidenceMonitorProps>(
   function ConfidenceMonitor({ previewFrame, children }, ref) {
     const imgRef = useRef<HTMLImageElement>(null);
+    const stageRef = useRef<HTMLDivElement>(null);
 
     useImperativeHandle(
       ref,
       () => ({
         setFrame: (dataUrl: string) => {
           if (imgRef.current) imgRef.current.src = dataUrl;
+          // Imperative on purpose (setFrame's no-re-render contract): flag the stage
+          // live so CSS hides the NO SIGNAL readout.
+          stageRef.current?.setAttribute("data-live", "true");
         },
       }),
       [],
     );
 
     return (
-      <div className="stage">
+      <div className="stage" ref={stageRef} data-live={!!previewFrame}>
         <div className="stage__frame">
           {/* src omitted when empty so the CSS `:not([src])` rule hides the broken glyph. */}
           <img ref={imgRef} className="preview-img" src={previewFrame || undefined} alt="" />
+        </div>
+        <div className="stage__nosignal" aria-hidden="true">
+          <span className="mono">NO SIGNAL</span>
+          <span className="stage__nosignal-sub mono">awaiting render-client preview</span>
         </div>
         {children}
       </div>

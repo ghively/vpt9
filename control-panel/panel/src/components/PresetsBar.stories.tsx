@@ -10,5 +10,7 @@ const meta: Meta<typeof PresetsBar> = {
 export default meta;
 type Story = StoryObj<typeof PresetsBar>;
 
-export const Default: Story = { args: { presets: samplePresets, onRecall: noop, onSave: noop } };
-export const Empty: Story = { args: { presets: [], onRecall: noop, onSave: noop } };
+export const Default: Story = {
+  args: { presets: samplePresets, onRecall: noop, onSave: noop, onRename: noop, onRemove: noop },
+};
+export const Empty: Story = { args: { presets: [], onRecall: noop, onSave: noop, onRename: noop, onRemove: noop } };

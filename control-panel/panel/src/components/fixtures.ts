@@ -1,6 +1,6 @@
 // Sample data for Storybook stories (and design-sync preview capture). Not used by the
 // app — purely to render components in isolation.
-import type { Cue, Fx, Layer, Lfo, MidiMapping, Pip, Preset, Screen, Timer } from "./types";
+import type { Cue, Fx, Layer, Lfo, MidiMapping, Pip, Preset, Screen, TargetOption, Timer } from "./types";
 
 export const defaultFx: Fx = {
   flipH: false,
@@ -92,6 +92,15 @@ export const sampleLfos: Lfo[] = [
 export const sampleMidiMappings: MidiMapping[] = [
   { id: "map-1", channel: 0, controller: 21, target: "layers.layer-1.opacity", min: 0, max: 1 },
   { id: "map-2", channel: 0, controller: 22, target: "layers.layer-1.fx.blur", min: 0, max: 1 },
+];
+
+export const sampleTargetOptions: TargetOption[] = [
+  { value: "master", label: "master dim", group: "Global" },
+  { value: "layers.layer-1.opacity", label: "opacity", group: "Ambient loop" },
+  { value: "layers.layer-1.fx.zoom", label: "zoom", group: "Ambient loop" },
+  { value: "layers.layer-1.fx.blur", label: "blur", group: "Ambient loop" },
+  { value: "layers.layer-2.opacity", label: "opacity", group: "Starfield" },
+  { value: "layers.layer-2.fx.zoom", label: "zoom", group: "Starfield" },
 ];
 
 export const noop = () => {};

@@ -23,6 +23,7 @@ function applyDerivedState() {
   compositor.setLayers(state.layers);
   compositor.setWarp(state.screens?.[screenId]?.warp);
   compositor.setMuted(!isAudioOwner);
+  compositor.setMaster(state.master ?? 1);
   pipOverlay.sync(state.pip, isAudioOwner);
 }
 

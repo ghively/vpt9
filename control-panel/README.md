@@ -15,8 +15,8 @@ repo — it's new code for the replacement system.
 | Service | What it is | VPT8 analogue |
 |---|---|---|
 | `server/` | State store (file-persisted) + WebSocket broadcast hub + the automation engine (cue-list interpreter, wall-clock timers, preset fades, LFO rack), an OSC/UDP listener, and a small HTTP hook for the cast receiver. | `pattrstorage` + the app-wide send/receive bus + the cuelist/timer/LFO modules |
-| `render-client/` | Browser WebGL2 compositor: multi-layer stack, per-layer effects chain (flip, tile, zoom/pan, blur, motion-trail, brightness/contrast/saturation, edge-blend), blend modes, per-layer masking, per-screen warp (corner-pin or mesh), video/color/camera sources, a YouTube PiP overlay, and an audio-owner mute policy. One instance runs per physical screen, addressed by `?screen=<id>` in its URL. | `enginetab.maxpat` + `vlayer.maxpat` (all 9 stages) + the corner-pin/mesh warp editors + `cam1`/`cam2` |
-| `panel/` | The actual operator UI: layer rack with per-strip FX drawer and layer-look copy/paste, warp editor (drag corner/mesh handles against a live low-res preview pulled from the render client), PiP window manager, presets bar, audio-owner selector, cue-list editor + transport, timer bank, LFO rack, and a WebMIDI learn-based CC map. | `layergui`/`layertab` + `activelayer.maxpat`'s point editors + the preset/cuelist/timer modules + the MIDI control surface |
+| `render-client/` | Browser WebGL2 compositor: multi-layer stack, per-layer effects chain (flip, tile, zoom/pan, blur, motion-trail, brightness/contrast/saturation, edge-blend), blend modes, per-layer masking, a house master dim/blackout, per-screen warp (corner-pin or mesh), video/color/camera sources, a YouTube PiP overlay, and an audio-owner mute policy. One instance runs per physical screen, addressed by `?screen=<id>` in its URL. | `enginetab.maxpat` + `vlayer.maxpat` (all 9 stages) + the corner-pin/mesh warp editors + `cam1`/`cam2` |
+| `panel/` | The actual operator UI: layer rack with per-strip FX drawer (incl. mask geometry) and layer-look copy/paste, warp editor (drag corner/mesh handles against a live low-res preview pulled from the render client, selectable mesh density, screen add/rename), PiP window manager, presets bar (recall / rename / delete), house master fader + blackout, audio-owner selector, cue-list editor + transport, timer bank, LFO rack, and a WebMIDI learn-based CC map with a state-built target picker. | `layergui`/`layertab` + `activelayer.maxpat`'s point editors + the preset/cuelist/timer modules + the MIDI control surface |
 | `cast-receiver/` | A DIAL/SSDP responder so a phone's YouTube app sees this as a "Cast" target; casting a video populates a PiP window's state. | *(no VPT8 equivalent — new capability)* |
 
 ## Architecture decisions made along the way
@@ -69,6 +69,7 @@ repo — it's new code for the replacement system.
   },
   "pip": { "pip-1": { "id": "pip-1", "screenId": "screen-1", "title": "...", "videoId": null, "x": 0.55, "y": 0.12, "width": 0.36, "height": 0.2, "visible": false } },
   "audioOwnerScreenId": "screen-1",
+  "master": 1,
   "presets": { "preset-1": { "id": "preset-1", "name": "Evening chill", "snapshot": { "layers": {...}, "screens": {...}, "pip": {...}, "audioOwnerScreenId": "..." } } },
   "automation": {
     "cues": [ { "id": "cue-1", "label": "Build", "type": "fade", "presetId": "preset-1", "seconds": 12 } ],
@@ -87,6 +88,10 @@ repo — it's new code for the replacement system.
 - `layers`/`screens`/`pip`/`audioOwnerScreenId` together form a preset snapshot;
   `presets` itself is excluded (recalling a preset doesn't recursively touch presets),
   and so are `automation`/`lfos`/`midiMap` (a preset shouldn't rewrite your cue list).
+- `master` is the house dim (0 = blackout, 1 = full): every render client multiplies its
+  final warped output by it. Deliberately **not** part of preset snapshots — recalls and
+  cue fades never move it; the panel's faceplate fader/BLACKOUT button (or an LFO/OSC
+  update targeting `master`) is the only thing that does.
 - `layer.fx` is the per-layer effects chain, applied in vlayer.maxpat's stage order:
   flip → tile → zoom/pan → brightness/contrast/saturation + edge-blend → blur →
   motion-trail. All values above are the "stage off" defaults; the server backfills

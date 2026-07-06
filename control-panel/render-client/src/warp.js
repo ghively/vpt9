@@ -17,9 +17,11 @@ const WARP_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_sceneUv;
 uniform sampler2D u_scene;
+uniform float u_master; // master dim: 0 = blackout, 1 = full
 out vec4 outColor;
 void main() {
-  outColor = texture(u_scene, v_sceneUv);
+  vec4 scene = texture(u_scene, v_sceneUv);
+  outColor = vec4(scene.rgb * u_master, scene.a);
 }`;
 
 function buildGridIndices(size) {
@@ -58,6 +60,7 @@ export class ScreenWarp {
     this.gl = gl;
     this.program = createProgram(gl, WARP_VERT, WARP_FRAG);
     this.u_scene = gl.getUniformLocation(this.program, "u_scene");
+    this.u_master = gl.getUniformLocation(this.program, "u_master");
     this.a_uv = gl.getAttribLocation(this.program, "a_uv");
     this.a_dest = gl.getAttribLocation(this.program, "a_dest");
 
@@ -81,7 +84,7 @@ export class ScreenWarp {
   }
 
   // warp: { mode: "corner"|"mesh", corners: [{x,y}x4] TL,TR,BR,BL, mesh: { size, points } }
-  render(sceneTexture, warp, viewportWidth, viewportHeight) {
+  render(sceneTexture, warp, viewportWidth, viewportHeight, master = 1) {
     const gl = this.gl;
     let size, points;
     if (warp?.mode === "mesh" && warp.mesh?.points?.length) {
@@ -120,6 +123,7 @@ export class ScreenWarp {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, sceneTexture);
     gl.uniform1i(this.u_scene, 0);
+    gl.uniform1f(this.u_master, Math.min(1, Math.max(0, master)));
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);

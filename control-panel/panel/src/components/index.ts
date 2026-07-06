@@ -15,6 +15,8 @@ export { TextField } from "./primitives/TextField";
 export type { TextFieldProps } from "./primitives/TextField";
 export { StatusLamp } from "./primitives/StatusLamp";
 export type { StatusLampProps } from "./primitives/StatusLamp";
+export { TargetPicker } from "./primitives/TargetPicker";
+export type { TargetPickerProps } from "./primitives/TargetPicker";
 
 export { Faceplate } from "./Faceplate";
 export type { FaceplateProps } from "./Faceplate";
@@ -46,6 +48,8 @@ export { LfoRack } from "./LfoRack";
 export type { LfoRackProps } from "./LfoRack";
 export { MidiMapPanel } from "./MidiMapPanel";
 export type { MidiMapPanelProps } from "./MidiMapPanel";
+export { MasterControl } from "./MasterControl";
+export type { MasterControlProps } from "./MasterControl";
 
 // Preview/provider wrapper (design-sync cfg.provider) — not a card component itself.
 export { VenueGround } from "./VenueGround";

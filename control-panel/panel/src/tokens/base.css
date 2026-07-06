@@ -97,6 +97,19 @@ input[type="range"]::-webkit-slider-thumb {
   cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.6);
 }
 input[type="range"]::-webkit-slider-thumb:hover { border-color: var(--beam); }
+/* Firefox parity — same machined cap and recessed rail. */
+input[type="range"]::-moz-range-track {
+  height: 6px; border-radius: 2px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--hairline-soft);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 11px; height: 20px; border-radius: 2px;
+  background: linear-gradient(180deg, #35373f, #1a1b20);
+  border: 1px solid #43454e;
+  cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+input[type="range"]::-moz-range-thumb:hover { border-color: var(--beam); }
 input[type="range"]:focus-visible { outline: 1.5px solid var(--beam); }
 
 input[type="text"], input[type="number"], select {
@@ -108,6 +121,22 @@ input[type="text"], input[type="number"], select {
   color: var(--text);
   transition: border-color 120ms ease;
 }
+/* Selects lose the native chrome: mono voice + a drawn chevron, matching TextField. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  padding-right: 22px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%238b8a84'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  cursor: pointer;
+}
+select:hover {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23ff9b3d'/%3E%3C/svg%3E");
+}
+select option, select optgroup { background: var(--panel-raised); color: var(--text); }
 input[type="text"]:hover, input[type="number"]:hover, select:hover { border-color: var(--muted-dim); }
 input[type="text"]:focus, input[type="number"]:focus, select:focus {
   outline: none; border-color: var(--beam);

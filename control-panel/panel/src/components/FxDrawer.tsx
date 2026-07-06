@@ -1,11 +1,14 @@
 import { Fader } from "./primitives/Fader";
 import { ToggleSquare } from "./primitives/ToggleSquare";
-import type { Fx } from "./types";
+import type { Fx, Mask } from "./types";
 
 export interface FxDrawerProps {
   fx: Fx;
-  /** Field paths are relative to the layer ("fx.zoom", "fx.edgeBlend.left") so the
-   *  container can prefix them with "layers.<id>." unchanged. */
+  /** Mask geometry lives here too (center/size/feather); enable + shape stay on the
+   *  strip. Optional so existing fx-only usage keeps working. */
+  mask?: Mask;
+  /** Field paths are relative to the layer ("fx.zoom", "mask.feather") so the container
+   *  can prefix them with "layers.<id>." unchanged. */
   onUpdate?: (field: string, value: unknown) => void;
 }
 
@@ -36,22 +39,40 @@ const COLOR_SLIDERS: SliderSpec[] = [
 ];
 
 const EDGE_SLIDERS: SliderSpec[] = [
-  { label: "EDGE L", field: "fx.edgeBlend.left", min: 0, max: 0.5, step: 0.005, neutral: 0 },
-  { label: "EDGE R", field: "fx.edgeBlend.right", min: 0, max: 0.5, step: 0.005, neutral: 0 },
-  { label: "EDGE T", field: "fx.edgeBlend.top", min: 0, max: 0.5, step: 0.005, neutral: 0 },
-  { label: "EDGE B", field: "fx.edgeBlend.bottom", min: 0, max: 0.5, step: 0.005, neutral: 0 },
+  { label: "LEFT", field: "fx.edgeBlend.left", min: 0, max: 0.5, step: 0.005, neutral: 0 },
+  { label: "RIGHT", field: "fx.edgeBlend.right", min: 0, max: 0.5, step: 0.005, neutral: 0 },
+  { label: "TOP", field: "fx.edgeBlend.top", min: 0, max: 0.5, step: 0.005, neutral: 0 },
+  { label: "BOTTOM", field: "fx.edgeBlend.bottom", min: 0, max: 0.5, step: 0.005, neutral: 0 },
   { label: "GAMMA", field: "fx.edgeBlend.gamma", min: 0.5, max: 4, step: 0.05, neutral: 2 },
 ];
 
-function readField(fx: Fx, field: string): number {
-  const keys = field.split(".").slice(1); // drop the "fx." prefix
-  let node: unknown = fx;
+// Mask geometry — engine-honored (render client uploads all five as uniforms); the
+// "neutral" marks are the server defaults, so an untouched mask reads dimmed.
+const MASK_SLIDERS: SliderSpec[] = [
+  { label: "CENTER X", field: "mask.cx", min: 0, max: 1, step: 0.005, neutral: 0.5 },
+  { label: "CENTER Y", field: "mask.cy", min: 0, max: 1, step: 0.005, neutral: 0.5 },
+  { label: "SIZE X", field: "mask.rx", min: 0.02, max: 1, step: 0.005, neutral: 0.4 },
+  { label: "SIZE Y", field: "mask.ry", min: 0.02, max: 1, step: 0.005, neutral: 0.4 },
+  { label: "FEATHER", field: "mask.feather", min: 0, max: 0.5, step: 0.005, neutral: 0.08 },
+];
+
+function readField(root: Record<string, unknown>, field: string): number {
+  const keys = field.split(".").slice(1); // drop the "fx."/"mask." prefix
+  let node: unknown = root;
   for (const key of keys) node = (node as Record<string, unknown> | undefined)?.[key];
   return typeof node === "number" ? node : 0;
 }
 
-function FxSlider({ spec, fx, onUpdate }: { spec: SliderSpec; fx: Fx; onUpdate?: FxDrawerProps["onUpdate"] }) {
-  const value = readField(fx, spec.field);
+function FxSlider({
+  spec,
+  root,
+  onUpdate,
+}: {
+  spec: SliderSpec;
+  root: Record<string, unknown>;
+  onUpdate?: FxDrawerProps["onUpdate"];
+}) {
+  const value = readField(root, spec.field);
   return (
     <label className="fx-control" data-neutral={value === spec.neutral}>
       <span className="fx-label">{spec.label}</span>
@@ -68,13 +89,29 @@ function FxSlider({ spec, fx, onUpdate }: { spec: SliderSpec; fx: Fx; onUpdate?:
   );
 }
 
-/** The per-layer effects chain controls (vlayer.maxpat's stages): flip/tile/zoom/pan,
- *  blur/motion-trail/brcosa, and the projector edge-blend ramps. Rendered inside an
- *  expanded LayerStrip. */
-export function FxDrawer({ fx, onUpdate }: FxDrawerProps) {
+function FxSection({
+  caption,
+  children,
+}: {
+  caption: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fx-section">
+      <span className="fx-cap eyebrow">{caption}</span>
+      <div className="fx-row">{children}</div>
+    </div>
+  );
+}
+
+/** The per-layer effects chain controls (vlayer.maxpat's stages) in captioned sections:
+ *  TRANSFORM (flip/tile/zoom/pan), COLOR (blur/trail/brcosa), EDGE BLEND (projector
+ *  ramps) and MASK geometry. Rendered inside an expanded LayerStrip. */
+export function FxDrawer({ fx, mask, onUpdate }: FxDrawerProps) {
+  const fxRoot = fx as unknown as Record<string, unknown>;
   return (
     <div className="fx-drawer">
-      <div className="fx-row">
+      <FxSection caption="Transform">
         <ToggleSquare
           label="⇋"
           title="Flip horizontal"
@@ -88,19 +125,31 @@ export function FxDrawer({ fx, onUpdate }: FxDrawerProps) {
           onClick={() => onUpdate?.("fx.flipV", !fx.flipV)}
         />
         {TRANSFORM_SLIDERS.map((spec) => (
-          <FxSlider key={spec.field} spec={spec} fx={fx} onUpdate={onUpdate} />
+          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
-      </div>
-      <div className="fx-row">
+      </FxSection>
+      <FxSection caption="Color">
         {COLOR_SLIDERS.map((spec) => (
-          <FxSlider key={spec.field} spec={spec} fx={fx} onUpdate={onUpdate} />
+          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
-      </div>
-      <div className="fx-row">
+      </FxSection>
+      <FxSection caption="Edge blend">
         {EDGE_SLIDERS.map((spec) => (
-          <FxSlider key={spec.field} spec={spec} fx={fx} onUpdate={onUpdate} />
+          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
-      </div>
+      </FxSection>
+      {mask && (
+        <FxSection caption={mask.enabled ? "Mask" : "Mask (off — enable with M)"}>
+          {MASK_SLIDERS.map((spec) => (
+            <FxSlider
+              key={spec.field}
+              spec={spec}
+              root={mask as unknown as Record<string, unknown>}
+              onUpdate={onUpdate}
+            />
+          ))}
+        </FxSection>
+      )}
     </div>
   );
 }
