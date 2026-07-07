@@ -141,6 +141,7 @@ export class LayerStack {
     }
     if (entry.imgEl) {
       entry.imgEl.removeAttribute("src");
+      entry.imgEl.remove();
       entry.imgEl = null;
     }
     entry.imgKind = null;
@@ -168,13 +169,20 @@ export class LayerStack {
         // Still image (jpg) or animated gif: sample an <img> into the texture. A gif
         // advances its own frames on the browser clock, so re-uploading each render
         // frame picks up the current frame; a static image needs a single upload.
+        // The element is attached to the document (off-screen, invisible) rather than
+        // left detached: animation-frame advancement for <img> gifs is tied to the
+        // element being part of the active render tree in some browser engines, unlike
+        // <video>, where playback is well-defined even while detached.
         const img = document.createElement("img");
         img.crossOrigin = "anonymous";
+        img.style.cssText = "position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none;";
+        img.addEventListener("error", () => console.warn(`[layers] could not load "${url}"`));
+        img.addEventListener("load", () => { entry.imgUploaded = false; });
         img.src = url;
+        document.body.appendChild(img);
         entry.imgEl = img;
         entry.imgKind = kind; // "gif" | "image"
         entry.imgUploaded = false;
-        img.addEventListener("load", () => { entry.imgUploaded = false; });
       }
     } else if (source?.type === "camera") {
       // Live camera input (VPT8's cam1/cam2). Chrome requires a secure context
