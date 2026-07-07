@@ -36,8 +36,8 @@ records — this doc doesn't repeat their findings, it points to them.
 > warp-editor labeling, an on-canvas mask editor) plus a media library (the browser-world stand-in
 > for VPT8's native file picker), (2) per-layer warp/corner-pin (VPT8 has this *in addition to* the
 > master/output corner-pin already built — ours only has the latter), (3) source-model expansion
-> (still-image source type; VPT8's shared/hot-swappable 8-slot source bank vs. our one-source-per-
-> layer model), (4) a clip-trigger grid (VPT8's `clipcontrol.maxpat` — no analog exists yet).
+> (VPT8's shared/hot-swappable 8-slot source bank vs. our one-source-per-layer model), (4) a
+> clip-trigger grid (VPT8's `clipcontrol.maxpat` — no analog exists yet).
 > User-confirmed sequencing: 1 → 2 → 3 → 4 (sub-project 1's on-canvas editing patterns get reused by
 > 2, so it goes first). User-confirmed non-goals: Art-Net/DMX, serial sensor input, and Syphon are
 > explicitly out of scope for this installation (not merely deferred pending hardware — a real
@@ -59,6 +59,15 @@ records — this doc doesn't repeat their findings, it points to them.
 > deliberate design difference, not a gap: VPT8's single 100-row router (any input → any parameter)
 > vs. our two separate mechanisms (WebMIDI CC-learn, OSC address-to-path) that reach the same
 > destinations without one unified table.
+>
+> **2026-07-06 scope change:** the user asked for gif and jpg support in the media library.
+> Storing/browsing those is a small server-side extension (broaden the upload allowlist), but
+> *using* one as a layer's source is the still-image source-type piece that was sitting in
+> sub-project 3 — so that piece is pulled forward into sub-project 1, on the reasoning that a
+> library holding files you can't assign to a layer isn't useful. Sub-project 3 keeps the
+> shared/hot-swappable source-bank architecture change plus the blend-mode/crossfade work; it no
+> longer includes still-image support. `docs/superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md`
+> is updated accordingly.
 
 ## Status Quo
 
