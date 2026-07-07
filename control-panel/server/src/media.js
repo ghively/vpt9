@@ -59,14 +59,17 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     const out = createWriteStream(filePath);
     let written = 0;
     let aborted = false;
+    let finished = false;
 
     const abort = (code, msg) => {
-      if (aborted) return;
+      if (aborted || finished) return;
       aborted = true;
       req.unpipe(out);
       out.destroy();
       try { unlinkSync(filePath); } catch { /* nothing to clean up */ }
-      sendJson(res, code, { error: msg });
+      // The client may already be gone (that's often why we're aborting), so a write here
+      // can throw/emit on a dead socket — sendJson best-effort, never let cleanup itself fail.
+      try { sendJson(res, code, { error: msg }); } catch { /* client already disconnected */ }
     };
 
     // Re-check against ACTUAL bytes in case Content-Length is absent/wrong.
@@ -75,9 +78,21 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
       if (written > maxBytes) abort(413, `file exceeds ${maxBytes}-byte limit`);
     });
     req.on("error", () => abort(400, "upload stream error"));
+    // A client disconnecting mid-upload doesn't always surface as req "error" — it can
+    // surface only as "close" (e.g. the socket is just cut), per Node's docs on IncomingMessage.
+    // Without this, that leaves the write stream open (fd leak) and the partial file orphaned
+    // on disk. "close" also fires after a NORMAL completed request, so guard on req.complete
+    // (true once the whole body has been received) rather than on our own finished/aborted
+    // flags alone — the write-to-disk flush (out "finish") can still be pending when a
+    // successful request's "close" fires, so that flag isn't reliable for this check.
+    req.on("close", () => {
+      if (req.complete) return;
+      abort(400, "upload stream closed before completion");
+    });
     out.on("error", () => abort(500, "could not write file"));
     out.on("finish", () => {
       if (aborted) return;
+      finished = true;
       const entry = { id, name: fileName, filename, kind: meta.kind, size: written, uploadedAt: new Date().toISOString() };
       applyCreate(state, "media", entry);
       scheduleSave();

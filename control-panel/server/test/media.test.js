@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -109,4 +109,36 @@ test("DELETE removes both the file and the state entry and broadcasts delete", w
 test("DELETE of an unknown id is a 404", withServer(async ({ base }) => {
   const res = await fetch(`${base}/api/media/media-nope`, { method: "DELETE" });
   assert.equal(res.status, 404);
+}));
+
+test("client disconnecting mid-upload leaves no partial file behind", withServer(async ({ base, state, dir }) => {
+  // fetch() has no socket-level control, so drop to node:http to destroy the connection
+  // partway through — this is the "close" without "error" case a plain stream/network
+  // error wouldn't exercise.
+  const url = new URL(`${base}/api/media`);
+  await new Promise((resolve) => {
+    const req = httpRequest({
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      method: "POST",
+      headers: { "X-File-Name": "clip.mp4" },
+    });
+    req.on("error", () => {}); // destroying mid-request can also surface here; not under test
+    req.write(Buffer.from("only-part-of-the-file"));
+    // Let the server actually receive the partial chunk before yanking the connection.
+    setImmediate(() => {
+      req.destroy();
+      resolve();
+    });
+  });
+
+  // The server's cleanup runs off the request's "close" event, which can land a tick after
+  // destroy() fires client-side, so poll briefly instead of asserting synchronously.
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline && readdirSync(dir).length > 0) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.deepEqual(readdirSync(dir), []); // partial file cleaned up, not orphaned
+  assert.deepEqual(state.media, {}); // never made it into state either
 }));
