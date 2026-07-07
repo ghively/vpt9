@@ -105,7 +105,7 @@ export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCop
                     }
                   }}
                 />
-                {(externalMode || (!isLibraryUrl && currentUrl !== "")) && (
+                {(externalMode || !isLibraryUrl) && (
                   <TextField
                     value={currentUrl}
                     placeholder="/media/video.mp4 or https://…"
