@@ -6,6 +6,7 @@ import {
   Faceplate,
   LfoRack,
   MasterControl,
+  MediaLibrary,
   MidiMapPanel,
   PipWindows,
   PresetsBar,
@@ -83,6 +84,18 @@ export function App() {
   const wsUrl = useMemo(
     () => new URLSearchParams(location.search).get("ws") || `ws://${location.hostname}:8080`,
     [],
+  );
+
+  // The media API lives on the same host as the control plane; derive its HTTP origin
+  // from the ws url. Upload + delete are HTTP (not WS); rename is a WS update.
+  const httpBase = useMemo(() => wsUrl.replace(/^ws/, "http"), [wsUrl]);
+  const removeMedia = useCallback(
+    (id: string) => {
+      fetch(`${httpBase}/api/media/${id}`, { method: "DELETE" }).catch((err) =>
+        console.warn("[media] delete failed:", err.message),
+      );
+    },
+    [httpBase],
   );
 
   // Socket-driven store patches re-render unless a drag is in progress (the isDragging
@@ -169,6 +182,7 @@ export function App() {
   const state = stateRef.current;
   const sid = selectedScreenId ?? "";
   const layers = Object.values(state.layers ?? {});
+  const media = Object.values(state.media ?? {});
   const screens = Object.values(state.screens ?? {});
   const screen = selectedScreenId ? state.screens[selectedScreenId] : undefined;
   const pips = Object.values(state.pip ?? {}).filter((p) => p.screenId === selectedScreenId);
@@ -199,6 +213,13 @@ export function App() {
       <div className="layout">
         {/* Left column: the scene (layer rack) + the show (presets/cues/timers/modulation). */}
         <main className="workspace">
+          <MediaLibrary
+            media={media}
+            uploadUrl={`${httpBase}/api/media`}
+            onRename={actions.renameMedia}
+            onRemove={removeMedia}
+          />
+
           <ChannelRack
             layers={layers}
             onUpdateLayer={actions.updateLayer}

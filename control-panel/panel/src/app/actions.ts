@@ -236,6 +236,12 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     removeMidiMapping(id: string) {
       send({ type: "delete", path: `midiMap.${id}` });
     },
+
+    // ── Media library ────────────────────────────────────────────────────────
+    // Rename is a plain leaf update (upload + delete are HTTP, handled in App).
+    renameMedia(id: string, name: string) {
+      send({ type: "update", path: `media.${id}.name`, value: name });
+    },
   };
 }
 
