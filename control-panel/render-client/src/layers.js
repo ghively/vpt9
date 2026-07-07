@@ -4,6 +4,18 @@ import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
 const BLEND_MODES = ["normal", "multiply", "screen", "overlay", "difference", "add"];
 const BLEND_INDEX = Object.fromEntries(BLEND_MODES.map((mode, i) => [mode, i]));
 
+// Treat a source URL by its file extension. Library files always carry a correct,
+// server-generated extension; external streams without a known image extension fall
+// through to "video" so arbitrary URLs keep working exactly as before.
+function mediaKindFromUrl(url) {
+  const clean = String(url).split("?")[0].split("#")[0];
+  const dot = clean.lastIndexOf(".");
+  const ext = dot < 0 ? "" : clean.slice(dot + 1).toLowerCase();
+  if (ext === "gif") return "gif";
+  if (ext === "jpg" || ext === "jpeg") return "image";
+  return "video";
+}
+
 const BLEND_VERT = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -77,6 +89,18 @@ export class LayerStack {
     this.groundColor = [0x0a / 255, 0x0c / 255, 0x11 / 255];
     this.fxPasses = new FxPasses(gl);
     this.entries = new Map(); // layer id -> { texture, videoEl, stream, currentUrl, fxChain }
+    this.mediaOrigin = ""; // prefix for /media/... source urls (set from the ?ws= host)
+  }
+
+  setMediaOrigin(origin) {
+    this.mediaOrigin = origin || "";
+  }
+
+  // Library media is stored as a host-independent "/media/<file>" path so a saved show
+  // works regardless of which browser assigned it; resolve it against this render
+  // client's own control-plane origin. External absolute URLs pass through untouched.
+  _resolveUrl(url) {
+    return url && url.startsWith("/media/") ? this.mediaOrigin + url : url;
   }
 
   resize(width, height) {
@@ -94,7 +118,11 @@ export class LayerStack {
 
   _entry(id) {
     if (!this.entries.has(id)) {
-      this.entries.set(id, { texture: createTexture(this.gl), videoEl: null, stream: null, currentUrl: null, fxChain: null });
+      this.entries.set(id, {
+        texture: createTexture(this.gl),
+        videoEl: null, stream: null, imgEl: null, imgKind: null, imgUploaded: false,
+        currentUrl: null, fxChain: null,
+      });
     }
     return this.entries.get(id);
   }
@@ -111,22 +139,43 @@ export class LayerStack {
       for (const track of entry.stream.getTracks()) track.stop();
       entry.stream = null;
     }
+    if (entry.imgEl) {
+      entry.imgEl.removeAttribute("src");
+      entry.imgEl = null;
+    }
+    entry.imgKind = null;
+    entry.imgUploaded = false;
   }
 
   setLayerSource(id, source) {
     const entry = this._entry(id);
     if (source?.type === "video") {
-      if (entry.currentUrl === source.url) return;
-      entry.currentUrl = source.url;
+      const url = this._resolveUrl(source.url);
+      const kind = mediaKindFromUrl(source.url);
+      if (entry.currentUrl === url) return;
+      entry.currentUrl = url;
       this._stopSource(entry);
-      const video = document.createElement("video");
-      video.src = source.url;
-      video.crossOrigin = "anonymous";
-      video.loop = true;
-      video.muted = true; // corrected by setLayerMuted() per the audio-owner policy
-      video.playsInline = true;
-      video.play().catch((err) => console.warn(`[layers] could not play "${source.url}":`, err.message));
-      entry.videoEl = video;
+      if (kind === "video") {
+        const video = document.createElement("video");
+        video.src = url;
+        video.crossOrigin = "anonymous";
+        video.loop = true;
+        video.muted = true; // corrected by setLayerMuted() per the audio-owner policy
+        video.playsInline = true;
+        video.play().catch((err) => console.warn(`[layers] could not play "${url}":`, err.message));
+        entry.videoEl = video;
+      } else {
+        // Still image (jpg) or animated gif: sample an <img> into the texture. A gif
+        // advances its own frames on the browser clock, so re-uploading each render
+        // frame picks up the current frame; a static image needs a single upload.
+        const img = document.createElement("img");
+        img.crossOrigin = "anonymous";
+        img.src = url;
+        entry.imgEl = img;
+        entry.imgKind = kind; // "gif" | "image"
+        entry.imgUploaded = false;
+        img.addEventListener("load", () => { entry.imgUploaded = false; });
+      }
     } else if (source?.type === "camera") {
       // Live camera input (VPT8's cam1/cam2). Chrome requires a secure context
       // (localhost counts) and prompts once per origin. Video only — a camera layer
@@ -180,6 +229,26 @@ export class LayerStack {
     return true;
   }
 
+  _uploadSourceFrame(entry) {
+    if (entry.videoEl) return this._uploadVideoFrame(entry);
+    if (entry.imgEl) return this._uploadImageFrame(entry);
+    return false;
+  }
+
+  _uploadImageFrame(entry) {
+    const img = entry.imgEl;
+    if (!img || !img.complete || img.naturalWidth === 0) return false;
+    // Static image uploads once; gif re-uploads every frame to catch the current frame.
+    if (entry.imgKind === "image" && entry.imgUploaded) return true;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    entry.imgUploaded = true;
+    return true;
+  }
+
   // layers: array of layer state objects, sorted by `order` ascending (bottom -> top).
   // Returns the WebGLTexture holding the fully composited scene.
   render(layers) {
@@ -195,7 +264,7 @@ export class LayerStack {
     for (const layer of layers) {
       const entry = this._entry(layer.id);
       const isColor = layer.source?.type === "color";
-      if (!isColor) this._uploadVideoFrame(entry);
+      if (!isColor) this._uploadSourceFrame(entry);
 
       // Effects chain: only entered when some stage is active. For color layers the
       // chain's point pass synthesizes the fill, so the blend pass then treats the

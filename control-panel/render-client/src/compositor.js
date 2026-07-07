@@ -60,6 +60,10 @@ export class Compositor {
     this.master = typeof master === "number" ? master : 1;
   }
 
+  setMediaOrigin(origin) {
+    this.layerStack.setMediaOrigin(origin);
+  }
+
   _applyMute() {
     for (const layer of this.layers) this.layerStack.setLayerMuted(layer.id, this.muted);
   }

@@ -14,6 +14,11 @@ const params = new URLSearchParams(location.search);
 const screenId = params.get("screen") || "screen-1";
 const wsUrl = params.get("ws") || `ws://${location.hostname}:8080`;
 
+// Library sources are stored as host-independent "/media/<file>" paths; resolve them
+// against the same host this client talks WebSocket to.
+const mediaOrigin = new URL(wsUrl.replace(/^ws/, "http")).origin;
+compositor.setMediaOrigin(mediaOrigin);
+
 const pipOverlay = new PipOverlay(pipRoot, screenId);
 
 let state = { layers: {}, screens: {}, pip: {}, audioOwnerScreenId: null };
