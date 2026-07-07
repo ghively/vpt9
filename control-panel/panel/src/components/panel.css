@@ -468,3 +468,17 @@ html, body { height: 100%; }
     cursor: pointer;
   }
   .mobile-tab[data-active="true"] { color: var(--beam); box-shadow: inset 0 2px 0 var(--beam); }
+
+  /* ── Touch: enlarge every interactive control on coarse pointers (touchscreens),
+     regardless of viewport width, so mouse users keep the compact desktop sizing. ── */
+  @media (any-pointer: coarse) {
+    .toggle-sq { min-width: var(--tap-min); min-height: var(--tap-min); }
+    .move-group { flex-direction: row; }
+    .move-group .move-btn { width: var(--tap-min); height: var(--tap-min); font-size: 12px; }
+    input[type="range"] { height: var(--tap-min); }
+    input[type="range"]::-webkit-slider-thumb { width: 28px; height: 28px; }
+    input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; }
+    .handle { width: var(--tap-min); height: var(--tap-min); }
+    .pip-box__resize { width: var(--tap-min); height: var(--tap-min); }
+    .mask-shape__edge { width: var(--tap-min); height: var(--tap-min); }
+  }
