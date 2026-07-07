@@ -5,13 +5,30 @@ assumes someone has already got the server, render client(s), and panel running 
 [`README.md`](README.md) → "Running it") and you have the panel open in a browser
 pointed at the control-plane.
 
-The panel is laid out in two columns: your **scene** on the left (the layer rack and,
-below it, show control — presets, cues, timers, modulation), and the **screen
-machines** on the right (warp + cast windows for whichever screen is selected). A
-status lamp top-right tells you the truth about the connection: green dot +
-"connected" is good; amber "connecting" or red "disconnected"/"error" means the panel
-can't currently reach the server, and nothing you do will reach the render clients
-until it recovers (it retries automatically).
+The panel is laid out in two columns: your **scene** on the left (the media library,
+the layer rack, and, below it, show control — presets, cues, timers, modulation), and
+the **screen machines** on the right (warp + cast windows for whichever screen is
+selected). On a narrow screen — a phone, or anything under 720px wide — this collapses
+to a single column with a bottom tab bar instead: **Layers / Screen / Media / Show**,
+one section filling the screen at a time. Everything described below works the same
+way in either layout; only the arrangement changes. A status lamp top-right tells you
+the truth about the connection: green dot + "connected" is good; amber "connecting" or
+red "disconnected"/"error" means the panel can't currently reach the server, and
+nothing you do will reach the render clients until it recovers (it retries
+automatically).
+
+## Media library
+
+Above the layer rack sits the **Media library**, a persistent shelf of every video,
+gif, and jpg you've uploaded to this installation — it stays put regardless of which
+layer or preset you're working on. Click **+ Upload** and pick a file (mp4, gif, or
+jpg/jpeg); the button relabels itself "Uploading NN%" while it transfers. Rename an entry in place
+by editing its name field, or hit its **×** to delete it. Deleting removes the
+underlying file, so double-check no layer is still using it first — a layer left
+pointing at a deleted file just loses its picture.
+
+Anything in the library becomes available in every layer's Source picker, described
+next.
 
 ## Layers
 
@@ -20,10 +37,12 @@ The **layer rack** (top-left) is your stack of video sources, shown top-of-stack
 
 - **▲ / ▼** — move a layer up or down the stack.
 - **Name field** — just a label, purely for you.
-- **Source** — pick Video URL (type/paste a path or URL to the file), Solid color (pick
-  with the color swatch), or Camera (uses whatever webcam the render client's machine
-  has — no live preview of it in the panel, since the panel doesn't have camera access
-  itself).
+- **Source** — pick Video URL, Solid color (pick with the color swatch), or Camera
+  (uses whatever webcam the render client's machine has — no live preview of it in the
+  panel, since the panel doesn't have camera access itself). Video URL's field is a
+  dropdown of everything in the media library; choose "External URL…" from that same
+  dropdown to fall back to a plain text box and type/paste an arbitrary URL or path
+  instead — the library doesn't take away the ability to point at an outside stream.
 - **Blend mode** dropdown and the **opacity** fader next to it.
 - **M** — toggle the layer's mask on/off. The square/circle button next to it swaps the
   mask shape between rectangle and ellipse.
@@ -45,7 +64,8 @@ Click **FX** on a strip to expand it. Controls are grouped into four captioned r
   one projector's image into an overlapping one.
 - **Mask** — only meaningful once the strip's **M** toggle is on (the caption reminds
   you if it's off): center X/Y, size X/Y, and feather, for positioning and softening
-  the mask shape you picked on the strip.
+  the mask shape you picked on the strip. Click **Edit on canvas** to position and size
+  it by dragging instead of dialing in numbers — see "Editing a mask on canvas" below.
 
 Every fader shown at its neutral "stage off" value (opacity 1, zoom 1, blur 0, etc.)
 reads dimmed, so a glance at the drawer tells you which stages are actually doing
@@ -73,6 +93,23 @@ after a render client connects, not a fault).
 - Drag the orange handles directly on the preview to warp. What you're dragging is
   never the actual projector output — it's the small preview frame — so you can warp a
   screen you're not standing in front of.
+
+### Editing a mask on canvas
+
+Clicking **Edit on canvas** next to a layer's mask controls (in its FX drawer) switches
+this pane into a focused mask-editing mode instead of warp handles: a banner reads
+"Editing mask — `<layer name>`" so you always know which layer you're touching, and
+the mask's shape (rectangle or ellipse, matching the strip's shape toggle) is drawn
+directly over the preview.
+
+- Drag the shape's **body** to move it (sets center X/Y).
+- Drag its **right edge** to resize it horizontally, its **bottom edge** to resize it
+  vertically — independent of each other, same as the size sliders.
+- Feather isn't a drag handle — it's still a slider in the FX drawer, shown here as a
+  fainter outline around the shape previewing its extent.
+- Click **Done** in the banner to leave mask-editing mode and go back to normal warp
+  editing. On a phone, opening the mask editor jumps you straight to the Screen tab —
+  it's the same "show me the picture" shortcut either way.
 
 ## Cast windows (PiP)
 

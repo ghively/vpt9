@@ -18,9 +18,9 @@ run). If you're running a show rather than building the software, see
 
 | Service | What it is | VPT8 analogue |
 |---|---|---|
-| `server/` | State store (file-persisted) + WebSocket broadcast hub + the automation engine (cue-list interpreter, wall-clock timers, preset fades, LFO rack), an OSC/UDP listener, and a small HTTP hook for the cast receiver. | `pattrstorage` + the app-wide send/receive bus + the cuelist/timer/LFO modules |
-| `render-client/` | Browser WebGL2 compositor: multi-layer stack, per-layer effects chain (flip, tile, zoom/pan, blur, motion-trail, brightness/contrast/saturation, edge-blend), blend modes, per-layer masking, a house master dim/blackout, per-screen warp (corner-pin or mesh), video/color/camera sources, a YouTube PiP overlay, and an audio-owner mute policy. One instance runs per physical screen, addressed by `?screen=<id>` in its URL. | `enginetab.maxpat` + `vlayer.maxpat` (all 9 stages) + the corner-pin/mesh warp editors + `cam1`/`cam2` |
-| `panel/` | The actual operator UI: layer rack with per-strip FX drawer (incl. mask geometry) and layer-look copy/paste, warp editor (drag corner/mesh handles against a live low-res preview pulled from the render client, selectable mesh density, screen add/rename), PiP window manager, presets bar (recall / rename / delete), house master fader + blackout, audio-owner selector, cue-list editor + transport, timer bank, LFO rack, and a WebMIDI learn-based CC map with a state-built target picker. | `layergui`/`layertab` + `activelayer.maxpat`'s point editors + the preset/cuelist/timer modules + the MIDI control surface |
+| `server/` | State store (file-persisted) + WebSocket broadcast hub + the automation engine (cue-list interpreter, wall-clock timers, preset fades, LFO rack), an OSC/UDP listener, and an HTTP surface for the cast receiver and the media library (upload/serve/delete video, gif, and jpg files under `MEDIA_DIR`). | `pattrstorage` + the app-wide send/receive bus + the cuelist/timer/LFO modules |
+| `render-client/` | Browser WebGL2 compositor: multi-layer stack, per-layer effects chain (flip, tile, zoom/pan, blur, motion-trail, brightness/contrast/saturation, edge-blend), blend modes, per-layer masking, a house master dim/blackout, per-screen warp (corner-pin or mesh), video/color/camera/media-library sources (mp4/gif/jpg — gif and jpg sample into the texture as an `<img>`, not a `<video>`), a YouTube PiP overlay, and an audio-owner mute policy. One instance runs per physical screen, addressed by `?screen=<id>` in its URL. | `enginetab.maxpat` + `vlayer.maxpat` (all 9 stages) + the corner-pin/mesh warp editors + `cam1`/`cam2` |
+| `panel/` | The actual operator UI: a persistent media-library pane (upload/rename/delete video, gif, and jpg files, feeding every layer's source picker), layer rack with per-strip FX drawer (incl. mask geometry and an on-canvas draggable mask-shape editor) and layer-look copy/paste, warp editor (drag corner/mesh handles against a live low-res preview pulled from the render client, selectable mesh density, screen add/rename), PiP window manager, a tabbed show-control section (presets / cues / timers / LFO / MIDI, one at a time instead of five stacked cards), house master fader + blackout, audio-owner selector, and a WebMIDI learn-based CC map with a state-built target picker. Below 720px, a bottom tab bar (Layers/Screen/Media/Show) replaces the two-column desktop layout. | `layergui`/`layertab` + `activelayer.maxpat`'s point editors + the preset/cuelist/timer modules + the MIDI control surface |
 | `cast-receiver/` | A DIAL/SSDP responder so a phone's YouTube app sees this as a "Cast" target; casting a video populates a PiP window's state. | *(no VPT8 equivalent — new capability)* |
 
 ## Architecture decisions made along the way
@@ -49,6 +49,12 @@ run). If you're running a show rather than building the software, see
   phone on the LAN can't discover a receiver stuck behind Docker's isolated bridge
   network. `docker-compose.yml` runs `cast-receiver` with `network_mode: host` and reads
   `CAST_RECEIVER_HOST` for the LAN IP to advertise.
+- **Media uploads/downloads are plain HTTP, not framed over the WebSocket.** `POST
+  /api/media` accepts a raw request body (no multipart-parsing dependency) with the
+  filename carried in an `X-File-Name` header; `GET /media/:filename` streams straight
+  off disk with Range support. Keeping binary transfer off the socket that carries JSON
+  state deltas means a large upload or a video seek can't get wedged behind (or block)
+  state-sync traffic.
 
 ## State shape
 
@@ -75,6 +81,7 @@ run). If you're running a show rather than building the software, see
   "audioOwnerScreenId": "screen-1",
   "master": 1,
   "presets": { "preset-1": { "id": "preset-1", "name": "Evening chill", "snapshot": { "layers": {...}, "screens": {...}, "pip": {...}, "audioOwnerScreenId": "..." } } },
+  "media": { "media-1": { "id": "media-1", "name": "Ambient loop.mp4", "filename": "media-1.mp4", "kind": "video", "size": 148734821, "uploadedAt": "2026-07-06T18:22:00.000Z" } },
   "automation": {
     "cues": [ { "id": "cue-1", "label": "Build", "type": "fade", "presetId": "preset-1", "seconds": 12 } ],
     "cursor": -1, "running": false,
@@ -87,8 +94,15 @@ run). If you're running a show rather than building the software, see
 
 - All collections are keyed by **id**, not array index — layer stack order is the
   explicit `order` field, not object-key insertion order.
-- `source.type` is `"video"` (needs `url`), `"color"` (needs `color: [r,g,b]`, 0–1), or
-  `"camera"` (getUserMedia; Chrome prompts once per origin, video only, never owns audio).
+- `source.type` is `"video"` (needs `url` — either an uploaded `media` entry's
+  `/media/<filename>` or an arbitrary external URL), `"color"` (needs `color: [r,g,b]`,
+  0–1), or `"camera"` (getUserMedia; Chrome prompts once per origin, video only, never
+  owns audio).
+- `media` entries are uploaded files, `kind` (`"video"`/`"gif"`/`"image"`) derived from
+  the extension at upload time, not from `source.type` (which stays `"video"` regardless).
+  The render client samples `kind: "video"` as a `<video>` element and `"gif"`/`"image"`
+  as an `<img>` (a still image uploads its texture once; a gif re-samples every frame to
+  track whichever frame the browser is currently showing).
 - `layers`/`screens`/`pip`/`audioOwnerScreenId` together form a preset snapshot;
   `presets` itself is excluded (recalling a preset doesn't recursively touch presets),
   and so are `automation`/`lfos`/`midiMap` (a preset shouldn't rewrite your cue list).
@@ -112,6 +126,8 @@ run). If you're running a show rather than building the software, see
 - `{"type":"state","state":{...}}` — server → client on connect, full snapshot.
 - `{"type":"update","path":"layers.layer-1.opacity","value":0.8}` — either direction;
   patches an **existing** leaf (dotted path, array indices work as plain numeric keys).
+  Renaming a media item is just this, targeting `media.<id>.name` — no dedicated message
+  type.
 - `{"type":"create","path":"layers","value":{...}}` — client → server; adds a new entry,
   keyed by `value.id`. Server broadcasts back `{"type":"create","path","key","value"}`
   (layers get `order` auto-assigned if omitted).
@@ -137,6 +153,27 @@ run). If you're running a show rather than building the software, see
 `POST /api/pip/:pipId/cast` with `{"videoId": "...", "title": "..."}` is the hook the
 cast-receiver (or anything else outside the WS protocol) uses to push a video into a PiP
 window without needing its own WebSocket client.
+
+The media library (`server/src/media.js`) is three more HTTP endpoints, deliberately
+outside the WS protocol:
+
+- `POST /api/media` — body is the raw file bytes, filename in an `X-File-Name` header.
+  The extension decides `kind` and must be in the allowlist (`mp4`/`gif`/`jpg`/`jpeg`,
+  case-insensitive) or the upload is rejected with 400. Size is capped at
+  `MEDIA_MAX_BYTES` (default 1 GiB): checked against `Content-Length` up front, and
+  against actual bytes written as a fallback (aborts + deletes the partial file, 413,
+  if the declared length was missing or wrong). On success it writes the file under
+  `MEDIA_DIR` as a server-generated `media-<id>.<ext>` (the client-supplied name is
+  metadata only, never a path), returns `{"ok": true, "media": {...}}` with the created
+  entry, and broadcasts it as a WS `create` on `media`.
+- `GET /media/:filename` — serves the file, `filename` validated against the
+  server-generated-name pattern before touching disk. Supports **HTTP Range** (needed
+  for `<video>` seeking) and always sends `Access-Control-Allow-Origin: *`, required
+  because the render client samples video/gif/image sources into a WebGL texture via
+  `crossOrigin: "anonymous"`, which taints the canvas without CORS.
+- `DELETE /api/media/:id` — deletes the file off disk and its `media` state entry,
+  broadcasts a WS `delete`. Renaming isn't a fourth endpoint — see the WS `update` note
+  above.
 
 ### OSC
 
