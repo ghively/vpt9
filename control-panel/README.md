@@ -167,8 +167,9 @@ outside the WS protocol:
   metadata only, never a path), returns `{"ok": true, "media": {...}}` with the created
   entry, and broadcasts it as a WS `create` on `media`.
 - `GET /media/:filename` — serves the file, `filename` validated against the
-  server-generated-name pattern before touching disk. Supports **HTTP Range** (needed
-  for `<video>` seeking) and always sends `Access-Control-Allow-Origin: *`, required
+  server-generated-name pattern before touching disk (an invalid or missing filename is
+  a bare 404, no headers). Supports **HTTP Range** (needed for `<video>` seeking) and,
+  on a successful or range response, sends `Access-Control-Allow-Origin: *`, required
   because the render client samples video/gif/image sources into a WebGL texture via
   `crossOrigin: "anonymous"`, which taints the canvas without CORS.
 - `DELETE /api/media/:id` — deletes the file off disk and its `media` state entry,
