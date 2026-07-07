@@ -16,3 +16,7 @@ export const Video: Story = {
 export const SolidColor: Story = {
   args: { layer: sampleLayers[1], neighbors: { above: false, below: true }, onUpdate: noop, onMove: noop, onRemove: noop },
 };
+export const Narrow: Story = {
+  decorators: [(Story) => <div style={{ width: 360, padding: 8 }}><Story /></div>],
+  args: { layer: sampleLayers[0], media: sampleMedia, neighbors: { above: true, below: false }, onUpdate: noop, onMove: noop, onRemove: noop },
+};
