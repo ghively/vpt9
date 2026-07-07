@@ -111,6 +111,39 @@ test("DELETE of an unknown id is a 404", withServer(async ({ base }) => {
   assert.equal(res.status, 404);
 }));
 
+// The panel calls POST/DELETE cross-origin (its own origin, distinct from this server's),
+// so the browser preflights with OPTIONS and every JSON response needs CORS headers too —
+// otherwise the panel's upload/delete buttons fail with net::ERR_FAILED before the real
+// request is ever sent.
+test("OPTIONS preflight to /api/media succeeds with CORS headers", withServer(async ({ base }) => {
+  const res = await fetch(`${base}/api/media`, { method: "OPTIONS" });
+  assert.ok(res.status === 204 || res.status === 200);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  assert.equal(res.headers.get("access-control-allow-methods"), "POST, DELETE, OPTIONS");
+  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name");
+}));
+
+test("OPTIONS preflight to /api/media/:id succeeds with CORS headers", withServer(async ({ base }) => {
+  const res = await fetch(`${base}/api/media/media-whatever`, { method: "OPTIONS" });
+  assert.ok(res.status === 204 || res.status === 200);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  assert.equal(res.headers.get("access-control-allow-methods"), "POST, DELETE, OPTIONS");
+  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name");
+}));
+
+test("POST /api/media success response carries CORS header", withServer(async ({ base }) => {
+  const res = await upload(base, "clip.mp4", "cors-check");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+}));
+
+test("DELETE /api/media/:id response carries CORS header", withServer(async ({ base }) => {
+  const up = await (await upload(base, "clip.mp4", "cors-check")).json();
+  const res = await fetch(`${base}/api/media/${up.media.id}`, { method: "DELETE" });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+}));
+
 test("client disconnecting mid-upload leaves no partial file behind", withServer(async ({ base, state, dir }) => {
   // fetch() has no socket-level control, so drop to node:http to destroy the connection
   // partway through — this is the "close" without "error" case a plain stream/network

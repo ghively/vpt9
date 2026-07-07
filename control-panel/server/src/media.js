@@ -33,10 +33,25 @@ const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
 // X-File-Name, mirroring how readJsonBody is hand-rolled in index.js. Factored out as a
 // router so it's testable without index.js's top-level listen().
 export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, maxBytes = DEFAULT_MAX_BYTES }) {
+  // The panel itself (a separate origin from this server, e.g. :8082 vs :8080) calls
+  // upload/delete directly via fetch(), so every JSON response needs the same wildcard
+  // CORS policy the GET/serve path already carries for the render-client.
   const sendJson = (res, code, obj) => {
-    res.writeHead(code, { "content-type": "application/json" });
+    res.writeHead(code, { "content-type": "application/json", "access-control-allow-origin": "*" });
     res.end(JSON.stringify(obj));
   };
+
+  // A cross-origin POST/DELETE with a custom header (X-File-Name) triggers a browser
+  // preflight OPTIONS request before the real request is sent; answer it directly.
+  function handlePreflight(res) {
+    res.writeHead(204, {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "POST, DELETE, OPTIONS",
+      "access-control-allow-headers": "X-File-Name",
+      "access-control-max-age": "86400",
+    });
+    res.end();
+  }
 
   function handleUpload(req, res) {
     const fileName = req.headers["x-file-name"];
@@ -145,6 +160,10 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
   return {
     async handle(req, res) {
       const url = req.url || "";
+      if (req.method === "OPTIONS" && (url === "/api/media" || /^\/api\/media\/([^/?]+)$/.exec(url))) {
+        handlePreflight(res);
+        return true;
+      }
       if (req.method === "POST" && url === "/api/media") { handleUpload(req, res); return true; }
       const serve = req.method === "GET" && /^\/media\/([^/?]+)/.exec(url);
       if (serve) { handleServe(req, res, decodeURIComponent(serve[1])); return true; }
