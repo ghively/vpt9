@@ -43,11 +43,14 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
 
   // A cross-origin POST/DELETE with a custom header (X-File-Name) triggers a browser
   // preflight OPTIONS request before the real request is sent; answer it directly.
+  // Content-Type must be allowed too: the upload sends a raw File body with no explicit
+  // Content-Type, so the browser auto-sets one from the file (e.g. video/mp4) — not a
+  // CORS-safelisted value, so it shows up in the real preflight's Access-Control-Request-Headers.
   function handlePreflight(res) {
     res.writeHead(204, {
       "access-control-allow-origin": "*",
       "access-control-allow-methods": "POST, DELETE, OPTIONS",
-      "access-control-allow-headers": "X-File-Name",
+      "access-control-allow-headers": "X-File-Name, Content-Type",
       "access-control-max-age": "86400",
     });
     res.end();

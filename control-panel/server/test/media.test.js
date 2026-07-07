@@ -120,7 +120,14 @@ test("OPTIONS preflight to /api/media succeeds with CORS headers", withServer(as
   assert.ok(res.status === 204 || res.status === 200);
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
   assert.equal(res.headers.get("access-control-allow-methods"), "POST, DELETE, OPTIONS");
-  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name");
+  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name, Content-Type");
+  // Regression guard: xhr.send(file) with no explicit Content-Type makes the browser
+  // auto-set one (e.g. video/mp4), which is not CORS-safelisted, so the real preflight
+  // requests "content-type" and the server must allow it or the browser blocks the upload.
+  assert.ok(
+    res.headers.get("access-control-allow-headers").toLowerCase().includes("content-type"),
+    "allow-headers must include content-type (case-insensitive) for the browser upload path"
+  );
 }));
 
 test("OPTIONS preflight to /api/media/:id succeeds with CORS headers", withServer(async ({ base }) => {
@@ -128,7 +135,11 @@ test("OPTIONS preflight to /api/media/:id succeeds with CORS headers", withServe
   assert.ok(res.status === 204 || res.status === 200);
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
   assert.equal(res.headers.get("access-control-allow-methods"), "POST, DELETE, OPTIONS");
-  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name");
+  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name, Content-Type");
+  assert.ok(
+    res.headers.get("access-control-allow-headers").toLowerCase().includes("content-type"),
+    "allow-headers must include content-type (case-insensitive) for the browser upload path"
+  );
 }));
 
 test("POST /api/media success response carries CORS header", withServer(async ({ base }) => {
