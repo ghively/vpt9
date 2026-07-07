@@ -8,6 +8,7 @@ import {
   MasterControl,
   MediaLibrary,
   MidiMapPanel,
+  MobileTabBar,
   PipWindows,
   PresetsBar,
   StatusLamp,
@@ -15,12 +16,14 @@ import {
   WarpEditor,
   type ConnectionState,
   type Layer,
+  type MobileTab,
   type TargetOption,
 } from "../components";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
 import { useMidi } from "./useMidi";
+import { useIsMobile } from "./useIsMobile";
 import { createActions } from "./actions";
 
 /** The layer-look fields copy/paste moves between layers (not source/name/order). */
@@ -77,6 +80,8 @@ export function App() {
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [activeShowTab, setActiveShowTab] = useState<ShowTab>("presets");
+  const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("layers");
+  const isMobile = useIsMobile();
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedScreenId;
   const isDraggingRef = useRef(false);
@@ -200,160 +205,184 @@ export function App() {
   const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
   const targetOptions = buildTargetOptions(state);
 
+  const mediaPane = (
+    <MediaLibrary
+      media={media}
+      uploadUrl={`${httpBase}/api/media`}
+      onRename={actions.renameMedia}
+      onRemove={removeMedia}
+    />
+  );
+
+  const layerRack = (
+    <ChannelRack
+      layers={layers}
+      media={media}
+      onUpdateLayer={actions.updateLayer}
+      onMoveLayer={actions.moveLayer}
+      onRemoveLayer={actions.removeLayer}
+      onAddLayer={actions.addLayer}
+      onCopyLayer={copyLayer}
+      onPasteLayer={pasteLayer}
+      canPaste={canPaste}
+    />
+  );
+
+  const showControl = (
+    <div className="show-control">
+      <div className="show-tabs" role="tablist">
+        {SHOW_TABS.map(([value, label]) => (
+          <button
+            key={value}
+            className="show-tab-btn"
+            role="tab"
+            aria-selected={activeShowTab === value}
+            data-active={activeShowTab === value}
+            onClick={() => setActiveShowTab(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeShowTab === "presets" && (
+        <section className="sc-card">
+          <h3>Presets</h3>
+          <PresetsBar
+            presets={presets}
+            onRecall={actions.recallPreset}
+            onSave={actions.savePreset}
+            onRename={actions.renamePreset}
+            onRemove={actions.removePreset}
+          />
+        </section>
+      )}
+      {activeShowTab === "cues" && (
+        <section className="sc-card">
+          <CueList
+            cues={automation.cues ?? []}
+            cursor={automation.cursor ?? -1}
+            running={!!automation.running}
+            presets={presets}
+            onGo={actions.cueGo}
+            onStop={actions.cueStop}
+            onJump={actions.cueJump}
+            onSetCues={actions.setCues}
+          />
+        </section>
+      )}
+      {activeShowTab === "timers" && (
+        <section className="sc-card">
+          <TimerBank
+            timers={Object.values(automation.timers ?? {})}
+            presets={presets}
+            onAdd={actions.addTimer}
+            onUpdate={actions.updateTimer}
+            onRemove={actions.removeTimer}
+          />
+        </section>
+      )}
+      {activeShowTab === "lfo" && (
+        <section className="sc-card">
+          <LfoRack
+            lfos={Object.values(state.lfos ?? {})}
+            targetOptions={targetOptions}
+            onAdd={actions.addLfo}
+            onUpdate={actions.updateLfo}
+            onRemove={actions.removeLfo}
+          />
+        </section>
+      )}
+      {activeShowTab === "midi" && (
+        <section className="sc-card">
+          <MidiMapPanel
+            mappings={Object.values(state.midiMap ?? {})}
+            learningId={midi.learningId}
+            midiAvailable={midi.available}
+            targetOptions={targetOptions}
+            onAdd={actions.addMidiMapping}
+            onUpdate={actions.updateMidiMapping}
+            onRemove={actions.removeMidiMapping}
+            onLearn={midi.learn}
+          />
+        </section>
+      )}
+    </div>
+  );
+
+  const screenAside = (
+    <aside>
+      <WarpEditor
+        ref={preview.warpMonitor}
+        screen={screen}
+        screens={screens}
+        previewFrame={preview.frameFor(selectedScreenId)}
+        onSelectScreen={setSelectedScreenId}
+        onAddScreen={actions.addScreen}
+        onRenameScreen={(name) => actions.renameScreen(sid, name)}
+        onSetMode={(mode) => actions.setWarpMode(sid, mode)}
+        onSetMeshSize={(size) => actions.setMeshSize(sid, size)}
+        onReset={() => actions.resetWarp(sid)}
+        onDragStart={beginDrag}
+        onMovePoint={(index, x, y) => actions.moveWarpPoint(sid, index, x, y)}
+        onDragEnd={endDrag}
+      />
+      <PipWindows
+        ref={preview.pipMonitor}
+        screenId={sid}
+        pips={pips}
+        previewFrame={preview.frameFor(selectedScreenId)}
+        onDragStart={beginDrag}
+        onDragEnd={endDrag}
+        onUpdatePip={actions.updatePip}
+        onMovePip={actions.movePip}
+        onResizePip={actions.resizePip}
+        onRemovePip={actions.removePip}
+        onAddPip={() => actions.addPip(sid)}
+      />
+    </aside>
+  );
+
+  const faceplate = (
+    <Faceplate
+      center={
+        <div className="faceplate-center">
+          <AudioOwner screens={screens} ownerId={state.audioOwnerScreenId} onSelect={actions.setAudioOwner} />
+          <MasterControl master={state.master ?? 1} onChange={actions.setMaster} onToggleBlackout={toggleBlackout} />
+        </div>
+      }
+      right={<StatusLamp state={status.state} label={status.label} />}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <>
+        {faceplate}
+        <div className="mobile-view">
+          {activeMobileTab === "layers" && <main className="workspace">{layerRack}</main>}
+          {activeMobileTab === "media" && <main className="workspace">{mediaPane}</main>}
+          {activeMobileTab === "show" && <main className="workspace">{showControl}</main>}
+          {activeMobileTab === "screen" && screenAside}
+        </div>
+        <MobileTabBar active={activeMobileTab} onSelect={setActiveMobileTab} />
+      </>
+    );
+  }
+
   return (
     <>
-      <Faceplate
-        center={
-          <div className="faceplate-center">
-            <AudioOwner
-              screens={screens}
-              ownerId={state.audioOwnerScreenId}
-              onSelect={actions.setAudioOwner}
-            />
-            <MasterControl
-              master={state.master ?? 1}
-              onChange={actions.setMaster}
-              onToggleBlackout={toggleBlackout}
-            />
-          </div>
-        }
-        right={<StatusLamp state={status.state} label={status.label} />}
-      />
-
+      {faceplate}
       <div className="layout">
         {/* Left column: the scene (layer rack) + the show (presets/cues/timers/modulation). */}
         <main className="workspace">
-          <MediaLibrary
-            media={media}
-            uploadUrl={`${httpBase}/api/media`}
-            onRename={actions.renameMedia}
-            onRemove={removeMedia}
-          />
-
-          <ChannelRack
-            layers={layers}
-            media={media}
-            onUpdateLayer={actions.updateLayer}
-            onMoveLayer={actions.moveLayer}
-            onRemoveLayer={actions.removeLayer}
-            onAddLayer={actions.addLayer}
-            onCopyLayer={copyLayer}
-            onPasteLayer={pasteLayer}
-            canPaste={canPaste}
-          />
-
-          <div className="show-control">
-            <div className="show-tabs" role="tablist">
-              {SHOW_TABS.map(([value, label]) => (
-                <button
-                  key={value}
-                  className="show-tab-btn"
-                  role="tab"
-                  aria-selected={activeShowTab === value}
-                  data-active={activeShowTab === value}
-                  onClick={() => setActiveShowTab(value)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {activeShowTab === "presets" && (
-              <section className="sc-card">
-                <h3>Presets</h3>
-                <PresetsBar
-                  presets={presets}
-                  onRecall={actions.recallPreset}
-                  onSave={actions.savePreset}
-                  onRename={actions.renamePreset}
-                  onRemove={actions.removePreset}
-                />
-              </section>
-            )}
-            {activeShowTab === "cues" && (
-              <section className="sc-card">
-                <CueList
-                  cues={automation.cues ?? []}
-                  cursor={automation.cursor ?? -1}
-                  running={!!automation.running}
-                  presets={presets}
-                  onGo={actions.cueGo}
-                  onStop={actions.cueStop}
-                  onJump={actions.cueJump}
-                  onSetCues={actions.setCues}
-                />
-              </section>
-            )}
-            {activeShowTab === "timers" && (
-              <section className="sc-card">
-                <TimerBank
-                  timers={Object.values(automation.timers ?? {})}
-                  presets={presets}
-                  onAdd={actions.addTimer}
-                  onUpdate={actions.updateTimer}
-                  onRemove={actions.removeTimer}
-                />
-              </section>
-            )}
-            {activeShowTab === "lfo" && (
-              <section className="sc-card">
-                <LfoRack
-                  lfos={Object.values(state.lfos ?? {})}
-                  targetOptions={targetOptions}
-                  onAdd={actions.addLfo}
-                  onUpdate={actions.updateLfo}
-                  onRemove={actions.removeLfo}
-                />
-              </section>
-            )}
-            {activeShowTab === "midi" && (
-              <section className="sc-card">
-                <MidiMapPanel
-                  mappings={Object.values(state.midiMap ?? {})}
-                  learningId={midi.learningId}
-                  midiAvailable={midi.available}
-                  targetOptions={targetOptions}
-                  onAdd={actions.addMidiMapping}
-                  onUpdate={actions.updateMidiMapping}
-                  onRemove={actions.removeMidiMapping}
-                  onLearn={midi.learn}
-                />
-              </section>
-            )}
-          </div>
+          {mediaPane}
+          {layerRack}
+          {showControl}
         </main>
 
         {/* Right column: the screen machines — warp + PiP windows (cyan territory). */}
-        <aside>
-          <WarpEditor
-            ref={preview.warpMonitor}
-            screen={screen}
-            screens={screens}
-            previewFrame={preview.frameFor(selectedScreenId)}
-            onSelectScreen={setSelectedScreenId}
-            onAddScreen={actions.addScreen}
-            onRenameScreen={(name) => actions.renameScreen(sid, name)}
-            onSetMode={(mode) => actions.setWarpMode(sid, mode)}
-            onSetMeshSize={(size) => actions.setMeshSize(sid, size)}
-            onReset={() => actions.resetWarp(sid)}
-            onDragStart={beginDrag}
-            onMovePoint={(index, x, y) => actions.moveWarpPoint(sid, index, x, y)}
-            onDragEnd={endDrag}
-          />
-          <PipWindows
-            ref={preview.pipMonitor}
-            screenId={sid}
-            pips={pips}
-            previewFrame={preview.frameFor(selectedScreenId)}
-            onDragStart={beginDrag}
-            onDragEnd={endDrag}
-            onUpdatePip={actions.updatePip}
-            onMovePip={actions.movePip}
-            onResizePip={actions.resizePip}
-            onRemovePip={actions.removePip}
-            onAddPip={() => actions.addPip(sid)}
-          />
-        </aside>
+        {screenAside}
       </div>
     </>
   );
