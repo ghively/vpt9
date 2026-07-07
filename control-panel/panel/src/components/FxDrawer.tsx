@@ -139,7 +139,18 @@ export function FxDrawer({ fx, mask, onUpdate }: FxDrawerProps) {
         ))}
       </FxSection>
       {mask && (
-        <FxSection caption={mask.enabled ? "Mask" : "Mask (off — enable with M)"}>
+        <FxSection caption="Mask">
+          <ToggleSquare
+            label={mask.enabled ? "On" : "Off"}
+            title="Toggle mask for this layer"
+            active={!!mask.enabled}
+            onClick={() => onUpdate?.("mask.enabled", !mask.enabled)}
+          />
+          <ToggleSquare
+            label={mask.shape === "rect" ? "□" : "○"}
+            title="Mask shape"
+            onClick={() => onUpdate?.("mask.shape", mask.shape === "rect" ? "ellipse" : "rect")}
+          />
           {MASK_SLIDERS.map((spec) => (
             <FxSlider
               key={spec.field}

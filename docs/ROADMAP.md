@@ -28,6 +28,22 @@ records — this doc doesn't repeat their findings, it points to them.
 > from presets/cue fades. `control-panel/README.md` now also links out to a new
 > [`control-panel/OPERATOR_GUIDE.md`](../control-panel/OPERATOR_GUIDE.md) for the
 > person running a show rather than building the software.
+>
+> **2026-07-06 update (2):** a fresh pass at "what would full VPT8 parity plus a genuinely better
+> interface require" (prompted by user testing of the running panel) found the remaining gap is
+> smaller than it sounds — engine-level parity was already closed above — but identified four real
+> sub-projects: (1) a UI/UX overhaul (mobile layout, touch-target sizing, clearer layer-strip and
+> warp-editor labeling, an on-canvas mask editor) plus a media library (the browser-world stand-in
+> for VPT8's native file picker), (2) per-layer warp/corner-pin (VPT8 has this *in addition to* the
+> master/output corner-pin already built — ours only has the latter), (3) source-model expansion
+> (still-image source type; VPT8's shared/hot-swappable 8-slot source bank vs. our one-source-per-
+> layer model), (4) a clip-trigger grid (VPT8's `clipcontrol.maxpat` — no analog exists yet).
+> User-confirmed sequencing: 1 → 2 → 3 → 4 (sub-project 1's on-canvas editing patterns get reused by
+> 2, so it goes first). User-confirmed non-goals: Art-Net/DMX, serial sensor input, and Syphon are
+> explicitly out of scope for this installation (not merely deferred pending hardware — a real
+> decision this time). Sub-project 1 is designed in
+> [`docs/superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md`](superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md);
+> sub-projects 2–4 are named and sequenced but not yet designed.
 
 ## Status Quo
 
@@ -170,3 +186,7 @@ new pieces in a real browser via a scripted check (Playwright) — see `control-
 - [`docs/superpowers/specs/2026-07-05-panel-ui-overhaul-design.md`](superpowers/specs/2026-07-05-panel-ui-overhaul-design.md)
   — the design for the two-column console layout, house master/blackout, and mask/mesh/preset/
   target-picker UI referenced in the 2026-07-06 status update above.
+- [`docs/superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md`](superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md)
+  — sub-project 1 of the 4-part decomposition in the second 2026-07-06 update above: mobile layout,
+  touch-target sizing, the media library (server + panel), warp-editor labeling, and the new
+  on-canvas mask editor.
