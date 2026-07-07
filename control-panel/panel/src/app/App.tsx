@@ -26,6 +26,15 @@ import { createActions } from "./actions";
 /** The layer-look fields copy/paste moves between layers (not source/name/order). */
 type LayerLook = Pick<Layer, "opacity" | "blendMode" | "mask" | "fx">;
 
+type ShowTab = "presets" | "cues" | "timers" | "lfo" | "midi";
+const SHOW_TABS: Array<[ShowTab, string]> = [
+  ["presets", "Presets"],
+  ["cues", "Cues"],
+  ["timers", "Timers"],
+  ["lfo", "LFO"],
+  ["midi", "MIDI"],
+];
+
 /** Numeric per-layer paths offered by the LFO/MIDI target pickers. */
 const LAYER_TARGET_FIELDS: Array<[string, string]> = [
   ["opacity", "opacity"],
@@ -67,6 +76,7 @@ export function App() {
   const stateRef = useRef<PanelState>(emptyState());
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
+  const [activeShowTab, setActiveShowTab] = useState<ShowTab>("presets");
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedScreenId;
   const isDraggingRef = useRef(false);
@@ -233,58 +243,83 @@ export function App() {
           />
 
           <div className="show-control">
-            <section className="sc-card sc-presets">
-              <h3>Presets</h3>
-              <PresetsBar
-                presets={presets}
-                onRecall={actions.recallPreset}
-                onSave={actions.savePreset}
-                onRename={actions.renamePreset}
-                onRemove={actions.removePreset}
-              />
-            </section>
-            <section className="sc-card">
-              <CueList
-                cues={automation.cues ?? []}
-                cursor={automation.cursor ?? -1}
-                running={!!automation.running}
-                presets={presets}
-                onGo={actions.cueGo}
-                onStop={actions.cueStop}
-                onJump={actions.cueJump}
-                onSetCues={actions.setCues}
-              />
-            </section>
-            <section className="sc-card">
-              <TimerBank
-                timers={Object.values(automation.timers ?? {})}
-                presets={presets}
-                onAdd={actions.addTimer}
-                onUpdate={actions.updateTimer}
-                onRemove={actions.removeTimer}
-              />
-            </section>
-            <section className="sc-card">
-              <LfoRack
-                lfos={Object.values(state.lfos ?? {})}
-                targetOptions={targetOptions}
-                onAdd={actions.addLfo}
-                onUpdate={actions.updateLfo}
-                onRemove={actions.removeLfo}
-              />
-            </section>
-            <section className="sc-card">
-              <MidiMapPanel
-                mappings={Object.values(state.midiMap ?? {})}
-                learningId={midi.learningId}
-                midiAvailable={midi.available}
-                targetOptions={targetOptions}
-                onAdd={actions.addMidiMapping}
-                onUpdate={actions.updateMidiMapping}
-                onRemove={actions.removeMidiMapping}
-                onLearn={midi.learn}
-              />
-            </section>
+            <div className="show-tabs" role="tablist">
+              {SHOW_TABS.map(([value, label]) => (
+                <button
+                  key={value}
+                  className="show-tab-btn"
+                  role="tab"
+                  aria-selected={activeShowTab === value}
+                  data-active={activeShowTab === value}
+                  onClick={() => setActiveShowTab(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {activeShowTab === "presets" && (
+              <section className="sc-card">
+                <h3>Presets</h3>
+                <PresetsBar
+                  presets={presets}
+                  onRecall={actions.recallPreset}
+                  onSave={actions.savePreset}
+                  onRename={actions.renamePreset}
+                  onRemove={actions.removePreset}
+                />
+              </section>
+            )}
+            {activeShowTab === "cues" && (
+              <section className="sc-card">
+                <CueList
+                  cues={automation.cues ?? []}
+                  cursor={automation.cursor ?? -1}
+                  running={!!automation.running}
+                  presets={presets}
+                  onGo={actions.cueGo}
+                  onStop={actions.cueStop}
+                  onJump={actions.cueJump}
+                  onSetCues={actions.setCues}
+                />
+              </section>
+            )}
+            {activeShowTab === "timers" && (
+              <section className="sc-card">
+                <TimerBank
+                  timers={Object.values(automation.timers ?? {})}
+                  presets={presets}
+                  onAdd={actions.addTimer}
+                  onUpdate={actions.updateTimer}
+                  onRemove={actions.removeTimer}
+                />
+              </section>
+            )}
+            {activeShowTab === "lfo" && (
+              <section className="sc-card">
+                <LfoRack
+                  lfos={Object.values(state.lfos ?? {})}
+                  targetOptions={targetOptions}
+                  onAdd={actions.addLfo}
+                  onUpdate={actions.updateLfo}
+                  onRemove={actions.removeLfo}
+                />
+              </section>
+            )}
+            {activeShowTab === "midi" && (
+              <section className="sc-card">
+                <MidiMapPanel
+                  mappings={Object.values(state.midiMap ?? {})}
+                  learningId={midi.learningId}
+                  midiAvailable={midi.available}
+                  targetOptions={targetOptions}
+                  onAdd={actions.addMidiMapping}
+                  onUpdate={actions.updateMidiMapping}
+                  onRemove={actions.removeMidiMapping}
+                  onLearn={midi.learn}
+                />
+              </section>
+            )}
           </div>
         </main>
 

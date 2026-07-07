@@ -157,11 +157,20 @@ html, body { height: 100%; }
      machine-driven (cyan). */
   .show-control {
     flex: 1;
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: var(--space-3);
+    display: flex; flex-direction: column; gap: var(--space-2);
     align-content: start;
     padding: 0 var(--space-4) var(--space-4);
   }
+  .show-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .show-tab-btn {
+    padding: 6px 12px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    border: 1px solid var(--hairline); border-bottom: none;
+    background: var(--panel-sunken); color: var(--muted);
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer; transition: color 120ms ease, background 120ms ease;
+  }
+  .show-tab-btn:hover { color: var(--beam); }
+  .show-tab-btn[data-active="true"] { color: var(--beam); background: var(--panel); border-color: var(--beam-line); }
   .sc-card {
     background: linear-gradient(180deg, rgba(255,255,255,0.012), rgba(0,0,0,0)), var(--panel);
     border: 1px solid var(--hairline);
@@ -169,7 +178,6 @@ html, body { height: 100%; }
     padding: var(--space-3) var(--space-4) var(--space-4);
     min-width: 0;
   }
-  .sc-presets { grid-column: 1 / -1; }
   .sc-card h3 {
     font-family: var(--font-mono);
     font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
