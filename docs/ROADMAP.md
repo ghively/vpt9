@@ -17,6 +17,17 @@ records — this doc doesn't repeat their findings, it points to them.
 > WS reconnect, sync-write-per-message persistence, hidden-PiP audio leak, invalid DIAL UUID,
 > id-less creates, dead code). Still open: the `control-panel` license decision, and the
 > real-hardware verification items listed at the end of the README.
+>
+> **2026-07-06 update:** the panel's operator UI was overhauled — see
+> [`docs/superpowers/specs/2026-07-05-panel-ui-overhaul-design.md`](superpowers/specs/2026-07-05-panel-ui-overhaul-design.md).
+> Composition moved to a two-column console (layer rack + show-control cards on the
+> left, screen instruments on the right) and closed several engine-supported-but-
+> unwired gaps: mask geometry faders, warp mesh-density selection, preset rename/
+> delete, screen add/rename, and a state-built LFO/MIDI target picker. It also added a
+> genuinely new capability, house master dim + hard blackout, deliberately excluded
+> from presets/cue fades. `control-panel/README.md` now also links out to a new
+> [`control-panel/OPERATOR_GUIDE.md`](../control-panel/OPERATOR_GUIDE.md) for the
+> person running a show rather than building the software.
 
 ## Status Quo
 

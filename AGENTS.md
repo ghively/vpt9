@@ -14,7 +14,18 @@ environment, not a conventional text-based codebase. There is no compiler, packa
 or test suite for the project as a whole. "Running" or "editing" this project means opening it in
 the Max application (with the Jitter GL extensions), not executing a shell command.
 
-All real content lives under `vpt8 source code/`.
+All VPT8 Max/MSP content lives under `vpt8 source code/`.
+
+## Also in this repo: `control-panel/` (the browser-based replacement)
+
+This repository also contains `control-panel/` — an actively developed, independent
+Node/React project that replaces VPT8 with a browser-based control panel, a WebGL2
+render client, and a WebSocket/OSC control-plane. It does not use Max/MSP and is not
+covered by the rest of this file. If you're working in `control-panel/`, read
+`control-panel/README.md` (architecture, state shape, protocol, build/run) and
+`control-panel/OPERATOR_GUIDE.md` (how to run a show from the panel) instead — and see
+`docs/ROADMAP.md` for how the two projects relate and which one is under active
+development.
 
 ## Opening / working with the project
 
@@ -104,3 +115,14 @@ GL effects are implemented as Jitter shaders (`.jxs`) rather than JS/patcher log
   (blur), `ab.spotmask_mod01.jxs` (spot masking).
 - Each `.jxs` declares its `<param>`s (bound to `vp`/`fp` programs) and its GLSL source either inline
   in a `<program>` CDATA block or via `source="filename.glsl"` pointing into `shaders/shared/`.
+
+## Deep architecture reference
+
+The sections above are a high-level orientation. For a complete, file-by-file map of all 49
+patchers (grouped into 11 functional clusters: app shell, layer engine core, per-layer engine
+instance, layer select/masking/warping, layer GUI/mixing/clips, core video sources, secondary
+video sources, presets/cues, control surfaces, modulation, and scripting/shaders/data), see
+`docs/architecture/00-overview.md` and the per-cluster docs it links to. For a categorized
+inventory of technical debt (platform gaps, toolchain/version debt, closed-source dependencies,
+dead code, naming inconsistencies, architectural fragility, hardcoded limits, missing tests/CI,
+and licensing constraints) to weigh before any modernization work, see `docs/TECH_DEBT.md`.

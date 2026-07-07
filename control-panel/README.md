@@ -10,6 +10,10 @@ shaped these decisions.
 This directory is **not** part of the VPT8 Max/MSP source discussed elsewhere in this
 repo — it's new code for the replacement system.
 
+This file is the **developer** reference (architecture, state shape, protocol, build &
+run). If you're running a show rather than building the software, see
+[`OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md) instead.
+
 ## Services
 
 | Service | What it is | VPT8 analogue |
@@ -205,6 +209,16 @@ the new panel sections driving real state, drag-based warp/PiP editing through t
 UI, the audio-owner mute toggle, hardened patch paths (primitive-leaf walks and
 `__proto__` injection are rejected without crashing), and the DIAL receiver's SSDP
 response + HTTP app-launch flow (via a real UDP M-SEARCH and a simulated launch POST).
+
+The 2026-07-05/06 panel UI overhaul (two-column console layout, house master +
+blackout, the FX drawer's mask-geometry section, mesh-density selector, preset
+rename/delete, screen add/rename, and the LFO/MIDI target picker) added its own
+scripted Playwright pass against a live server and browser: master fader → `state.master`,
+blackout-and-restore, mask faders → the layer's `mask` object, preset save → rename →
+delete round-trip, cue GO advancing `automation.cursor`, mesh-size change producing a
+correctly-sized identity grid in one atomic update, screen rename/add, and an enabled
+LFO actually oscillating a bound layer's opacity over time — all 8 checks pass with no
+browser console errors.
 
 Not verifiable from this environment, by nature of what they are:
 
