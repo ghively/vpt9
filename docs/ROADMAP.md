@@ -44,6 +44,21 @@ records — this doc doesn't repeat their findings, it points to them.
 > decision this time). Sub-project 1 is designed in
 > [`docs/superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md`](superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md);
 > sub-projects 2–4 are named and sequenced but not yet designed.
+>
+> **2026-07-06 correction:** the four-sub-project decomposition above missed two real gaps, caught
+> only when asked directly whether it actually reached full parity. `render-client/src/layers.js`
+> and `panel/src/components/types.ts` implement 6 of VPT8's 24 `shaders/v001 Mixers/` blend modes
+> (normal/multiply/screen/overlay/difference/add) — 18 are missing. VPT8's whole-bank A/B crossfade
+> (`mix-vpt7.maxpat`), distinct from per-layer blend modes, also has no analog. **User decision: both
+> fold into sub-project 3** (same neighborhood as that sub-project's compositor/shader work) rather
+> than becoming a 5th sub-project. Separately, VPT8's `hapsource.maxpat` uses the HAP codec, which no
+> browser API decodes — the render-client's `<video>` element only plays codecs the browser supports
+> natively (h264/vp9/av1/webm). **User decision: transcode source video to a standard web codec
+> rather than build a HAP decoder** — browsers already hardware-decode those, so this is treated as
+> equivalent in practice, not a gap requiring engineering. One further item was named but left as a
+> deliberate design difference, not a gap: VPT8's single 100-row router (any input → any parameter)
+> vs. our two separate mechanisms (WebMIDI CC-learn, OSC address-to-path) that reach the same
+> destinations without one unified table.
 
 ## Status Quo
 
