@@ -77,7 +77,19 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
     const points: Point[] = isMesh ? warp?.mesh.points ?? [] : warp?.corners ?? [];
     const size = warp?.mesh.size ?? 4;
     const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
-    useEffect(() => { setSelectedPoint(null); }, [screen?.id, warp?.mode, size]);
+    // Reset the selection synchronously during render (not in a useEffect) when the point set
+    // changes identity — e.g. mesh resize or corner/mesh mode switch. A useEffect runs AFTER
+    // render, so for one frame the old index could still be in-bounds of the new points[] and
+    // read a different point's data (stale highlight + coord row). This is React's documented
+    // "adjusting state when a prop changes" pattern: track the previous trigger values in state
+    // (not a ref — a ref mutated during render doesn't replay correctly under StrictMode's
+    // dev-mode double-render) and call setState directly, before the JSX below reads `selected`.
+    const resetKey = `${screen?.id ?? ""}|${warp?.mode ?? ""}|${size}`;
+    const [prevResetKey, setPrevResetKey] = useState(resetKey);
+    if (prevResetKey !== resetKey) {
+      setPrevResetKey(resetKey);
+      if (selectedPoint !== null) setSelectedPoint(null);
+    }
     const selected = selectedPoint != null && selectedPoint < points.length ? points[selectedPoint] : null;
     const selectedLabel =
       selectedPoint == null ? "" : isMesh ? `R${Math.floor(selectedPoint / size) + 1}·C${(selectedPoint % size) + 1}` : CORNER_TAGS[selectedPoint];
