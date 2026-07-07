@@ -308,6 +308,22 @@ html, body { height: 100%; }
   .handle[data-active="true"] { background: var(--beam); box-shadow: var(--glow-beam); cursor: grabbing; }
   .handle[data-active="true"]::before, .handle[data-active="true"]::after { background: var(--ink); }
 
+  /* Corner tag (always visible), coordinate tag (hover/drag), live badge (drag). */
+  .handle__tag, .handle__coord, .handle__badge {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-size: 8px; font-weight: 700; letter-spacing: 0.08em; line-height: 1;
+    padding: 2px 4px; white-space: nowrap; pointer-events: none;
+    background: var(--panel-sunken); border: 1px solid var(--beam-line); color: var(--beam);
+    border-radius: var(--radius-sm);
+  }
+  .handle__tag { bottom: calc(100% + 4px); }
+  .handle__coord { top: calc(100% + 4px); opacity: 0; transition: opacity 100ms ease; }
+  .handle:hover .handle__coord { opacity: 1; }
+  .handle__badge { bottom: calc(100% + 4px); display: none; }
+  .handle[data-active="true"] .handle__badge { display: block; }
+  .handle[data-active="true"] .handle__coord { opacity: 1; }
+  .handle[data-selected="true"] { box-shadow: var(--glow-beam); }
+
   /* PiP windows — cool cyan, marking them as the cast/preview overlay distinct
      from the tungsten layer stack. */
   .pip-box {

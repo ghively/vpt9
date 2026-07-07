@@ -26,6 +26,7 @@ export interface WarpEditorProps {
 }
 
 const MESH_SIZES = [3, 4, 6, 8].map((n) => ({ value: String(n), label: `${n}×${n}` }));
+const CORNER_TAGS = ["TL", "TR", "BR", "BL"]; // index order matches the identity corners
 
 /** Corner-pin / mesh warp editor over the confidence monitor. The forwarded ref reaches
  *  the monitor so the container can push preview frames into it. */
@@ -92,16 +93,21 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
           <Chip label="Reset" onClick={onReset} />
         </div>
         <ConfidenceMonitor ref={ref} previewFrame={previewFrame}>
-          {points.map((p, i) => (
-            <WarpHandle
-              key={i}
-              x={p.x}
-              y={p.y}
-              onDragStart={onDragStart}
-              onDragTo={(x, y) => onMovePoint?.(i, x, y)}
-              onDragEnd={onDragEnd}
-            />
-          ))}
+          {points.map((p, i) => {
+            const size = warp?.mesh.size ?? 4;
+            return (
+              <WarpHandle
+                key={i}
+                x={p.x}
+                y={p.y}
+                cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
+                coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
+                onDragStart={onDragStart}
+                onDragTo={(x, y) => onMovePoint?.(i, x, y)}
+                onDragEnd={onDragEnd}
+              />
+            );
+          })}
         </ConfidenceMonitor>
       </div>
     );
