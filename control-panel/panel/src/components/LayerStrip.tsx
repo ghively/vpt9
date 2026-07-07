@@ -4,7 +4,7 @@ import { Fader } from "./primitives/Fader";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { FxDrawer } from "./FxDrawer";
-import { BLEND_MODES, type Layer } from "./types";
+import { BLEND_MODES, type Layer, type MediaItem } from "./types";
 
 export interface LayerNeighbors {
   /** Whether a move toward the front / back of the stack is possible. */
@@ -23,6 +23,8 @@ export interface LayerStripProps {
   /** Paste the rack clipboard onto this layer; hidden while the clipboard is empty. */
   onPaste?: () => void;
   canPaste?: boolean;
+  /** Library items offered in the source picker when the layer source is a URL. */
+  media?: MediaItem[];
 }
 
 function rgbToHex([r, g, b]: [number, number, number]): string {
@@ -32,9 +34,14 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 
 /** One layer as a mixer channel strip: index, reorder, name, source, blend, opacity,
  *  mask/fx toggles, copy/paste, remove. The FX button expands the effects drawer. */
-export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCopy, onPaste, canPaste }: LayerStripProps) {
+export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCopy, onPaste, canPaste, media }: LayerStripProps) {
   const isColor = layer.source?.type === "color";
   const [fxOpen, setFxOpen] = useState(false);
+  const mediaOptions = (media ?? []).map((m) => ({ value: `/media/${m.filename}`, label: m.name }));
+  const currentUrl = layer.source?.url ?? "";
+  const isLibraryUrl = mediaOptions.some((o) => o.value === currentUrl);
+  // Start in External mode only if the current url is a non-empty, non-library url.
+  const [externalMode, setExternalMode] = useState(currentUrl !== "" && !isLibraryUrl);
 
   return (
     <div className="strip" data-fx-open={fxOpen}>
@@ -103,11 +110,28 @@ export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCop
               }}
             />
           ) : (
-            <TextField
-              value={layer.source?.url ?? ""}
-              placeholder="/media/video.mp4"
-              onCommit={(v) => onUpdate?.("source", { type: "video", url: v })}
-            />
+            <>
+              <Select
+                className="source-media-select"
+                value={externalMode || !isLibraryUrl ? "__external__" : currentUrl}
+                options={[...mediaOptions, { value: "__external__", label: "External URL…" }]}
+                onChange={(v) => {
+                  if (v === "__external__") {
+                    setExternalMode(true);
+                  } else {
+                    setExternalMode(false);
+                    onUpdate?.("source", { type: "video", url: v });
+                  }
+                }}
+              />
+              {(externalMode || (!isLibraryUrl && currentUrl !== "")) && (
+                <TextField
+                  value={currentUrl}
+                  placeholder="/media/video.mp4 or https://…"
+                  onCommit={(v) => onUpdate?.("source", { type: "video", url: v })}
+                />
+              )}
+            </>
           )}
         </div>
       </div>

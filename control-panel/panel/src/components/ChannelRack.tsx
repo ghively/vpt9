@@ -1,6 +1,6 @@
 import { LayerStrip } from "./LayerStrip";
 import { Button } from "./primitives/Button";
-import type { Layer } from "./types";
+import type { Layer, MediaItem } from "./types";
 
 export interface ChannelRackProps {
   layers: Layer[];
@@ -12,6 +12,8 @@ export interface ChannelRackProps {
   onCopyLayer?: (id: string) => void;
   onPasteLayer?: (id: string) => void;
   canPaste?: boolean;
+  /** Library items, threaded to each strip's source picker. */
+  media?: MediaItem[];
 }
 
 /** The full layer rack: strips shown top-of-stack first, plus an add button. */
@@ -24,6 +26,7 @@ export function ChannelRack({
   onCopyLayer,
   onPasteLayer,
   canPaste,
+  media,
 }: ChannelRackProps) {
   // `order` ascends bottom→top; show the top of the stack first, like the vanilla panel.
   const ascending = [...layers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -40,6 +43,7 @@ export function ChannelRack({
             key={layer.id}
             layer={layer}
             neighbors={neighbors}
+            media={media}
             onUpdate={(field, value) => onUpdateLayer?.(layer.id, field, value)}
             onMove={(dir) => onMoveLayer?.(layer.id, dir)}
             onRemove={() => onRemoveLayer?.(layer.id)}

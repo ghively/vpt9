@@ -222,6 +222,7 @@ export function App() {
 
           <ChannelRack
             layers={layers}
+            media={media}
             onUpdateLayer={actions.updateLayer}
             onMoveLayer={actions.moveLayer}
             onRemoveLayer={actions.removeLayer}
