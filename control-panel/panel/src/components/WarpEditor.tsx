@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { Chip } from "./primitives/Chip";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
@@ -28,6 +28,30 @@ export interface WarpEditorProps {
 const MESH_SIZES = [3, 4, 6, 8].map((n) => ({ value: String(n), label: `${n}×${n}` }));
 const CORNER_TAGS = ["TL", "TR", "BR", "BL"]; // index order matches the identity corners
 
+function CoordInput({ label, value, onCommit }: { label: string; value: number; onCommit: (v: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const n = Number(draft);
+    if (Number.isFinite(n)) onCommit(Math.min(1, Math.max(0, n)));
+  };
+  return (
+    <label className="warp-coord-field mono">
+      {label}
+      <input
+        type="number"
+        step="0.001"
+        min={0}
+        max={1}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+      />
+    </label>
+  );
+}
+
 /** Corner-pin / mesh warp editor over the confidence monitor. The forwarded ref reaches
  *  the monitor so the container can push preview frames into it. */
 export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
@@ -51,6 +75,12 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
     const warp = screen?.warp;
     const isMesh = warp?.mode === "mesh";
     const points: Point[] = isMesh ? warp?.mesh.points ?? [] : warp?.corners ?? [];
+    const size = warp?.mesh.size ?? 4;
+    const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
+    useEffect(() => { setSelectedPoint(null); }, [screen?.id, warp?.mode, size]);
+    const selected = selectedPoint != null && selectedPoint < points.length ? points[selectedPoint] : null;
+    const selectedLabel =
+      selectedPoint == null ? "" : isMesh ? `R${Math.floor(selectedPoint / size) + 1}·C${(selectedPoint % size) + 1}` : CORNER_TAGS[selectedPoint];
 
     return (
       <div id="warp-editor">
@@ -93,22 +123,28 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
           <Chip label="Reset" onClick={onReset} />
         </div>
         <ConfidenceMonitor ref={ref} previewFrame={previewFrame}>
-          {points.map((p, i) => {
-            const size = warp?.mesh.size ?? 4;
-            return (
-              <WarpHandle
-                key={i}
-                x={p.x}
-                y={p.y}
-                cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
-                coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
-                onDragStart={onDragStart}
-                onDragTo={(x, y) => onMovePoint?.(i, x, y)}
-                onDragEnd={onDragEnd}
-              />
-            );
-          })}
+          {points.map((p, i) => (
+            <WarpHandle
+              key={i}
+              x={p.x}
+              y={p.y}
+              selected={i === selectedPoint}
+              cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
+              coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
+              onSelect={() => setSelectedPoint(i)}
+              onDragStart={onDragStart}
+              onDragTo={(x, y) => onMovePoint?.(i, x, y)}
+              onDragEnd={onDragEnd}
+            />
+          ))}
         </ConfidenceMonitor>
+        {selected && (
+          <div className="warp-coord-entry">
+            <span className="warp-coord-tag mono">{selectedLabel}</span>
+            <CoordInput label="X" value={selected.x} onCommit={(x) => onMovePoint?.(selectedPoint!, x, selected.y)} />
+            <CoordInput label="Y" value={selected.y} onCommit={(y) => onMovePoint?.(selectedPoint!, selected.x, y)} />
+          </div>
+        )}
       </div>
     );
   },
