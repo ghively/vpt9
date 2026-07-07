@@ -1,8 +1,10 @@
 import { createServer } from "node:http";
+import { mkdirSync } from "node:fs";
 import { WebSocketServer } from "ws";
 import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent } from "./state.js";
 import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
+import { createMediaRouter } from "./media.js";
 
 // At most one console.warn per key per second, so a misbehaving/hostile client can't
 // flood the log — while a maintainer debugging "why isn't my update landing" still
@@ -20,6 +22,10 @@ const STATE_FILE = process.env.STATE_FILE || "./state.json";
 const OSC_PORT = Number(process.env.OSC_PORT ?? 9000); // 0 disables the OSC listener
 
 const state = loadState(STATE_FILE);
+
+const MEDIA_DIR = process.env.MEDIA_DIR || "./media";
+const MEDIA_MAX_BYTES = Number(process.env.MEDIA_MAX_BYTES ?? 1024 * 1024 * 1024);
+mkdirSync(MEDIA_DIR, { recursive: true });
 
 // Non-layer/screen/pip fields a preset snapshot does NOT capture (e.g. we don't want
 // recalling a preset to also move audio ownership around unless it's explicitly part
@@ -117,6 +123,8 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
+  if (await mediaRouter.handle(req, res)) return;
+
   res.writeHead(404);
   res.end();
 });
@@ -143,6 +151,8 @@ function broadcast(message, exclude) {
     if (client !== exclude && client.readyState === client.OPEN) client.send(payload);
   }
 }
+
+const mediaRouter = createMediaRouter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES });
 
 function handleCreate(socket, message) {
   const value = message.value ?? {};

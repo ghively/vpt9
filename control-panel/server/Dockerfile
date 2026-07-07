@@ -9,6 +9,7 @@ COPY src ./src
 
 ENV PORT=8080
 ENV STATE_FILE=/data/state.json
+ENV MEDIA_DIR=/data/media
 VOLUME ["/data"]
 
 EXPOSE 8080

@@ -21,3 +21,121 @@ export function extOf(name) {
 export function mediaTypeForName(name) {
   return MEDIA_TYPES[extOf(name)] ?? null;
 }
+
+import { createReadStream, createWriteStream, statSync, existsSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
+import { randomBytes } from "node:crypto";
+import { applyCreate, applyDelete } from "./state.js";
+
+const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
+
+// Three HTTP endpoints on the existing hand-rolled server (no multipart lib): raw body +
+// X-File-Name, mirroring how readJsonBody is hand-rolled in index.js. Factored out as a
+// router so it's testable without index.js's top-level listen().
+export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, maxBytes = DEFAULT_MAX_BYTES }) {
+  const sendJson = (res, code, obj) => {
+    res.writeHead(code, { "content-type": "application/json" });
+    res.end(JSON.stringify(obj));
+  };
+
+  function handleUpload(req, res) {
+    const fileName = req.headers["x-file-name"];
+    const meta = fileName ? mediaTypeForName(fileName) : null;
+    if (!meta) {
+      sendJson(res, 400, { error: "unsupported or missing file type (allowed: mp4, gif, jpg, jpeg)" });
+      return;
+    }
+    // Reject up front on a declared oversize Content-Length (cheap, avoids a partial write).
+    const declared = Number(req.headers["content-length"]);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      sendJson(res, 413, { error: `file exceeds ${maxBytes}-byte limit` });
+      return;
+    }
+
+    const ext = extOf(fileName);
+    const id = `media-${randomBytes(8).toString("hex")}`;
+    const filename = `${id}.${ext}`; // matches SAFE_FILENAME by construction
+    const filePath = join(mediaDir, filename);
+    const out = createWriteStream(filePath);
+    let written = 0;
+    let aborted = false;
+
+    const abort = (code, msg) => {
+      if (aborted) return;
+      aborted = true;
+      req.unpipe(out);
+      out.destroy();
+      try { unlinkSync(filePath); } catch { /* nothing to clean up */ }
+      sendJson(res, code, { error: msg });
+    };
+
+    // Re-check against ACTUAL bytes in case Content-Length is absent/wrong.
+    req.on("data", (chunk) => {
+      written += chunk.length;
+      if (written > maxBytes) abort(413, `file exceeds ${maxBytes}-byte limit`);
+    });
+    req.on("error", () => abort(400, "upload stream error"));
+    out.on("error", () => abort(500, "could not write file"));
+    out.on("finish", () => {
+      if (aborted) return;
+      const entry = { id, name: fileName, filename, kind: meta.kind, size: written, uploadedAt: new Date().toISOString() };
+      applyCreate(state, "media", entry);
+      scheduleSave();
+      broadcast({ type: "create", path: "media", key: id, value: entry });
+      sendJson(res, 200, { ok: true, media: entry });
+    });
+    req.pipe(out);
+  }
+
+  function handleServe(req, res, filename) {
+    if (!SAFE_FILENAME.test(filename)) { res.writeHead(404); res.end(); return; }
+    const filePath = join(mediaDir, filename);
+    if (!existsSync(filePath)) { res.writeHead(404); res.end(); return; }
+    const { size } = statSync(filePath);
+    const contentType = (MEDIA_TYPES[extOf(filename)] ?? {}).contentType ?? "application/octet-stream";
+    // CORS is mandatory: the render-client draws these into a WebGL texture (crossOrigin
+    // "anonymous"), which taints the canvas without an allow-origin header.
+    const headers = { "access-control-allow-origin": "*", "accept-ranges": "bytes", "content-type": contentType };
+
+    const range = req.headers.range;
+    const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (m) {
+      const start = m[1] ? Number(m[1]) : 0;
+      const end = m[2] ? Number(m[2]) : size - 1;
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || end >= size) {
+        res.writeHead(416, { ...headers, "content-range": `bytes */${size}` });
+        res.end();
+        return;
+      }
+      res.writeHead(206, { ...headers, "content-range": `bytes ${start}-${end}/${size}`, "content-length": end - start + 1 });
+      createReadStream(filePath, { start, end }).pipe(res);
+      return;
+    }
+    res.writeHead(200, { ...headers, "content-length": size });
+    createReadStream(filePath).pipe(res);
+  }
+
+  function handleDelete(res, id) {
+    const entry = state.media?.[id];
+    if (!entry) { sendJson(res, 404, { error: `no media with id "${id}"` }); return; }
+    if (SAFE_FILENAME.test(entry.filename)) {
+      try { unlinkSync(join(mediaDir, entry.filename)); } catch { /* already gone */ }
+    }
+    applyDelete(state, `media.${id}`);
+    scheduleSave();
+    broadcast({ type: "delete", path: `media.${id}` });
+    sendJson(res, 200, { ok: true });
+  }
+
+  return {
+    async handle(req, res) {
+      const url = req.url || "";
+      if (req.method === "POST" && url === "/api/media") { handleUpload(req, res); return true; }
+      const serve = req.method === "GET" && /^\/media\/([^/?]+)/.exec(url);
+      if (serve) { handleServe(req, res, decodeURIComponent(serve[1])); return true; }
+      const del = req.method === "DELETE" && /^\/api\/media\/([^/?]+)$/.exec(url);
+      if (del) { handleDelete(res, decodeURIComponent(del[1])); return true; }
+      return false;
+    },
+  };
+}
