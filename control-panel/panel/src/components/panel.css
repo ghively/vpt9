@@ -85,6 +85,26 @@ html, body { height: 100%; }
   }
   .rack-title::before { content: ""; width: 6px; height: 6px; background: var(--beam); flex-shrink: 0; }
 
+  /* ── Media library pane ─────────────────────────────────────────────────────
+     Persistent above the layer rack (not one card among the show controls): you
+     pick media before/while assigning a layer source, so it's the first stop. */
+  #media-library { margin: var(--space-4) var(--space-4) 0; }
+  #media-library h3::before { content: ""; width: 6px; height: 6px; background: var(--beam); flex-shrink: 0; }
+  .media-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+  .media-head h3 { margin: 0; flex: 1; }
+  .media-file-input { display: none; }
+  .media-error { font-size: 10px; color: var(--live); padding: 2px 0 6px; }
+  .media-row { display: flex; align-items: center; gap: var(--space-2); padding: 4px 0; }
+  .media-tag {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted);
+    width: 34px; text-align: center; padding: 3px 0;
+    background: var(--panel-sunken); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+  .media-row .media-name { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text); font-size: 12px; padding: 4px 2px; font-family: var(--font-ui); }
+  .media-row .media-name:focus { outline: none; }
+  .media-size { font-size: 10px; color: var(--muted); width: 62px; text-align: right; flex-shrink: 0; }
+
   /* Each layer is a channel strip: a signal rail down the left edge, then the
      controls. The rail lights tungsten so a glance reads the stack as channels. */
   .strip {

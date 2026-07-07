@@ -42,6 +42,8 @@ export { PresetsBar } from "./PresetsBar";
 export type { PresetsBarProps } from "./PresetsBar";
 export { FxDrawer } from "./FxDrawer";
 export type { FxDrawerProps } from "./FxDrawer";
+export { MediaLibrary } from "./MediaLibrary";
+export type { MediaLibraryProps } from "./MediaLibrary";
 export { CueList } from "./CueList";
 export type { CueListProps } from "./CueList";
 export { TimerBank } from "./TimerBank";
