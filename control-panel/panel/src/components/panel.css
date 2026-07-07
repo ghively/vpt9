@@ -355,6 +355,23 @@ html, body { height: 100%; }
   .pip-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
   .pip-row input[type="text"] { flex: 1; min-width: 0; }
 
+  /* ── On-canvas mask shape — tungsten (layer-stack color, not the cyan render data). ── */
+  .mask-shape {
+    position: absolute; border: 1.5px solid var(--beam);
+    background: rgba(255,155,61,0.06); box-shadow: var(--glow-beam);
+    touch-action: none;
+  }
+  .mask-shape__body { position: absolute; inset: 0; cursor: move; }
+  .mask-shape__edge {
+    position: absolute; width: 14px; height: 14px; background: var(--beam);
+    border: 1px solid var(--ink); border-radius: 2px; touch-action: none;
+  }
+  .mask-shape__edge--right { right: -7px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+  .mask-shape__edge--bottom { bottom: -7px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+  .mask-shape__feather {
+    position: absolute; border: 1px dashed var(--beam-line); opacity: 0.5; pointer-events: none;
+  }
+
   /* ── Preset chips ────────────────────────────────────────────────────────── */
   #presets-bar .bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .preset-chip { position: relative; display: inline-flex; }
