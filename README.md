@@ -29,6 +29,7 @@ Two things live in this repository:
 | [`docs/architecture/00-overview.md`](docs/architecture/00-overview.md) | Developers | Full module-by-module map of VPT8's 49 Max patchers |
 | [`docs/TECH_DEBT.md`](docs/TECH_DEBT.md) | Developers | Categorized technical debt in the original VPT8 source |
 | [`docs/CONTROL_PANEL_SPEC_AUDIT.md`](docs/CONTROL_PANEL_SPEC_AUDIT.md) | Developers | Closed spec-compliance audit of `control-panel/` |
+| [`docs/CONTROL_PANEL_CODE_QUALITY.md`](docs/CONTROL_PANEL_CODE_QUALITY.md) | Developers | Code-quality audit of `control-panel/`: error handling, data-integrity, and test/lint gaps, with reproduced bugs |
 | [`control-panel/README.md`](control-panel/README.md) | Developers | `control-panel/` architecture, protocol, build/run, verification log |
 | [`control-panel/OPERATOR_GUIDE.md`](control-panel/OPERATOR_GUIDE.md) | Operators | Running a show from the panel |
 

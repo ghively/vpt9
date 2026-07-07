@@ -50,7 +50,7 @@ control-panel/panel/
 │   │   ├── primitives/      Chip, ToggleSquare, Fader, Button, Select, TextField, StatusLamp
 │   │   ├── Faceplate, AudioOwner, ChannelRack, LayerStrip
 │   │   ├── ConfidenceMonitor   ← signature (well, grid, crop-marks, feathered preview)
-│   │   ├── WarpEditor, WarpHandle, PipManager, PipBox, PresetsBar
+│   │   ├── WarpEditor, WarpHandle, PipWindows, PipBox, PresetsBar
 │   │   ├── *.stories.tsx    colocated Storybook stories
 │   │   ├── types.ts         shared UI types (Layer, Screen, Pip, Preset, Warp)
 │   │   └── index.ts         barrel → library bundle exposes window.VPTPanelKit.*
@@ -76,7 +76,9 @@ onUpdateLayer,onMoveLayer,onRemoveLayer,onAddLayer}`, `ConfidenceMonitor{preview
 children}` (forwardRef → imperative `setFrame(dataUrl)`), `WarpHandle{x,y,active?,
 onDragStart,onDragTo,onDragEnd}`, `WarpEditor{screen,screens[],mode,points[],onSelectScreen,
 onSetMode,onReset,onMovePoint,onDragStart,onDragEnd}`, `PipBox{pip,onMove,onResize,
-onDragStart,onDragEnd}`, `PipManager{screenId,pips[],onUpdatePip,onRemovePip,onAddPip}`,
+onDragStart,onDragEnd}`, `PipWindows{screenId,pips[],onUpdatePip,onRemovePip,onAddPip}`
+(named `PipManager` in this original spec; renamed to `PipWindows` during implementation — see
+`control-panel/panel/.design-sync/NOTES.md`),
 `PresetsBar{presets[],onRecall,onSave}`.
 
 ## Data flow (two optimizations from the vanilla app that MUST survive)

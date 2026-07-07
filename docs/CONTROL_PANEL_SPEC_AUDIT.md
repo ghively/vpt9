@@ -2,6 +2,19 @@
 
 Date: 2026-07-03 (findings below fixed same day — see "Fix log")
 
+> **Note on file paths (added after later work):** `panel/` was fully rewritten from vanilla JS to
+> React/TypeScript on 2026-07-05 (see
+> [`docs/superpowers/specs/2026-07-05-panel-componentization-design.md`](superpowers/specs/2026-07-05-panel-componentization-design.md)).
+> Every `panel/` file this doc cites below — `panel/src/layer-rack.js`, `panel/src/app.js`,
+> `panel/src/socket.js`, `panel/index.html`'s `.strip` grid — no longer exists at that path. The
+> bugs and fixes described are still real and still in place, just relocated: the layer-reorder fix
+> (finding #4) is now `panel/src/components/LayerStrip.tsx`'s move-up/down buttons wired to
+> `moveLayer()` in `panel/src/app/actions.ts` and called from `panel/src/app/App.tsx`. `server/`,
+> `render-client/`, and `cast-receiver/` were not rewritten and their file citations below still
+> resolve correctly. Do not use this doc to locate `panel/` code — use
+> `control-panel/panel/src/components/index.ts` (component list) and `panel/src/app/` (wiring)
+> instead.
+
 ## Scope
 
 `control-panel/` (the browser-based VPT8 replacement: `server/`, `render-client/`,

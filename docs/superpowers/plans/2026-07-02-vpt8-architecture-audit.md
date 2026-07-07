@@ -1,5 +1,13 @@
 # VPT8 Architecture Audit & Developer Onboarding Map Implementation Plan
 
+> **STATUS: COMPLETED (2026-07-02).** Every task below was executed via
+> superpowers:subagent-driven-development, not the checkbox-tracking executing-plans skill, so the
+> `- [ ] Step N` boxes below were never checked off even though the work is done. All deliverables
+> exist and are current: `docs/architecture/00-overview.md` + the 11 per-cluster module docs,
+> `docs/TECH_DEBT.md`, `docs/architecture/VERIFICATION-LOG.md`, and the `CLAUDE.md`/`AGENTS.md`
+> pointer section. Kept here as a historical record of how that work was scoped — do not treat the
+> unchecked boxes below as open work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Produce a complete, verified architecture map and technical-debt catalog for the VPT8

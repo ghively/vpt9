@@ -1,5 +1,11 @@
 # Master Roadmap Doc Implementation Plan
 
+> **STATUS: COMPLETED (2026-07-04).** `docs/ROADMAP.md` was rewritten as planned below. It has
+> since been further updated in place (2026-07-05/06 status notes, a reconciled Subsystem Inventory)
+> rather than rewritten again — this plan's own checkbox tracking was never used (see the identical
+> caveat on the 2026-07-02 plan in this same directory), so the boxes below are unchecked despite
+> the work being done and long since superseded by later edits. Kept as a historical record only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rewrite `docs/ROADMAP.md` in place so it is the single current source of truth for VPT
