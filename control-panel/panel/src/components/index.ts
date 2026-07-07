@@ -17,6 +17,8 @@ export { StatusLamp } from "./primitives/StatusLamp";
 export type { StatusLampProps } from "./primitives/StatusLamp";
 export { TargetPicker } from "./primitives/TargetPicker";
 export type { TargetPickerProps } from "./primitives/TargetPicker";
+export { TargetField } from "./primitives/TargetField";
+export type { TargetFieldProps } from "./primitives/TargetField";
 
 export { Faceplate } from "./Faceplate";
 export type { FaceplateProps } from "./Faceplate";

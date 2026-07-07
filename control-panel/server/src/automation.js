@@ -165,7 +165,18 @@ export function createAutomationEngine({ state, broadcast, scheduleSave, recallP
     runCue((auto().cursor ?? -1) + 1);
   }
 
+  // Deleted LFOs/timers never came back to clear their Map entry (ids are minted
+  // fresh with Date.now(), never reused), so a long-running server that accumulates
+  // many delete-and-recreate cycles would otherwise grow these two Maps forever.
+  // Sweep whichever ids no longer exist in live state before each tick uses them.
+  function pruneStaleSlots(map, liveIds) {
+    for (const id of map.keys()) {
+      if (!liveIds.has(id)) map.delete(id);
+    }
+  }
+
   function tickTimers(now) {
+    pruneStaleSlots(timerFired, new Set(Object.keys(auto().timers ?? {})));
     const d = new Date(now);
     const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     const minuteKey = `${d.toDateString()} ${hhmm}`;
@@ -183,6 +194,7 @@ export function createAutomationEngine({ state, broadcast, scheduleSave, recallP
   }
 
   function tickLfos(now, dtSeconds, batch) {
+    pruneStaleSlots(lfoSlots, new Set(Object.keys(state.lfos ?? {})));
     for (const lfo of Object.values(state.lfos ?? {})) {
       if (!lfo?.enabled || typeof lfo.target !== "string" || !lfo.target) continue;
       let slot = lfoSlots.get(lfo.id);

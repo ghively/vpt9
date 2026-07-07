@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, copyFileSync, existsSync } from "node:fs";
 
 // Layers/screens/pip windows/presets are all keyed by id (never array index) so a
 // WebSocket path like "layers.layer-1.opacity" stays valid regardless of client-side
@@ -163,13 +163,27 @@ export function loadState(filePath) {
       return ensureStateDefaults(JSON.parse(readFileSync(filePath, "utf8")));
     } catch (err) {
       console.error(`[state] failed to parse ${filePath}, falling back to defaults:`, err.message);
+      // Don't just discard a corrupt file — a crash mid-write shouldn't silently erase
+      // a show's saved layers/presets/cues with no way to recover them.
+      const backupPath = `${filePath}.corrupt-${Date.now()}`;
+      try {
+        copyFileSync(filePath, backupPath);
+        console.error(`[state] corrupt file preserved at ${backupPath} for inspection`);
+      } catch (copyErr) {
+        console.error(`[state] could not preserve corrupt file:`, copyErr.message);
+      }
     }
   }
   return structuredClone(DEFAULT_STATE);
 }
 
+// Write-to-temp-then-rename so a process kill mid-write never leaves state.json
+// truncated/corrupt — rename is atomic on both POSIX and NTFS. The temp file lives
+// next to the target so the rename stays on the same filesystem/volume.
 export function saveState(filePath, state) {
-  writeFileSync(filePath, JSON.stringify(state, null, 2));
+  const tmpPath = `${filePath}.tmp-${process.pid}`;
+  writeFileSync(tmpPath, JSON.stringify(state, null, 2));
+  renameSync(tmpPath, filePath);
 }
 
 // Paths come from untrusted LAN clients: refuse segments that would walk into the
@@ -180,7 +194,7 @@ function isUnsafePath(keys) {
   return keys.some((key) => UNSAFE_KEYS.has(key));
 }
 
-function walkToParent(state, keys) {
+export function walkToParent(state, keys) {
   let node = state;
   for (const key of keys) {
     // Only traverse actual containers; a path that dots through a primitive leaf

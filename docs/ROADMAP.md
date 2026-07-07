@@ -60,9 +60,10 @@ list for the authoritative, current version of this): real YouTube playback insi
 an actual phone's YouTube app casting to the receiver, Docker/GPU execution, and real hardware at
 the edges (physical camera, MIDI controller, Chromecast, Art-Net/DMX/serial). A separate
 2026-07-06 code-quality pass ([`docs/CONTROL_PANEL_CODE_QUALITY.md`](CONTROL_PANEL_CODE_QUALITY.md))
-found 12 open findings not yet fixed — including a live-reproduced `cast-receiver` crash on port
-conflict and a non-atomic `state.json` write that can silently discard a show's saved state on a
-mid-write crash.
+found 12 findings — including a live-reproduced `cast-receiver` crash on port conflict and a
+non-atomic `state.json` write that could silently discard a show's saved state on a mid-write
+crash — all fixed and verified the same evening (43 new automated tests added to `server/` in the
+process; a `lint` script added to `panel/`).
 
 ## Direction Decision
 
@@ -154,9 +155,9 @@ new pieces in a real browser via a scripted check (Playwright) — see `control-
   `control-panel`.
 - [`docs/CONTROL_PANEL_SPEC_AUDIT.md`](CONTROL_PANEL_SPEC_AUDIT.md) — closed spec-compliance audit
   of `control-panel/` (4 bugs found and fixed 2026-07-03).
-- [`docs/CONTROL_PANEL_CODE_QUALITY.md`](CONTROL_PANEL_CODE_QUALITY.md) — code-quality audit of
-  `control-panel/` (2026-07-06): error handling, data-integrity, and test/lint gaps, including a
-  live-reproduced crash bug. Findings are open, not yet fixed.
+- [`docs/CONTROL_PANEL_CODE_QUALITY.md`](CONTROL_PANEL_CODE_QUALITY.md) — closed code-quality audit
+  of `control-panel/` (2026-07-06): error handling, data-integrity, and test/lint gaps, including a
+  live-reproduced crash bug. All 12 findings fixed and verified the same evening.
 - [`docs/architecture/00-overview.md`](architecture/00-overview.md) and its 11 module docs — the
   full VPT8 map this roadmap's subsystem gaps are derived from.
 - [`docs/superpowers/specs/2026-07-04-master-roadmap-design.md`](superpowers/specs/2026-07-04-master-roadmap-design.md)

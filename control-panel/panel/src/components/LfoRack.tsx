@@ -1,8 +1,9 @@
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
-import { TargetPicker } from "./primitives/TargetPicker";
+import { TargetField } from "./primitives/TargetField";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
+import { parseNumberOr } from "./numeric";
 import type { Lfo, LfoWave, TargetOption } from "./types";
 
 export interface LfoRackProps {
@@ -27,8 +28,6 @@ const WAVES: Array<{ value: LfoWave; label: string }> = [
  *  state path between min and max. The server runs the oscillators; enabling a slot
  *  here starts it everywhere. */
 export function LfoRack({ lfos, targetOptions, onAdd, onUpdate, onRemove }: LfoRackProps) {
-  const num = (v: string, fallback: number) => (Number.isFinite(Number(v)) && v !== "" ? Number(v) : fallback);
-
   return (
     <div id="lfo-rack">
       <h3>LFO rack</h3>
@@ -52,35 +51,26 @@ export function LfoRack({ lfos, targetOptions, onAdd, onUpdate, onRemove }: LfoR
             className="lfo-num"
             value={String(lfo.rateHz ?? 0)}
             placeholder="Hz"
-            onCommit={(v) => onUpdate?.(lfo.id, "rateHz", Math.max(0, num(v, 0)))}
+            onCommit={(v) => onUpdate?.(lfo.id, "rateHz", Math.max(0, parseNumberOr(v, 0)))}
           />
           <TextField
             className="lfo-num"
             value={String(lfo.min ?? 0)}
             placeholder="min"
-            onCommit={(v) => onUpdate?.(lfo.id, "min", num(v, 0))}
+            onCommit={(v) => onUpdate?.(lfo.id, "min", parseNumberOr(v, 0))}
           />
           <TextField
             className="lfo-num"
             value={String(lfo.max ?? 1)}
             placeholder="max"
-            onCommit={(v) => onUpdate?.(lfo.id, "max", num(v, 1))}
+            onCommit={(v) => onUpdate?.(lfo.id, "max", parseNumberOr(v, 1))}
           />
-          {targetOptions?.length ? (
-            <TargetPicker
-              className="lfo-target"
-              value={lfo.target ?? ""}
-              options={targetOptions}
-              onChange={(v) => onUpdate?.(lfo.id, "target", v)}
-            />
-          ) : (
-            <TextField
-              className="lfo-target"
-              value={lfo.target ?? ""}
-              placeholder="layers.layer-1.opacity"
-              onCommit={(v) => onUpdate?.(lfo.id, "target", v)}
-            />
-          )}
+          <TargetField
+            className="lfo-target"
+            value={lfo.target ?? ""}
+            targetOptions={targetOptions}
+            onChange={(v) => onUpdate?.(lfo.id, "target", v)}
+          />
           <ToggleSquare className="remove-btn" label="×" title="Remove LFO" onClick={() => onRemove?.(lfo.id)} />
         </div>
       ))}

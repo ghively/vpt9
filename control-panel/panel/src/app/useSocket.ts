@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { ConnectionState } from "../components/types";
 import type { PanelState } from "./store";
 
@@ -78,5 +78,11 @@ export function useSocket(url: string, handlers: SocketHandlers): { send: (messa
     };
   }, [url]);
 
-  return { send: (message) => sendRef.current(message) };
+  // Stable identity across renders (sendRef itself never changes) — consumers like
+  // useMidi depend on `send` in an effect's dependency array, and an unstable
+  // reference here would tear that effect down and re-run it on every render (up to
+  // 30x/sec while an LFO/fade is broadcasting `batch` updates).
+  const send = useCallback((message: SocketMessage) => sendRef.current(message), []);
+
+  return { send };
 }

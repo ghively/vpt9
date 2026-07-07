@@ -53,9 +53,26 @@ const socket = connectControlPlane(wsUrl, {
 // screen's actual composited+warped output, sent as its own message type (never stored
 // in `state` — it's the confidence-monitor feed described in the design conversation,
 // not part of the persisted scene).
+//
+// capturePreview() reads the canvas back via toDataURL(); if any video source's media
+// server doesn't send CORS headers, drawing it taints the canvas and toDataURL() throws
+// a SecurityError on every tick thereafter. Browsers keep re-invoking setInterval after
+// an uncaught throw inside it, so an unguarded call here becomes a permanently-broken,
+// console-spamming preview (4x/sec, forever) with no explanation. Warn once and stop.
+let previewDisabled = false;
 setInterval(() => {
-  if (socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: "preview", screenId, frame: compositor.capturePreview(320) }));
+  if (previewDisabled || socket.readyState !== WebSocket.OPEN) return;
+  try {
+    const frame = compositor.capturePreview(320);
+    socket.send(JSON.stringify({ type: "preview", screenId, frame }));
+  } catch (err) {
+    previewDisabled = true;
+    console.error(
+      "[preview] disabling confidence-monitor preview — canvas capture failed " +
+        "(likely a video source missing CORS headers, which taints the canvas):",
+      err.message,
+    );
+  }
 }, 250);
 
 

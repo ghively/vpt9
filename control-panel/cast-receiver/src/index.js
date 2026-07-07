@@ -30,8 +30,16 @@ const httpServer = createDialHttpServer({
   onLaunch,
 });
 
+const stopSsdp = startSsdp({ deviceUrl, uuid: DEVICE_UUID });
+
+httpServer.on("error", (err) => {
+  console.error(`[cast-receiver] failed to start DIAL HTTP endpoints on :${PORT}: ${err.message}`);
+  // The SSDP responder already started (it binds first) — don't leave it advertising
+  // a device whose HTTP endpoints never came up.
+  stopSsdp();
+  process.exit(1);
+});
+
 httpServer.listen(PORT, HOST, () => {
   console.log(`[cast-receiver] DIAL HTTP endpoints on ${deviceUrl} (dd.xml, /apps/YouTube)`);
 });
-
-startSsdp({ deviceUrl, uuid: DEVICE_UUID });

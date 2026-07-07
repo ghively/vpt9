@@ -80,15 +80,23 @@ export function parsePacket(buf) {
 
 // handle(address, args) receives each decoded message; the caller (index.js) owns the
 // address → state-path / transport-command routing.
-export function startOsc({ port, handle, log = console.log }) {
+export function startOsc({ port, handle, log = console.log, warn = console.warn }) {
   const socket = dgram.createSocket("udp4");
+  let lastWarnAt = 0;
 
   socket.on("message", (buf) => {
     let messages;
     try {
       messages = parsePacket(buf);
-    } catch {
-      return; // malformed datagram: not our problem
+    } catch (err) {
+      // Malformed datagram: defensible to drop (untrusted LAN senders), but silent
+      // forever makes "why isn't OSC landing" hard to debug — warn, rate-limited.
+      const now = Date.now();
+      if (now - lastWarnAt >= 1000) {
+        lastWarnAt = now;
+        warn("[osc] dropped malformed datagram:", err.message);
+      }
+      return;
     }
     for (const { address, args } of messages) handle(address, args);
   });

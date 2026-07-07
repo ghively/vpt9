@@ -1,8 +1,19 @@
 import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
-import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults } from "./state.js";
+import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent } from "./state.js";
 import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
+
+// At most one console.warn per key per second, so a misbehaving/hostile client can't
+// flood the log — while a maintainer debugging "why isn't my update landing" still
+// gets a signal instead of a silent drop.
+const lastWarnAt = new Map();
+function warnRateLimited(key, ...args) {
+  const now = Date.now();
+  if (now - (lastWarnAt.get(key) || 0) < 1000) return;
+  lastWarnAt.set(key, now);
+  console.warn(...args);
+}
 
 const PORT = process.env.PORT || 8080;
 const STATE_FILE = process.env.STATE_FILE || "./state.json";
@@ -112,6 +123,20 @@ const httpServer = createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer });
 
+// `ws`'s WebSocketServer, constructed with an existing httpServer, attaches its own
+// 'error'/'listening' listeners to that httpServer and re-emits them on `wss` itself —
+// so a bind failure (EADDRINUSE/EACCES) surfaces as an 'error' event on `wss`, not on
+// `httpServer` directly. An EventEmitter with zero listeners for 'error' throws
+// synchronously as soon as one is emitted, and since ws's own internal listener is
+// registered before any listener added here, it throws before a plain
+// `httpServer.on('error', ...)` handler (registered later) would ever run. This is the
+// listener that actually needs to exist for a clean, actionable failure message instead
+// of an uncaught-exception stack trace.
+wss.on("error", (err) => {
+  console.error(`[control-plane] failed to start on :${PORT}: ${err.message}`);
+  process.exit(1);
+});
+
 function broadcast(message, exclude) {
   const payload = JSON.stringify(message);
   for (const client of wss.clients) {
@@ -129,7 +154,8 @@ function handleCreate(socket, message) {
   }
   const key = applyCreate(state, message.path, value);
   if (key == null) return;
-  const stored = state[message.path]?.[key] ?? value;
+  const parent = walkToParent(state, message.path.split("."));
+  const stored = parent?.[key] ?? value;
   scheduleSave();
   broadcast({ type: "create", path: message.path, key, value: stored });
 }
@@ -169,7 +195,8 @@ wss.on("connection", (socket) => {
     let message;
     try {
       message = JSON.parse(raw.toString());
-    } catch {
+    } catch (err) {
+      warnRateLimited("ws-parse", "[ws] dropped malformed message:", err.message);
       return;
     }
 

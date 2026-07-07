@@ -32,7 +32,10 @@ export function emptyState(): PanelState {
 
 // Dotted-path patch helpers — a direct port of patch.js / server/src/state.js, with the
 // same hardening: no prototype-chain traversal, no crash when a path dots through a
-// primitive leaf.
+// primitive leaf, applyUpdate only patches an EXISTING leaf (no-op if unchanged),
+// applyDelete only reports true if the key existed. Kept in parity with
+// server/src/state.js and render-client/src/patch.js by
+// server/test/state-patch-parity.test.js — mirror any change to one there too.
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 function walkToParent(state: unknown, keys: string[]): Record<string, unknown> | null {
@@ -51,7 +54,8 @@ export function applyUpdate(state: PanelState, path: string, value: unknown): bo
   const last = keys.pop()!;
   if (UNSAFE_KEYS.has(last)) return false;
   const node = walkToParent(state, keys);
-  if (node == null) return false;
+  if (node == null || !Object.hasOwn(node, last)) return false;
+  if (node[last] === value) return false;
   node[last] = value;
   return true;
 }
@@ -69,7 +73,7 @@ export function applyDelete(state: PanelState, path: string): boolean {
   const last = keys.pop()!;
   if (UNSAFE_KEYS.has(last)) return false;
   const node = walkToParent(state, keys);
-  if (node == null) return false;
+  if (node == null || !Object.hasOwn(node, last)) return false;
   delete node[last];
   return true;
 }
