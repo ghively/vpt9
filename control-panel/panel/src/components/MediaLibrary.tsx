@@ -61,13 +61,15 @@ export function MediaLibrary({ media, uploadUrl, onRename, onRemove }: MediaLibr
           accept="video/mp4,image/gif,image/jpeg"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) upload(file);
+            if (file && progress === null) upload(file);
             e.target.value = "";
           }}
         />
         <Button
           label={progress === null ? "+ Upload" : `Uploading ${progress}%`}
-          onClick={() => fileRef.current?.click()}
+          onClick={() => {
+            if (progress === null) fileRef.current?.click();
+          }}
         />
       </div>
       {error && <div className="media-error mono">{error}</div>}
