@@ -319,7 +319,9 @@ html, body { height: 100%; }
   .handle__tag { bottom: calc(100% + 4px); }
   .handle__coord { top: calc(100% + 4px); opacity: 0; transition: opacity 100ms ease; }
   .handle:hover .handle__coord { opacity: 1; }
-  .handle__badge { bottom: calc(100% + 4px); display: none; }
+  /* Sits further above the handle than .handle__tag so the two never overlap when both are
+     visible at once (corner mode: cornerTag is always on, badge appears mid-drag). */
+  .handle__badge { bottom: calc(100% + 22px); display: none; }
   .handle[data-active="true"] .handle__badge { display: block; }
   .handle[data-active="true"] .handle__coord { opacity: 1; }
   .handle[data-selected="true"] { box-shadow: var(--glow-beam); }
