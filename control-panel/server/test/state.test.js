@@ -155,3 +155,19 @@ test("loadState preserves a corrupt file as a .corrupt-<timestamp> backup instea
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("DEFAULT_STATE (via loadState fallback) includes an empty media container", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vpt-state-test-"));
+  try {
+    const loaded = loadState(join(dir, "state.json")); // no file -> defaults
+    assert.deepEqual(loaded.media, {});
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ensureStateDefaults backfills media as {} on an older state without it", () => {
+  const state = { layers: {}, presets: {}, automation: { running: false } };
+  ensureStateDefaults(state);
+  assert.deepEqual(state.media, {});
+});

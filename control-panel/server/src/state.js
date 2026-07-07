@@ -111,6 +111,10 @@ const DEFAULT_STATE = {
 
   presets: {},
 
+  // Uploaded media (mp4/gif/jpg), keyed by id like every other collection. Files live
+  // under MEDIA_DIR on disk; this holds the metadata the panel/render-client read.
+  media: {},
+
   // Whole-app automation: the cue-list interpreter + wall-clock timer bank. `cursor`
   // and `running` are transport state — persisted for visibility but reset to stopped
   // on boot (a power-cycled installation shouldn't resume mid-cue-list on its own).
@@ -148,6 +152,7 @@ export function ensureStateDefaults(state) {
     lfos: {},
     midiMap: {},
     master: 1,
+    media: {},
   });
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
   for (const preset of Object.values(state.presets ?? {})) {
