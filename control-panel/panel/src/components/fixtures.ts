@@ -1,6 +1,6 @@
 // Sample data for Storybook stories (and design-sync preview capture). Not used by the
 // app — purely to render components in isolation.
-import type { Cue, Fx, Layer, Lfo, MidiMapping, Pip, Preset, Screen, TargetOption, Timer } from "./types";
+import type { Cue, Fx, Layer, Lfo, MidiMapping, Pip, Preset, Screen, TargetOption, Timer, MediaItem } from "./types";
 
 export const defaultFx: Fx = {
   flipH: false,
@@ -92,6 +92,12 @@ export const sampleLfos: Lfo[] = [
 export const sampleMidiMappings: MidiMapping[] = [
   { id: "map-1", channel: 0, controller: 21, target: "layers.layer-1.opacity", min: 0, max: 1 },
   { id: "map-2", channel: 0, controller: 22, target: "layers.layer-1.fx.blur", min: 0, max: 1 },
+];
+
+export const sampleMedia: MediaItem[] = [
+  { id: "media-a1", name: "Ambient loop.mp4", filename: "media-a1.mp4", kind: "video", size: 148 * 1024 * 1024, uploadedAt: "2026-07-06T10:00:00.000Z" },
+  { id: "media-b2", name: "Starfield.gif", filename: "media-b2.gif", kind: "gif", size: 4 * 1024 * 1024, uploadedAt: "2026-07-06T10:05:00.000Z" },
+  { id: "media-c3", name: "Logo.jpg", filename: "media-c3.jpg", kind: "image", size: 512 * 1024, uploadedAt: "2026-07-06T10:06:00.000Z" },
 ];
 
 export const sampleTargetOptions: TargetOption[] = [

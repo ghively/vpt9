@@ -1,4 +1,4 @@
-import type { Layer, Screen, Pip, Preset, Automation, Lfo, MidiMapping } from "../components/types";
+import type { Layer, Screen, Pip, Preset, Automation, Lfo, MidiMapping, MediaItem } from "../components/types";
 
 /** The panel's mirror of the control-plane state (server/src/state.js). Held in a mutable
  *  ref and patched in place — exactly like the vanilla panel — with React re-renders
@@ -14,6 +14,8 @@ export interface PanelState {
   automation: Automation;
   lfos: Record<string, Lfo>;
   midiMap: Record<string, MidiMapping>;
+  /** Uploaded media library (server/src/media.js), keyed by id. */
+  media: Record<string, MediaItem>;
 }
 
 export function emptyState(): PanelState {
@@ -27,6 +29,7 @@ export function emptyState(): PanelState {
     automation: { cues: [], cursor: -1, running: false, timers: {} },
     lfos: {},
     midiMap: {},
+    media: {},
   };
 }
 

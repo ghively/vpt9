@@ -8,6 +8,19 @@ export interface LayerSource {
   color?: [number, number, number];
 }
 
+export type MediaKind = "video" | "gif" | "image";
+
+/** One uploaded library file. Mirrors the server's media entry (server/src/media.js).
+ *  `kind` is derived from the extension at upload; `filename` is server-generated. */
+export interface MediaItem {
+  id: string;
+  name: string;
+  filename: string;
+  kind: MediaKind;
+  size: number;
+  uploadedAt: string;
+}
+
 export interface Mask {
   enabled: boolean;
   shape: "rect" | "ellipse";
