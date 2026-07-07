@@ -25,6 +25,8 @@ export interface LayerStripProps {
   canPaste?: boolean;
   /** Library items offered in the source picker when the layer source is a URL. */
   media?: MediaItem[];
+  /** Opens the on-canvas mask editor for this layer. */
+  onEditMask?: () => void;
 }
 
 function rgbToHex([r, g, b]: [number, number, number]): string {
@@ -34,7 +36,7 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 
 /** One layer as a mixer channel strip: index, reorder, name, source, blend, opacity,
  *  mask/fx toggles, copy/paste, remove. The FX button expands the effects drawer. */
-export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCopy, onPaste, canPaste, media }: LayerStripProps) {
+export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCopy, onPaste, canPaste, media, onEditMask }: LayerStripProps) {
   const isColor = layer.source?.type === "color";
   const [fxOpen, setFxOpen] = useState(false);
   const mediaOptions = (media ?? []).map((m) => ({ value: `/media/${m.filename}`, label: m.name }));
@@ -152,7 +154,7 @@ export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCop
         <ToggleSquare className="remove-btn" label="×" title="Remove layer" onClick={onRemove} />
       </div>
 
-      {fxOpen && layer.fx && <FxDrawer fx={layer.fx} mask={layer.mask} onUpdate={onUpdate} />}
+      {fxOpen && layer.fx && <FxDrawer fx={layer.fx} mask={layer.mask} onUpdate={onUpdate} onEditMask={onEditMask} />}
     </div>
   );
 }

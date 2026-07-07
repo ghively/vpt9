@@ -14,6 +14,8 @@ export interface ChannelRackProps {
   canPaste?: boolean;
   /** Library items, threaded to each strip's source picker. */
   media?: MediaItem[];
+  /** Opens the on-canvas mask editor for a given layer. */
+  onEditMaskLayer?: (id: string) => void;
 }
 
 /** The full layer rack: strips shown top-of-stack first, plus an add button. */
@@ -27,6 +29,7 @@ export function ChannelRack({
   onPasteLayer,
   canPaste,
   media,
+  onEditMaskLayer,
 }: ChannelRackProps) {
   // `order` ascends bottom→top; show the top of the stack first, like the vanilla panel.
   const ascending = [...layers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -50,6 +53,7 @@ export function ChannelRack({
             onCopy={() => onCopyLayer?.(layer.id)}
             onPaste={() => onPasteLayer?.(layer.id)}
             canPaste={canPaste}
+            onEditMask={() => onEditMaskLayer?.(layer.id)}
           />
         );
       })}

@@ -1,5 +1,6 @@
 import { Fader } from "./primitives/Fader";
 import { ToggleSquare } from "./primitives/ToggleSquare";
+import { Button } from "./primitives/Button";
 import type { Fx, Mask } from "./types";
 
 export interface FxDrawerProps {
@@ -10,6 +11,8 @@ export interface FxDrawerProps {
   /** Field paths are relative to the layer ("fx.zoom", "mask.feather") so the container
    *  can prefix them with "layers.<id>." unchanged. */
   onUpdate?: (field: string, value: unknown) => void;
+  /** Opens the on-canvas mask editor for this layer (Screen tab). */
+  onEditMask?: () => void;
 }
 
 interface SliderSpec {
@@ -107,7 +110,7 @@ function FxSection({
 /** The per-layer effects chain controls (vlayer.maxpat's stages) in captioned sections:
  *  TRANSFORM (flip/tile/zoom/pan), COLOR (blur/trail/brcosa), EDGE BLEND (projector
  *  ramps) and MASK geometry. Rendered inside an expanded LayerStrip. */
-export function FxDrawer({ fx, mask, onUpdate }: FxDrawerProps) {
+export function FxDrawer({ fx, mask, onUpdate, onEditMask }: FxDrawerProps) {
   const fxRoot = fx as unknown as Record<string, unknown>;
   return (
     <div className="fx-drawer">
@@ -151,6 +154,7 @@ export function FxDrawer({ fx, mask, onUpdate }: FxDrawerProps) {
             title="Mask shape"
             onClick={() => onUpdate?.("mask.shape", mask.shape === "rect" ? "ellipse" : "rect")}
           />
+          {onEditMask && <Button label="Edit on canvas" onClick={onEditMask} />}
           {MASK_SLIDERS.map((spec) => (
             <FxSlider
               key={spec.field}

@@ -2,9 +2,11 @@ import { forwardRef, useEffect, useState } from "react";
 import { Chip } from "./primitives/Chip";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
+import { Button } from "./primitives/Button";
 import { ConfidenceMonitor, type ConfidenceMonitorHandle } from "./ConfidenceMonitor";
 import { WarpHandle } from "./WarpHandle";
-import type { Point, Screen } from "./types";
+import { MaskShapeOverlay } from "./MaskShapeOverlay";
+import type { Layer, Point, Screen } from "./types";
 
 export interface WarpEditorProps {
   /** The screen being warped (undefined until one is selected). */
@@ -23,6 +25,10 @@ export interface WarpEditorProps {
   onDragStart?: () => void;
   onMovePoint?: (index: number, x: number, y: number) => void;
   onDragEnd?: () => void;
+  /** When set, the stage edits this layer's mask shape instead of warp handles. */
+  maskEditLayer?: Layer | null;
+  onMaskChange?: (field: string, value: unknown) => void;
+  onMaskEditDone?: () => void;
 }
 
 const MESH_SIZES = [3, 4, 6, 8].map((n) => ({ value: String(n), label: `${n}×${n}` }));
@@ -69,6 +75,9 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
       onDragStart,
       onMovePoint,
       onDragEnd,
+      maskEditLayer,
+      onMaskChange,
+      onMaskEditDone,
     },
     ref,
   ) {
@@ -96,6 +105,12 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
 
     return (
       <div id="warp-editor">
+        {maskEditLayer && (
+          <div className="mask-edit-banner">
+            <span className="mono">Editing mask — {maskEditLayer.name || maskEditLayer.id}</span>
+            <Button label="Done" onClick={onMaskEditDone} />
+          </div>
+        )}
         <div className="panel-head">
           <h3>Warp</h3>
           <div className="mode-group">
@@ -135,22 +150,33 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
           <Chip label="Reset" onClick={onReset} />
         </div>
         <ConfidenceMonitor ref={ref} previewFrame={previewFrame}>
-          {points.map((p, i) => (
-            <WarpHandle
-              key={i}
-              x={p.x}
-              y={p.y}
-              selected={i === selectedPoint}
-              cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
-              coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
-              onSelect={() => setSelectedPoint(i)}
+          {maskEditLayer ? (
+            <MaskShapeOverlay
+              mask={maskEditLayer.mask}
               onDragStart={onDragStart}
-              onDragTo={(x, y) => onMovePoint?.(i, x, y)}
               onDragEnd={onDragEnd}
+              onChange={(patch) => {
+                for (const [k, v] of Object.entries(patch)) onMaskChange?.(`mask.${k}`, v);
+              }}
             />
-          ))}
+          ) : (
+            points.map((p, i) => (
+              <WarpHandle
+                key={i}
+                x={p.x}
+                y={p.y}
+                selected={i === selectedPoint}
+                cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
+                coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
+                onSelect={() => setSelectedPoint(i)}
+                onDragStart={onDragStart}
+                onDragTo={(x, y) => onMovePoint?.(i, x, y)}
+                onDragEnd={onDragEnd}
+              />
+            ))
+          )}
         </ConfidenceMonitor>
-        {selected && (
+        {selected && !maskEditLayer && (
           <div className="warp-coord-entry">
             <span className="warp-coord-tag mono">{selectedLabel}</span>
             <CoordInput label="X" value={selected.x} onCommit={(x) => onMovePoint?.(selectedPoint!, x, selected.y)} />

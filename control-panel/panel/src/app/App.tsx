@@ -81,6 +81,7 @@ export function App() {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [activeShowTab, setActiveShowTab] = useState<ShowTab>("presets");
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("layers");
+  const [maskEditLayerId, setMaskEditLayerId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedScreenId;
@@ -194,6 +195,14 @@ export function App() {
     }
   }, [actions]);
 
+  const editMask = useCallback(
+    (id: string) => {
+      setMaskEditLayerId(id);
+      if (isMobile) setActiveMobileTab("screen");
+    },
+    [isMobile],
+  );
+
   const state = stateRef.current;
   const sid = selectedScreenId ?? "";
   const layers = Object.values(state.layers ?? {});
@@ -225,6 +234,7 @@ export function App() {
       onCopyLayer={copyLayer}
       onPasteLayer={pasteLayer}
       canPaste={canPaste}
+      onEditMaskLayer={editMask}
     />
   );
 
@@ -326,6 +336,9 @@ export function App() {
         onDragStart={beginDrag}
         onMovePoint={(index, x, y) => actions.moveWarpPoint(sid, index, x, y)}
         onDragEnd={endDrag}
+        maskEditLayer={maskEditLayerId ? state.layers[maskEditLayerId] ?? null : null}
+        onMaskChange={(field, value) => { if (maskEditLayerId) actions.updateLayer(maskEditLayerId, field, value); }}
+        onMaskEditDone={() => setMaskEditLayerId(null)}
       />
       <PipWindows
         ref={preview.pipMonitor}

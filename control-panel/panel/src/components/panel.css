@@ -335,6 +335,13 @@ html, body { height: 100%; }
   .warp-coord-field { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
   .warp-coord-field input { width: 72px; font-size: 11px; padding: 4px 6px; }
 
+  .mask-edit-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+    margin-bottom: var(--space-2); padding: var(--space-2) var(--space-3);
+    background: var(--beam-soft); border: 1px solid var(--beam-line); border-radius: var(--radius-sm);
+    color: var(--beam); font-size: 10px; letter-spacing: 0.08em;
+  }
+
   /* PiP windows — cool cyan, marking them as the cast/preview overlay distinct
      from the tungsten layer stack. */
   .pip-box {
