@@ -239,10 +239,18 @@ Masking currently has no on-canvas manipulation — five abstract sliders only (
   successfully with the right `kind` and `Content-Type`, an unrecognized extension is rejected
   (400), oversize is rejected (413), successful upload appears in state and broadcasts `create`,
   `GET` serves with correct CORS + Range behavior for all three kinds, `DELETE` removes both file
-  and state entry, rename via the existing generic `update` path works unchanged.
+  and state entry.
 - Render-client: a Playwright pixel check (matching the project's existing verification style)
   assigning a jpg and a gif to a layer each, confirming both composite correctly and that the gif
   actually animates across two screenshots taken a beat apart.
+
+> **2026-07-08 correction:** as actually built, `media.test.js` does not include a rename test (rename
+> goes through the existing generic `update` path and was judged already covered by that path's own
+> tests) — the line above claiming it does was aspirational, not built. The render-client Playwright
+> pixel check for jpg/gif compositing described above was never built either; no Playwright dependency
+> or spec file exists anywhere in `control-panel/` for this work. See `control-panel/README.md`'s
+> "What's verified" section for the current, accurate record of what has and hasn't been exercised
+> live for this batch of work.
 - Panel: no existing component-test framework beyond Storybook stories (`*.stories.tsx`) — this
   spec doesn't introduce one; new components (`MobileTabBar`, `MaskShapeOverlay`, the restructured
   `LayerStrip`) get stories matching the existing precedent. Functional verification follows the

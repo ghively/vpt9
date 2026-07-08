@@ -233,8 +233,11 @@ All 12 findings were fixed the same evening, verified, and re-tested before comm
    panel's own `tsc --noEmit`. Verified: 11/11 new parity tests pass; `panel`'s build still passes
    after the `store.ts` change.
 7. **No test coverage (scoped)** — added `server/test/{state,automation,osc,state-patch-parity}.test.js`
-   (43 tests total) using Node's built-in `node:test`/`node:assert`, zero new dependencies; added a
-   `"test": "node --test test/*.test.js"` script to `server/package.json`. Covers the patch engine
+   (43 tests total as of this pass; the media library work in 2026-07-06/07 added
+   `media.test.js`/`media-helpers.test.js` and grew `state.test.js`, bringing the current total to 65 —
+   see `control-panel/README.md`) using Node's built-in `node:test`/`node:assert`, zero new
+   dependencies; added a `"test": "node --test test/*.test.js"` script to `server/package.json`.
+   Covers the patch engine
    (incl. the prototype-pollution guard), the cue-list/fade/goto/recall transport logic, LFO
    oscillation bounds, the prune-on-delete fix (#10), and the real OSC wire format (including a
    real loopback UDP round trip and the rate-limited-warning fix from #12). Deliberately NOT in

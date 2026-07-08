@@ -93,6 +93,11 @@ after a render client connects, not a fault).
 - Drag the orange handles directly on the preview to warp. What you're dragging is
   never the actual projector output — it's the small preview frame — so you can warp a
   screen you're not standing in front of.
+- Each handle is tagged so you always know which point you're touching — corners show
+  `TL`/`TR`/`BR`/`BL`; mesh points show their row·column (`R2·C3`). **Tap or click a
+  handle to select it** (it highlights) and a pair of **X/Y number fields appears below
+  the preview** — type an exact coordinate instead of dragging, useful when you need a
+  precise keystone value rather than an eyeballed one.
 
 ### Editing a mask on canvas
 
