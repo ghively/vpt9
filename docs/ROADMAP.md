@@ -68,6 +68,23 @@ records — this doc doesn't repeat their findings, it points to them.
 > shared/hot-swappable source-bank architecture change plus the blend-mode/crossfade work; it no
 > longer includes still-image support. `docs/superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md`
 > is updated accordingly.
+>
+> **2026-07-08 status update: sub-project 1 (UI/UX overhaul + media library) is now CLOSED.** Built
+> per `docs/superpowers/specs/2026-07-06-panel-ux-and-media-library-design.md`: the media library
+> (`server/src/media.js` — upload/serve/delete for mp4/gif/jpg/jpeg with CORS + Range support;
+> `panel/src/components/MediaLibrary.tsx`), still-image/gif layer sources
+> (`render-client/src/layers.js`), the two-column mobile layout with a bottom tab bar below 720px
+> (`panel/src/components/MobileTabBar.tsx`, `useIsMobile`), 44px touch targets on coarse pointers
+> (`tokens.css`/`panel.css`), the restructured two-row layer strip (`LayerStrip.tsx`), warp-editor
+> corner/mesh tags plus tap-to-select-and-type-exact-coordinates (`WarpEditor.tsx`, `WarpHandle.tsx`),
+> and the on-canvas mask shape editor (`MaskShapeOverlay.tsx`). Server-side: 15 new tests in
+> `server/test/media.test.js` (plus `media-helpers.test.js`), all passing. Two verification gaps from
+> the spec were **not** closed and remain open, tracked here rather than silently dropped: the spec's
+> planned Playwright pixel check (jpg/gif compositing, gif animation across two screenshots) was never
+> built — no Playwright dependency or spec file exists anywhere in `control-panel/` — so this batch of
+> work has automated server coverage but no live-browser verification; `control-panel/README.md`'s
+> "What's verified" section accurately reflects this by omission. `control-panel/OPERATOR_GUIDE.md`
+> has been updated to document all of the above.
 
 ## Status Quo
 
@@ -181,8 +198,14 @@ new pieces in a real browser via a scripted check (Playwright) — see `control-
 
 ## Non-Goals
 
-- No license chosen for `control-panel` — flagged as a one-time open decision to make before ever
-  distributing it, still not resolved here or anywhere else in the repo.
+- **License — resolved 2026-07-08.** `control-panel` is MIT-licensed (`control-panel/LICENSE`); it's
+  an independent rewrite, not a derivative of VPT8's Max/MSP source, so it doesn't inherit that
+  source's CC BY-NC-SA 3.0 terms. User-confirmed: permissive, not the noncommercial/share-alike
+  option also offered.
+- **Hardware control (Art-Net/DMX, serial sensors, a real MIDI controller) — confirmed out of scope,
+  2026-07-08.** Re-affirms the 2026-07-06 non-goal decision below rather than reopening it: this
+  installation doesn't need physical hardware integration for the software to be considered
+  finished. The WS/OSC protocol remains the documented integration surface if that ever changes.
 - (Historical, from the 2026-07-04 first pass, now moot: at the time this section was written there
   was no new code and no spec yet for the effects chain, automation, or input/control subsystems —
   see the Subsystem Inventory above for how each was subsequently spec'd and built.)

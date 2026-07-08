@@ -274,3 +274,10 @@ Not verifiable from this environment, by nature of what they are:
   and Art-Net/DMX/serial (no browser API exists — these need a small bridge process
   speaking the WS/OSC protocol above, which is deliberately left until hardware is
   actually in the room).
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). This applies to `control-panel/` only; the original VPT8
+Max/MSP source elsewhere in this repo is licensed separately (CC BY-NC-SA 3.0, see
+`vpt8 source code/VPT8-sourcecode-readme.rtf`) — `control-panel/` is an independent
+rewrite, not a derivative of that source, and does not inherit its terms.

@@ -1,6 +1,7 @@
 {
   "name": "vpt-control-plane",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "State store + WebSocket broadcast hub for the VPT modernization render clients.",

@@ -1,6 +1,7 @@
 {
   "name": "vpt-cast-receiver",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "DIAL/SSDP receiver so YouTube's phone app can 'Cast' to a virtual screen, which populates a PiP window on the control-plane.",

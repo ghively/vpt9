@@ -1,6 +1,7 @@
 {
   "name": "vpt-control-panel",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "React operator UI for the VPT modernization control plane — the panel that drives layers, warp, PiP and presets over the control-plane WebSocket.",
