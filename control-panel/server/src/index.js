@@ -247,6 +247,17 @@ wss.on("connection", (socket) => {
           broadcast({ type: "preview", screenId: message.screenId, frame: message.frame }, socket);
         }
         return;
+      case "transportStatus":
+        // Playback-position telemetry: relay-only, never persisted, mirroring the
+        // `preview` pattern exactly — see docs/superpowers/specs/2026-07-08-parity-
+        // finish-line-design.md Section 3 for why this is NOT part of `state`.
+        if (typeof message.layerId === "string" && typeof message.position === "number") {
+          broadcast({ type: "transportStatus", layerId: message.layerId, position: message.position }, socket);
+        }
+        return;
+      case "clipEnded":
+        if (typeof message.layerId === "string") engine.clipEnded(message.layerId);
+        return;
       default:
         return;
     }
