@@ -47,6 +47,14 @@ export function defaultFx() {
   };
 }
 
+export function defaultWarp() {
+  return {
+    mode: "corner",
+    corners: structuredClone(IDENTITY_CORNERS),
+    mesh: { size: 4, points: identityMeshPoints(4) },
+  };
+}
+
 const DEFAULT_STATE = {
   layers: {
     "layer-1": {
@@ -58,6 +66,7 @@ const DEFAULT_STATE = {
       blendMode: "screen",
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
       fx: defaultFx(),
+      warp: defaultWarp(),
     },
     "layer-2": {
       id: "layer-2",
@@ -68,6 +77,7 @@ const DEFAULT_STATE = {
       blendMode: "multiply",
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
       fx: defaultFx(),
+      warp: defaultWarp(),
     },
   },
 
@@ -143,7 +153,7 @@ function fillMissing(target, defaults) {
 }
 
 export function ensureLayerDefaults(layer) {
-  fillMissing(layer, { fx: defaultFx() });
+  fillMissing(layer, { fx: defaultFx(), warp: defaultWarp() });
 }
 
 export function ensureStateDefaults(state) {

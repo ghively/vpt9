@@ -12,6 +12,7 @@ import {
   ensureLayerDefaults,
   ensureStateDefaults,
   defaultFx,
+  defaultWarp,
   loadState,
   saveState,
 } from "../src/state.js";
@@ -102,6 +103,28 @@ test("ensureLayerDefaults backfills fx on a layer missing it entirely", () => {
   const layer = { id: "layer-1", opacity: 1 };
   ensureLayerDefaults(layer);
   assert.deepEqual(layer.fx, defaultFx());
+});
+
+test("defaultWarp returns an identity corner-pin warp", () => {
+  const warp = defaultWarp();
+  assert.equal(warp.mode, "corner");
+  assert.deepEqual(warp.corners, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]);
+  assert.equal(warp.mesh.size, 4);
+  assert.equal(warp.mesh.points.length, 16);
+});
+
+test("ensureLayerDefaults backfills warp on a layer missing it entirely", () => {
+  const layer = { id: "layer-1", order: 1, opacity: 0.5, fx: defaultFx() };
+  ensureLayerDefaults(layer);
+  assert.ok(layer.warp);
+  assert.equal(layer.warp.mode, "corner");
+});
+
+test("ensureLayerDefaults does not clobber an existing warp", () => {
+  const layer = { id: "layer-1", order: 1, fx: defaultFx(), warp: { mode: "mesh", corners: [], mesh: { size: 3, points: [] } } };
+  ensureLayerDefaults(layer);
+  assert.equal(layer.warp.mode, "mesh");
+  assert.equal(layer.warp.mesh.size, 3);
 });
 
 test("ensureStateDefaults backfills automation/lfos/midiMap and forces automation.running false", () => {
