@@ -67,6 +67,7 @@ export interface Layer {
   blendMode: string;
   mask: Mask;
   fx: Fx;
+  warp: Warp;
 }
 
 export interface Point {

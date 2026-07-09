@@ -16,6 +16,10 @@ export interface ChannelRackProps {
   media?: MediaItem[];
   /** Opens the on-canvas mask editor for a given layer. */
   onEditMaskLayer?: (id: string) => void;
+  /** Opens the on-canvas warp editor for a given layer. */
+  onEditWarpLayer?: (id: string) => void;
+  /** Applies a named corner-pin preset (from a strip's FX drawer) to a given layer. */
+  onApplyCornerPresetLayer?: (id: string, preset: string) => void;
 }
 
 /** The full layer rack: strips shown top-of-stack first, plus an add button. */
@@ -30,6 +34,8 @@ export function ChannelRack({
   canPaste,
   media,
   onEditMaskLayer,
+  onEditWarpLayer,
+  onApplyCornerPresetLayer,
 }: ChannelRackProps) {
   // `order` ascends bottom→top; show the top of the stack first, like the vanilla panel.
   const ascending = [...layers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -54,6 +60,8 @@ export function ChannelRack({
             onPaste={() => onPasteLayer?.(layer.id)}
             canPaste={canPaste}
             onEditMask={() => onEditMaskLayer?.(layer.id)}
+            onEditWarp={() => onEditWarpLayer?.(layer.id)}
+            onApplyCornerPreset={(preset) => onApplyCornerPresetLayer?.(layer.id, preset)}
           />
         );
       })}

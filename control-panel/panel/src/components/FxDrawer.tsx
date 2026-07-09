@@ -1,6 +1,7 @@
 import { Fader } from "./primitives/Fader";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
+import { Select } from "./primitives/Select";
 import type { Fx, Mask } from "./types";
 
 export interface FxDrawerProps {
@@ -13,6 +14,8 @@ export interface FxDrawerProps {
   onUpdate?: (field: string, value: unknown) => void;
   /** Opens the on-canvas mask editor for this layer (Screen tab). */
   onEditMask?: () => void;
+  /** Opens the on-canvas warp editor for this layer (Screen tab). */
+  onEditWarp?: () => void;
 }
 
 interface SliderSpec {
@@ -110,7 +113,7 @@ function FxSection({
 /** The per-layer effects chain controls (vlayer.maxpat's stages) in captioned sections:
  *  TRANSFORM (flip/tile/zoom/pan), COLOR (blur/trail/brcosa), EDGE BLEND (projector
  *  ramps) and MASK geometry. Rendered inside an expanded LayerStrip. */
-export function FxDrawer({ fx, mask, onUpdate, onEditMask }: FxDrawerProps) {
+export function FxDrawer({ fx, mask, onUpdate, onEditMask, onEditWarp }: FxDrawerProps) {
   const fxRoot = fx as unknown as Record<string, unknown>;
   return (
     <div className="fx-drawer">
@@ -140,6 +143,24 @@ export function FxDrawer({ fx, mask, onUpdate, onEditMask }: FxDrawerProps) {
         {EDGE_SLIDERS.map((spec) => (
           <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
+      </FxSection>
+      <FxSection caption="Warp">
+        <Select
+          className="corner-preset-select"
+          value=""
+          options={[
+            { value: "", label: "Preset…" },
+            { value: "full", label: "Full" },
+            { value: "center", label: "Center" },
+            { value: "leftThird", label: "Left third" },
+            { value: "rightThird", label: "Right third" },
+            { value: "rotate90", label: "Rotate 90°" },
+            { value: "rotate180", label: "Rotate 180°" },
+            { value: "rotate270", label: "Rotate 270°" },
+          ]}
+          onChange={(v) => { if (v) onUpdate?.("__cornerPreset__", v); }}
+        />
+        {onEditWarp && <Button label="Edit on canvas" onClick={onEditWarp} />}
       </FxSection>
       {mask && (
         <FxSection caption="Mask">

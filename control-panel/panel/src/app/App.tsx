@@ -29,6 +29,10 @@ import { createActions } from "./actions";
 /** The layer-look fields copy/paste moves between layers (not source/name/order). */
 type LayerLook = Pick<Layer, "opacity" | "blendMode" | "mask" | "fx">;
 
+/** What the screen-aside canvas is currently editing on top of the confidence monitor:
+ *  a layer's mask shape, a layer's own corner-pin/mesh warp, or nothing (screen warp). */
+type CanvasEditTarget = { kind: "mask"; layerId: string } | { kind: "warp"; layerId: string } | null;
+
 type ShowTab = "presets" | "cues" | "timers" | "lfo" | "midi";
 const SHOW_TABS: Array<[ShowTab, string]> = [
   ["presets", "Presets"],
@@ -81,7 +85,7 @@ export function App() {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [activeShowTab, setActiveShowTab] = useState<ShowTab>("presets");
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("layers");
-  const [maskEditLayerId, setMaskEditLayerId] = useState<string | null>(null);
+  const [canvasEditTarget, setCanvasEditTarget] = useState<CanvasEditTarget>(null);
   const isMobile = useIsMobile();
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedScreenId;
@@ -197,13 +201,22 @@ export function App() {
 
   const editMask = useCallback(
     (id: string) => {
-      setMaskEditLayerId(id);
+      setCanvasEditTarget({ kind: "mask", layerId: id });
+      if (isMobile) setActiveMobileTab("screen");
+    },
+    [isMobile],
+  );
+  const editLayerWarp = useCallback(
+    (id: string) => {
+      setCanvasEditTarget({ kind: "warp", layerId: id });
       if (isMobile) setActiveMobileTab("screen");
     },
     [isMobile],
   );
 
   const state = stateRef.current;
+  const maskEditLayerId = canvasEditTarget?.kind === "mask" ? canvasEditTarget.layerId : null;
+  const warpEditLayerId = canvasEditTarget?.kind === "warp" ? canvasEditTarget.layerId : null;
   const sid = selectedScreenId ?? "";
   const layers = Object.values(state.layers ?? {});
   const media = Object.values(state.media ?? {});
@@ -235,6 +248,13 @@ export function App() {
       onPasteLayer={pasteLayer}
       canPaste={canPaste}
       onEditMaskLayer={editMask}
+      onEditWarpLayer={editLayerWarp}
+      onApplyCornerPresetLayer={(id, preset) =>
+        actions.applyLayerCornerPreset(
+          id,
+          preset as "full" | "center" | "leftThird" | "rightThird" | "rotate90" | "rotate180" | "rotate270",
+        )
+      }
     />
   );
 
@@ -338,7 +358,13 @@ export function App() {
         onDragEnd={endDrag}
         maskEditLayer={maskEditLayerId ? state.layers[maskEditLayerId] ?? null : null}
         onMaskChange={(field, value) => { if (maskEditLayerId) actions.updateLayer(maskEditLayerId, field, value); }}
-        onMaskEditDone={() => setMaskEditLayerId(null)}
+        onMaskEditDone={() => setCanvasEditTarget(null)}
+        warpEditLayer={warpEditLayerId ? state.layers[warpEditLayerId] ?? null : null}
+        onLayerSetMode={(mode) => { if (warpEditLayerId) actions.setLayerWarpMode(warpEditLayerId, mode); }}
+        onLayerSetMeshSize={(size) => { if (warpEditLayerId) actions.setLayerMeshSize(warpEditLayerId, size); }}
+        onLayerResetWarp={() => { if (warpEditLayerId) actions.resetLayerWarp(warpEditLayerId); }}
+        onLayerMovePoint={(index, x, y) => { if (warpEditLayerId) actions.moveLayerWarpPoint(warpEditLayerId, index, x, y); }}
+        onWarpEditDone={() => setCanvasEditTarget(null)}
       />
       <PipWindows
         ref={preview.pipMonitor}

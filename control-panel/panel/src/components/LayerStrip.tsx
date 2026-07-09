@@ -27,6 +27,10 @@ export interface LayerStripProps {
   media?: MediaItem[];
   /** Opens the on-canvas mask editor for this layer. */
   onEditMask?: () => void;
+  /** Opens the on-canvas warp editor for this layer. */
+  onEditWarp?: () => void;
+  /** Applies a named corner-pin preset (from the FX drawer's Warp section) to this layer. */
+  onApplyCornerPreset?: (preset: string) => void;
 }
 
 function rgbToHex([r, g, b]: [number, number, number]): string {
@@ -36,7 +40,20 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 
 /** One layer as a mixer channel strip: index, reorder, name, source, blend, opacity,
  *  mask/fx toggles, copy/paste, remove. The FX button expands the effects drawer. */
-export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCopy, onPaste, canPaste, media, onEditMask }: LayerStripProps) {
+export function LayerStrip({
+  layer,
+  neighbors,
+  onUpdate,
+  onMove,
+  onRemove,
+  onCopy,
+  onPaste,
+  canPaste,
+  media,
+  onEditMask,
+  onEditWarp,
+  onApplyCornerPreset,
+}: LayerStripProps) {
   const isColor = layer.source?.type === "color";
   const [fxOpen, setFxOpen] = useState(false);
   const mediaOptions = (media ?? []).map((m) => ({ value: `/media/${m.filename}`, label: m.name }));
@@ -154,7 +171,18 @@ export function LayerStrip({ layer, neighbors, onUpdate, onMove, onRemove, onCop
         <ToggleSquare className="remove-btn" label="×" title="Remove layer" onClick={onRemove} />
       </div>
 
-      {fxOpen && layer.fx && <FxDrawer fx={layer.fx} mask={layer.mask} onUpdate={onUpdate} onEditMask={onEditMask} />}
+      {fxOpen && layer.fx && (
+        <FxDrawer
+          fx={layer.fx}
+          mask={layer.mask}
+          onUpdate={(field, value) => {
+            if (field === "__cornerPreset__") onApplyCornerPreset?.(value as string);
+            else onUpdate?.(field, value);
+          }}
+          onEditMask={onEditMask}
+          onEditWarp={onEditWarp}
+        />
+      )}
     </div>
   );
 }

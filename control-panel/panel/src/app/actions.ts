@@ -91,6 +91,39 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
           : `screens.${screenId}.warp.corners`;
       send({ type: "update", path: `${base}.${index}`, value: { x, y } });
     },
+    setLayerWarpMode(id: string, mode: "corner" | "mesh") {
+      send({ type: "update", path: `layers.${id}.warp.mode`, value: mode });
+    },
+    resetLayerWarp(id: string) {
+      const warp = getState().layers[id]?.warp;
+      if (warp?.mode === "mesh") {
+        send({ type: "update", path: `layers.${id}.warp.mesh.points`, value: identityMeshPoints(warp.mesh.size) });
+      } else {
+        send({ type: "update", path: `layers.${id}.warp.corners`, value: IDENTITY_CORNERS.map((p) => ({ ...p })) });
+      }
+    },
+    moveLayerWarpPoint(id: string, index: number, x: number, y: number) {
+      const warp = getState().layers[id]?.warp;
+      const base = warp?.mode === "mesh" ? `layers.${id}.warp.mesh.points` : `layers.${id}.warp.corners`;
+      send({ type: "update", path: `${base}.${index}`, value: { x, y } });
+    },
+    setLayerMeshSize(id: string, size: number) {
+      send({ type: "update", path: `layers.${id}.warp.mesh`, value: { size, points: identityMeshPoints(size) } });
+    },
+    // VPT8's activelayer.maxpat "p cornerpin_templates" preset menu (full/center/thirds/
+    // rotations), applied to layers.<id>.warp.corners as one atomic write.
+    applyLayerCornerPreset(id: string, preset: "full" | "center" | "leftThird" | "rightThird" | "rotate90" | "rotate180" | "rotate270") {
+      const presets: Record<string, Point[]> = {
+        full: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+        center: [{ x: 0.25, y: 0.25 }, { x: 0.75, y: 0.25 }, { x: 0.75, y: 0.75 }, { x: 0.25, y: 0.75 }],
+        leftThird: [{ x: 0, y: 0 }, { x: 0.333, y: 0 }, { x: 0.333, y: 1 }, { x: 0, y: 1 }],
+        rightThird: [{ x: 0.667, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0.667, y: 1 }],
+        rotate90: [{ x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }, { x: 0, y: 0 }],
+        rotate180: [{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 0, y: 0 }, { x: 1, y: 0 }],
+        rotate270: [{ x: 0, y: 1 }, { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }],
+      };
+      send({ type: "update", path: `layers.${id}.warp.corners`, value: presets[preset] });
+    },
     updatePip(id: string, field: string, value: unknown) {
       send({ type: "update", path: `pip.${id}.${field}`, value });
     },

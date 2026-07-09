@@ -18,6 +18,15 @@ export const defaultFx: Fx = {
   edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2 },
 };
 
+const identityCorners = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+];
+
+const defaultWarp = { mode: "corner" as const, corners: identityCorners, mesh: { size: 4, points: [] } };
+
 export const sampleLayers: Layer[] = [
   {
     id: "layer-1",
@@ -28,6 +37,7 @@ export const sampleLayers: Layer[] = [
     blendMode: "screen",
     mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
     fx: { ...defaultFx, zoom: 1.4, blur: 0.2, edgeBlend: { ...defaultFx.edgeBlend, right: 0.15 } },
+    warp: defaultWarp,
   },
   {
     id: "layer-2",
@@ -38,14 +48,8 @@ export const sampleLayers: Layer[] = [
     blendMode: "multiply",
     mask: { enabled: true, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
     fx: defaultFx,
+    warp: defaultWarp,
   },
-];
-
-const identityCorners = [
-  { x: 0, y: 0 },
-  { x: 1, y: 0 },
-  { x: 1, y: 1 },
-  { x: 0, y: 1 },
 ];
 
 export const sampleScreens: Screen[] = [
