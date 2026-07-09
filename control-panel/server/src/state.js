@@ -257,16 +257,33 @@ function isUsedAsMixInputElsewhere(state, slotId) {
 }
 
 export function wouldCreateMixCycle(state, path, value) {
-  // Path shape: "sourceBank.<index>.content"
-  const match = /^sourceBank\.(\d+)\.content$/.exec(path);
-  if (!match || value?.type !== "mix") return false;
-  const thisSlot = state.sourceBank?.[Number(match[1])];
+  // Path shape: "sourceBank.<index>.content" (whole-object replacement) or
+  // "sourceBank.<index>.content.a"/".content.b" (granular sub-path write, only
+  // reachable via applyUpdate's existing-leaf rule when that key is already present
+  // on content — i.e. content is already type "mix").
+  const wholeMatch = /^sourceBank\.(\d+)\.content$/.exec(path);
+  const subMatch = /^sourceBank\.(\d+)\.content\.(a|b)$/.exec(path);
+  if (!wholeMatch && !subMatch) return false;
+
+  const index = Number((wholeMatch ?? subMatch)[1]);
+  const thisSlot = state.sourceBank?.[index];
   if (!thisSlot) return false;
+
+  let candidate;
+  if (wholeMatch) {
+    if (value?.type !== "mix") return false;
+    candidate = value;
+  } else {
+    if (thisSlot.content?.type !== "mix") return false;
+    const field = subMatch[2]; // "a" | "b"
+    candidate = { ...thisSlot.content, [field]: value };
+  }
+
   // Self-reference: always a cycle, regardless of this slot's current content type.
-  if (value.a?.type === "slot" && value.a.slotId === thisSlot.id) return true;
-  if (value.b?.type === "slot" && value.b.slotId === thisSlot.id) return true;
+  if (candidate.a?.type === "slot" && candidate.a.slotId === thisSlot.id) return true;
+  if (candidate.b?.type === "slot" && candidate.b.slotId === thisSlot.id) return true;
   // Direct: an input that's itself a mix-holding slot right now.
-  if (refIsMixSlot(state, value.a) || refIsMixSlot(state, value.b)) return true;
+  if (refIsMixSlot(state, candidate.a) || refIsMixSlot(state, candidate.b)) return true;
   // Ordering hole: this slot is already someone else's mix input — becoming a mix now
   // would make that other slot a mix-of-mix without ever revalidating its own write.
   if (isUsedAsMixInputElsewhere(state, thisSlot.id)) return true;
