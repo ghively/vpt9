@@ -193,6 +193,44 @@ export function createAutomationEngine({ state, broadcast, scheduleSave, recallP
     }
   }
 
+  const playlistFired = new Map(); // layerId -> ms timestamp the current item started
+
+  function tickPlaylists(now) {
+    // Same leak-prevention pattern tickTimers already uses for timerFired: a layer
+    // deleted entirely (not just switched out of playlist mode) would otherwise leave
+    // its entry in this Map forever, since the loop below only ever visits ids still
+    // present in state.layers.
+    pruneStaleSlots(playlistFired, new Set(Object.keys(state.layers ?? {})));
+    for (const [id, layer] of Object.entries(state.layers ?? {})) {
+      if (layer.sourceMode !== "playlist") { playlistFired.delete(id); continue; }
+      const pl = layer.playlist;
+      if (!pl?.items?.length) continue;
+      const item = pl.items[pl.cursor];
+      if (!item?.duration) continue; // video items ("play through to end") only advance via clipEnded()
+      const startedAt = playlistFired.get(id);
+      if (startedAt == null) { playlistFired.set(id, now); continue; }
+      if (now - startedAt >= item.duration * 1000) {
+        const nextCursor = (pl.cursor + 1) % pl.items.length;
+        state.layers[id].playlist = { ...pl, cursor: nextCursor };
+        playlistFired.set(id, now);
+        broadcast({ type: "update", path: `layers.${id}.playlist`, value: state.layers[id].playlist });
+      }
+    }
+  }
+
+  // Called when a render client (the audio owner for this layer) reports its <video>
+  // firing the native `ended` event — the only way the server can know a video-mode
+  // playlist item finished, since it never observes playback directly.
+  function clipEnded(layerId) {
+    const layer = state.layers?.[layerId];
+    if (layer?.sourceMode !== "playlist") return;
+    const pl = layer.playlist;
+    if (!pl?.items?.length) return;
+    const nextCursor = (pl.cursor + 1) % pl.items.length;
+    state.layers[layerId].playlist = { ...pl, cursor: nextCursor };
+    broadcast({ type: "update", path: `layers.${layerId}.playlist`, value: state.layers[layerId].playlist });
+  }
+
   function tickLfos(now, dtSeconds, batch) {
     pruneStaleSlots(lfoSlots, new Set(Object.keys(state.lfos ?? {})));
     for (const lfo of Object.values(state.lfos ?? {})) {
@@ -229,6 +267,7 @@ export function createAutomationEngine({ state, broadcast, scheduleSave, recallP
     tickLfos(now, dtSeconds, batch);
     tickCues(now);
     tickTimers(now);
+    tickPlaylists(now);
     if (batch.length) broadcast({ type: "batch", updates: batch });
   }, TICK_MS);
 
@@ -236,6 +275,7 @@ export function createAutomationEngine({ state, broadcast, scheduleSave, recallP
     cueGo,
     cueStop,
     cueJump,
+    clipEnded,
     dispose() {
       clearInterval(interval);
     },

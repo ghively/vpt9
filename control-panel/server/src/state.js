@@ -47,6 +47,21 @@ export function defaultFx() {
   };
 }
 
+export function defaultWarp() {
+  return {
+    mode: "corner",
+    corners: structuredClone(IDENTITY_CORNERS),
+    mesh: { size: 4, points: identityMeshPoints(4) },
+  };
+}
+
+// Per-layer transport: play/pause + rate/loop/pan/vol for the layer's current source.
+// Defaults are "stopped, neutral" — a freshly created or backfilled layer never
+// starts itself playing or looping on its own.
+export function defaultTransport() {
+  return { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1 };
+}
+
 const DEFAULT_STATE = {
   layers: {
     "layer-1": {
@@ -58,6 +73,10 @@ const DEFAULT_STATE = {
       blendMode: "screen",
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
       fx: defaultFx(),
+      warp: defaultWarp(),
+      transport: defaultTransport(),
+      sourceMode: "single",
+      playlist: { items: [], cursor: -1 },
     },
     "layer-2": {
       id: "layer-2",
@@ -68,6 +87,10 @@ const DEFAULT_STATE = {
       blendMode: "multiply",
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
       fx: defaultFx(),
+      warp: defaultWarp(),
+      transport: defaultTransport(),
+      sourceMode: "single",
+      playlist: { items: [], cursor: -1 },
     },
   },
 
@@ -126,6 +149,14 @@ const DEFAULT_STATE = {
   // WebMIDI CC bindings (the panel browser owns the MIDI hardware; mappings live in
   // shared state so they survive reloads and can be edited from any panel).
   midiMap: {},
+
+  // Shared, optionally-hot-swappable source slots (VPT8's 8-slot sourcebank.maxpat).
+  // Layers default to a direct `source` (unchanged); pointing a layer's source at
+  // { type: "slot", slotId } instead makes it track whichever content this slot holds,
+  // live. A slot's content is either a media-library reference or a "mix" — two other
+  // sources (each a media/camera ref, or a slot reference — but never another mix-
+  // holding slot, enforced below) crossfaded by a chosen blend mode.
+  sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null })),
 };
 
 // `applyUpdate` only patches EXISTING leaves, so state loaded from an older
@@ -143,7 +174,13 @@ function fillMissing(target, defaults) {
 }
 
 export function ensureLayerDefaults(layer) {
-  fillMissing(layer, { fx: defaultFx() });
+  fillMissing(layer, {
+    fx: defaultFx(),
+    warp: defaultWarp(),
+    transport: defaultTransport(),
+    sourceMode: "single",
+    playlist: { items: [], cursor: -1 },
+  });
 }
 
 export function ensureStateDefaults(state) {
@@ -153,6 +190,7 @@ export function ensureStateDefaults(state) {
     midiMap: {},
     master: 1,
     media: {},
+    sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null })),
   });
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
   for (const preset of Object.values(state.presets ?? {})) {
@@ -210,12 +248,84 @@ export function walkToParent(state, keys) {
   return node;
 }
 
+// A slot's content may be a "mix" of two other sources; a mix's own a/b refs must
+// never themselves be — or resolve to, in one hop, or via an inline literal at any
+// nesting depth — another mix. Not a general "no cycles in an arbitrary graph" check:
+// simply "no mix may reference any mix," full stop, re-verified over the WHOLE
+// sourceBank after every write that touches it.
+//
+// Five earlier rounds each patched one narrower shape of this (self-reference, direct
+// mix-of-mix, one-level slot indirection, an ordering hole where the OTHER slot's
+// write was never revalidated, a 4-step type-flip dance gated on pre-write state, and
+// an inline-literal wrapper that hid a slot ref from the ordering check) and each fix
+// left a structurally identical bypass one path/depth/step further out — because each
+// attempt reasoned locally about "what could this one write have changed" instead of
+// validating the actual resulting state. This replaces all of it — `wouldCreateMixCycle`
+// no longer enumerates write shapes at all: it reuses `walkToParent` (the same
+// write-simulation primitive `applyUpdate` itself uses, not a reimplementation of path-
+// walking) to apply the candidate write exactly the way applyUpdate would, then
+// re-validates every mix slot in the resulting array. No recursion or depth cap is
+// needed: an inline-nested mix literal is caught by the very first `type === "mix"`
+// check on that structure, regardless of how deep it's nested — the mere presence of a
+// nested mix is already the violation, nothing further needs tracing. Enforced here,
+// the sole write path for client-originated state changes; render-client/src/patch.js
+// intentionally does NOT duplicate this guard (see
+// docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md Global Constraints — it
+// only ever applies server-broadcast, already-validated state).
+function refResolvesToMix(ref, candidateSourceBank) {
+  if (!ref || typeof ref !== "object") return false;
+  if (ref.type === "mix") return true;
+  if (ref.type === "slot") {
+    // `.some(...)`, not `.find(...)` + optional-chain on the first match: sourceBank is
+    // otherwise a fixed-size array of unique-id slots, but nothing at this write layer
+    // enforces that uniqueness (see the `path === "sourceBank"` whole-array-replacement
+    // case below) — matching only the first same-id slot could let a real mix hide
+    // behind an earlier same-id decoy. Matching on ANY same-id slot holding a mix keeps
+    // the check correct even if id-uniqueness is ever violated upstream.
+    return candidateSourceBank.some((s) => s?.id === ref.slotId && s?.content?.type === "mix");
+  }
+  return false;
+}
+
+export function wouldCreateMixCycle(state, path, value) {
+  // Every write that can affect sourceBank content must be reconstructed and
+  // re-validated — not just "sourceBank.<n>.content..." sub-paths. Nothing on the wire
+  // protocol restricts `path` to a sub-path shape (see index.js's `update` WS handler
+  // and OSC handler, which pass any client-supplied path straight through to
+  // applyUpdate), so a whole-array replacement at path "sourceBank" itself must be
+  // caught too, not just "sourceBank.".
+  if (path !== "sourceBank" && !path.startsWith("sourceBank.")) return false;
+
+  const candidateState = { sourceBank: structuredClone(state.sourceBank ?? []) };
+  const keys = path.split(".");
+  const last = keys.pop();
+  const node = walkToParent(candidateState, keys);
+  if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
+  node[last] = value;
+
+  // A whole-array replacement's value isn't necessarily even an array — a client can
+  // send any JSON as `value`. A non-array candidate can't contain a mix-of-mix as this
+  // invariant defines it, and iterating a non-iterable would throw. Whether sourceBank
+  // stays shaped like a well-formed slot array at all is a different, broader
+  // structural concern this check isn't chartered to enforce.
+  if (!Array.isArray(candidateState.sourceBank)) return false;
+
+  for (const slot of candidateState.sourceBank) {
+    if (slot?.content?.type !== "mix") continue;
+    if (refResolvesToMix(slot.content.a, candidateState.sourceBank) || refResolvesToMix(slot.content.b, candidateState.sourceBank)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Patches an EXISTING leaf ("layers.layer-1.opacity"). Never creates new keys —
 // use applyCreate for that. Returns true if the path was valid and the value changed.
 export function applyUpdate(state, path, value) {
   const keys = path.split(".");
   const last = keys.pop();
   if (isUnsafePath(keys) || UNSAFE_KEYS.has(last)) return false;
+  if (wouldCreateMixCycle(state, path, value)) return false;
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   if (node[last] === value) return false;
@@ -230,6 +340,17 @@ export function applyUpdate(state, path, value) {
 export function applyCreate(state, containerPath, value) {
   const keys = containerPath.split(".");
   if (isUnsafePath(keys)) return null;
+  // sourceBank is a fixed 8-slot array (see DEFAULT_STATE above) — slots are never
+  // created or deleted individually, only their `content`/`name` fields are ever
+  // legitimately updated via applyUpdate, addressed by index. applyCreate has no
+  // legitimate use case anywhere under sourceBank, and — unlike applyUpdate — it has
+  // no mix-cycle guard at all, so leaving it reachable here would let a client inject
+  // an arbitrary key into an existing slot or its content object (overwriting `a`/`b`
+  // with a self-reference, or replacing a slot's content with a ready-made mix-of-mix)
+  // completely unvalidated. Block outright rather than adapting the cycle guard to a
+  // second, differently-shaped write primitive — see
+  // docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md Task 7.
+  if (containerPath === "sourceBank" || containerPath.startsWith("sourceBank.")) return null;
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object") return null;
   const key = value?.id;
@@ -247,6 +368,24 @@ export function applyDelete(state, path) {
   if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   delete node[last];
   return true;
+}
+
+// Called after a media entry or a source-bank slot is deleted: clears any reference to
+// it rather than leaving a dangling id. A slot referencing deleted media becomes empty
+// (content: null). A mix slot whose a/b referenced a deleted media/slot passes the
+// other input through at full weight rather than rendering black — matches how the
+// design spec defines "missing input" behavior for a mix.
+export function resolveDanglingSourceRefs(state, kind, id) {
+  const refMatches = (ref) => (kind === "media" ? ref?.type === "media" && ref.mediaId === id : ref?.type === "slot" && ref.slotId === id);
+  for (const slot of state.sourceBank ?? []) {
+    if (!slot.content) continue;
+    if (slot.content.type === "media" && kind === "media" && slot.content.mediaId === id) {
+      slot.content = null;
+    } else if (slot.content.type === "mix") {
+      if (refMatches(slot.content.a)) slot.content = { ...slot.content, a: null };
+      if (refMatches(slot.content.b)) slot.content = { ...slot.content, b: null };
+    }
+  }
 }
 
 export function nextLayerOrder(state) {

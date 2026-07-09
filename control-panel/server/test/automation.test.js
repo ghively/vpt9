@@ -144,3 +144,58 @@ test("deleting an LFO after it has ticked doesn't crash subsequent ticks (prune-
   assert.equal(engine !== undefined, true);
   engine.dispose();
 });
+
+test("a still-image playlist item advances after its configured duration", async () => {
+  const { state, engine } = makeHarness({
+    layers: {
+      "layer-1": {
+        sourceMode: "playlist",
+        playlist: {
+          items: [
+            { ref: { type: "media", mediaId: "a" }, duration: 0.1 },
+            { ref: { type: "media", mediaId: "b" }, duration: 0.1 },
+          ],
+          cursor: 0,
+        },
+      },
+    },
+  });
+  await wait(180);
+  assert.equal(state.layers["layer-1"].playlist.cursor, 1);
+  engine.dispose();
+});
+
+test("a video playlist item does NOT advance on wall-clock time alone (no duration set)", async () => {
+  const { state, engine } = makeHarness({
+    layers: {
+      "layer-1": {
+        sourceMode: "playlist",
+        playlist: { items: [{ ref: { type: "media", mediaId: "a" } }, { ref: { type: "media", mediaId: "b" } }], cursor: 0 },
+      },
+    },
+  });
+  await wait(180);
+  assert.equal(state.layers["layer-1"].playlist.cursor, 0); // unchanged — no duration means "play through to end", which only clipEnded() advances
+  engine.dispose();
+});
+
+test("clipEnded() advances a video playlist item and wraps at the end", () => {
+  const { state, engine } = makeHarness({
+    layers: {
+      "layer-1": {
+        sourceMode: "playlist",
+        playlist: { items: [{ ref: { type: "media", mediaId: "a" } }, { ref: { type: "media", mediaId: "b" } }], cursor: 1 },
+      },
+    },
+  });
+  engine.clipEnded("layer-1");
+  assert.equal(state.layers["layer-1"].playlist.cursor, 0); // wraps
+  engine.dispose();
+});
+
+test("clipEnded() on a layer not in playlist mode is a no-op", () => {
+  const { state, engine } = makeHarness({ layers: { "layer-1": { sourceMode: "single", playlist: { items: [], cursor: -1 } } } });
+  engine.clipEnded("layer-1"); // must not throw
+  assert.equal(state.layers["layer-1"].playlist.cursor, -1);
+  engine.dispose();
+});

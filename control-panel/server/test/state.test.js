@@ -12,6 +12,8 @@ import {
   ensureLayerDefaults,
   ensureStateDefaults,
   defaultFx,
+  defaultWarp,
+  defaultTransport,
   loadState,
   saveState,
 } from "../src/state.js";
@@ -104,6 +106,28 @@ test("ensureLayerDefaults backfills fx on a layer missing it entirely", () => {
   assert.deepEqual(layer.fx, defaultFx());
 });
 
+test("defaultWarp returns an identity corner-pin warp", () => {
+  const warp = defaultWarp();
+  assert.equal(warp.mode, "corner");
+  assert.deepEqual(warp.corners, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]);
+  assert.equal(warp.mesh.size, 4);
+  assert.equal(warp.mesh.points.length, 16);
+});
+
+test("ensureLayerDefaults backfills warp on a layer missing it entirely", () => {
+  const layer = { id: "layer-1", order: 1, opacity: 0.5, fx: defaultFx() };
+  ensureLayerDefaults(layer);
+  assert.ok(layer.warp);
+  assert.equal(layer.warp.mode, "corner");
+});
+
+test("ensureLayerDefaults does not clobber an existing warp", () => {
+  const layer = { id: "layer-1", order: 1, fx: defaultFx(), warp: { mode: "mesh", corners: [], mesh: { size: 3, points: [] } } };
+  ensureLayerDefaults(layer);
+  assert.equal(layer.warp.mode, "mesh");
+  assert.equal(layer.warp.mesh.size, 3);
+});
+
 test("ensureStateDefaults backfills automation/lfos/midiMap and forces automation.running false", () => {
   const state = { layers: {}, presets: {}, automation: { running: true } };
   ensureStateDefaults(state);
@@ -170,4 +194,36 @@ test("ensureStateDefaults backfills media as {} on an older state without it", (
   const state = { layers: {}, presets: {}, automation: { running: false } };
   ensureStateDefaults(state);
   assert.deepEqual(state.media, {});
+});
+
+test("DEFAULT_STATE has 8 empty source-bank slots", () => {
+  const state = structuredClone(loadState("/nonexistent/path/for/test.json"));
+  assert.equal(state.sourceBank.length, 8);
+  assert.equal(state.sourceBank[0].id, "slot-1");
+  assert.equal(state.sourceBank[0].content, null);
+});
+
+test("ensureStateDefaults backfills sourceBank as 8 empty slots on an older state without it", () => {
+  const state = { layers: {}, presets: {} };
+  ensureStateDefaults(state);
+  assert.equal(state.sourceBank.length, 8);
+});
+
+test("defaultTransport returns a paused, forward, un-looped, centered transport", () => {
+  const t = defaultTransport();
+  assert.equal(t.playing, false);
+  assert.equal(t.rate, 1);
+  assert.equal(t.loopIn, null);
+  assert.equal(t.loopOut, null);
+  assert.equal(t.loopMode, "off");
+  assert.equal(t.pan, 0);
+  assert.equal(t.vol, 1);
+});
+
+test("ensureLayerDefaults backfills transport, sourceMode, and playlist on an older layer", () => {
+  const layer = { id: "layer-1", order: 1, fx: defaultFx(), warp: defaultWarp() };
+  ensureLayerDefaults(layer);
+  assert.ok(layer.transport);
+  assert.equal(layer.sourceMode, "single");
+  assert.deepEqual(layer.playlist, { items: [], cursor: -1 });
 });
