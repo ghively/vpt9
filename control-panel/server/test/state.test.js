@@ -13,6 +13,7 @@ import {
   ensureStateDefaults,
   defaultFx,
   defaultWarp,
+  defaultTransport,
   loadState,
   saveState,
 } from "../src/state.js";
@@ -206,4 +207,23 @@ test("ensureStateDefaults backfills sourceBank as 8 empty slots on an older stat
   const state = { layers: {}, presets: {} };
   ensureStateDefaults(state);
   assert.equal(state.sourceBank.length, 8);
+});
+
+test("defaultTransport returns a paused, forward, un-looped, centered transport", () => {
+  const t = defaultTransport();
+  assert.equal(t.playing, false);
+  assert.equal(t.rate, 1);
+  assert.equal(t.loopIn, null);
+  assert.equal(t.loopOut, null);
+  assert.equal(t.loopMode, "off");
+  assert.equal(t.pan, 0);
+  assert.equal(t.vol, 1);
+});
+
+test("ensureLayerDefaults backfills transport, sourceMode, and playlist on an older layer", () => {
+  const layer = { id: "layer-1", order: 1, fx: defaultFx(), warp: defaultWarp() };
+  ensureLayerDefaults(layer);
+  assert.ok(layer.transport);
+  assert.equal(layer.sourceMode, "single");
+  assert.deepEqual(layer.playlist, { items: [], cursor: -1 });
 });

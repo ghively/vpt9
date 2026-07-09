@@ -55,6 +55,13 @@ export function defaultWarp() {
   };
 }
 
+// Per-layer transport: play/pause + rate/loop/pan/vol for the layer's current source.
+// Defaults are "stopped, neutral" — a freshly created or backfilled layer never
+// starts itself playing or looping on its own.
+export function defaultTransport() {
+  return { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1 };
+}
+
 const DEFAULT_STATE = {
   layers: {
     "layer-1": {
@@ -67,6 +74,9 @@ const DEFAULT_STATE = {
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
       fx: defaultFx(),
       warp: defaultWarp(),
+      transport: defaultTransport(),
+      sourceMode: "single",
+      playlist: { items: [], cursor: -1 },
     },
     "layer-2": {
       id: "layer-2",
@@ -78,6 +88,9 @@ const DEFAULT_STATE = {
       mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
       fx: defaultFx(),
       warp: defaultWarp(),
+      transport: defaultTransport(),
+      sourceMode: "single",
+      playlist: { items: [], cursor: -1 },
     },
   },
 
@@ -161,7 +174,13 @@ function fillMissing(target, defaults) {
 }
 
 export function ensureLayerDefaults(layer) {
-  fillMissing(layer, { fx: defaultFx(), warp: defaultWarp() });
+  fillMissing(layer, {
+    fx: defaultFx(),
+    warp: defaultWarp(),
+    transport: defaultTransport(),
+    sourceMode: "single",
+    playlist: { items: [], cursor: -1 },
+  });
 }
 
 export function ensureStateDefaults(state) {
