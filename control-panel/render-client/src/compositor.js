@@ -33,12 +33,18 @@ export class Compositor {
     this.canvas.height = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
   }
 
-  // layersById: the state's `layers` map (id -> layer object)
-  setLayers(layersById) {
+  // layersById: state's `layers` map. sourceBank/media: state.sourceBank/state.media,
+  // needed so slot-sourced and playlist-media-sourced layers can resolve what they
+  // actually display (see LayerStack.effectiveSource/setSourceContext).
+  setLayers(layersById, sourceBank, media) {
     const incoming = Object.values(layersById || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const incomingIds = new Set(incoming.map((l) => l.id));
 
-    for (const layer of incoming) this.layerStack.setLayerSource(layer.id, layer.source);
+    this.layerStack.setSourceContext(sourceBank, media);
+    for (const layer of incoming) {
+      const effective = this.layerStack.effectiveSource(layer);
+      if (effective) this.layerStack.setLayerSource(layer.id, effective, { loop: this.layerStack.shouldLoop(layer) });
+    }
     for (const id of [...this.layerStack.entries.keys()]) {
       if (!incomingIds.has(id)) this.layerStack.removeLayer(id);
     }

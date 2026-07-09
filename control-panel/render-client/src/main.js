@@ -23,9 +23,10 @@ const pipOverlay = new PipOverlay(pipRoot, screenId);
 
 let state = { layers: {}, screens: {}, pip: {}, audioOwnerScreenId: null };
 
+let isAudioOwner = false;
 function applyDerivedState() {
-  const isAudioOwner = state.audioOwnerScreenId === screenId;
-  compositor.setLayers(state.layers);
+  isAudioOwner = state.audioOwnerScreenId === screenId;
+  compositor.setLayers(state.layers, state.sourceBank, state.media);
   compositor.setWarp(state.screens?.[screenId]?.warp);
   compositor.setMuted(!isAudioOwner);
   compositor.setMaster(state.master ?? 1);
@@ -53,6 +54,23 @@ const socket = connectControlPlane(wsUrl, {
     if (applyBatch(state, updates)) applyDerivedState();
   },
 });
+
+compositor.layerStack.onClipEnded = (layerId) => {
+  if (!isAudioOwner || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: "clipEnded", layerId }));
+};
+
+// Per-layer playback-position telemetry: mirrors the ~250ms preview interval below, but
+// much less frequent since it's just a number, not a JPEG, and only the audio-owner
+// screen's positions are authoritative (see the audio-owner policy in README).
+setInterval(() => {
+  if (!isAudioOwner || socket.readyState !== WebSocket.OPEN) return;
+  for (const [layerId, entry] of compositor.layerStack.entries) {
+    if (entry.videoEl && !entry.videoEl.paused) {
+      socket.send(JSON.stringify({ type: "transportStatus", layerId, position: entry.videoEl.currentTime }));
+    }
+  }
+}, 500);
 
 // Preview pusher for the control panel's warp editor: a small, infrequent JPEG of this
 // screen's actual composited+warped output, sent as its own message type (never stored

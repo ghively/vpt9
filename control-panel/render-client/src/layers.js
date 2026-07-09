@@ -120,6 +120,7 @@ export class LayerStack {
     this.sourceBank = new SourceBank(gl);
     this.slots = [];
     this.media = {};
+    this.onClipEnded = null; // settable callback: (layerId) => void, wired by compositor.js/main.js
   }
 
   setMediaOrigin(origin) {
@@ -130,6 +131,34 @@ export class LayerStack {
   setSourceContext(slots, media) {
     this.slots = slots ?? [];
     this.media = media ?? {};
+  }
+
+  // When sourceMode is "playlist", the layer's displayed content is
+  // playlist.items[cursor].ref, not layer.source directly — layer.source is only the
+  // fallback for sourceMode "single". ref shape matches SourceRef: {type:"media",
+  // mediaId} resolves through the media library the same way a direct video URL would
+  // (media items are served at /media/<filename>, matching mediaUrlFor's convention in
+  // source-bank.js); {type:"slot", slotId} resolves through this.sourceBank.
+  effectiveSource(layer) {
+    if (layer.sourceMode !== "playlist") return layer.source;
+    const item = layer.playlist?.items?.[layer.playlist.cursor];
+    if (!item) return layer.source;
+    const ref = item.ref;
+    if (ref?.type === "slot") return { type: "slot", slotId: ref.slotId };
+    if (ref?.type === "media") {
+      const mediaItem = this.media?.[ref.mediaId];
+      return mediaItem ? { type: "video", url: `/media/${mediaItem.filename}` } : null;
+    }
+    return null;
+  }
+
+  // Whether this layer's <video> should loop. Single-mode and looping-still playlists
+  // loop as before; a playlist VIDEO item with no fixed duration means "play through to
+  // end" — it must NOT loop, or the native `ended` event this relies on never fires.
+  shouldLoop(layer) {
+    if (layer.sourceMode !== "playlist") return true;
+    const item = layer.playlist?.items?.[layer.playlist.cursor];
+    return item?.duration != null;
   }
 
   // Library media is stored as a host-independent "/media/<file>" path so a saved show
@@ -170,6 +199,12 @@ export class LayerStack {
       entry.videoEl.removeAttribute("src");
       entry.videoEl.load();
       entry.videoEl = null;
+      if (entry._audioNodes) {
+        entry._audioNodes.gainNode.disconnect();
+        entry._audioNodes.pannerNode?.disconnect();
+        entry._audioNodes = null;
+        entry._audioNodesFor = null;
+      }
     }
     if (entry.stream) {
       for (const track of entry.stream.getTracks()) track.stop();
@@ -184,7 +219,7 @@ export class LayerStack {
     entry.imgUploaded = false;
   }
 
-  setLayerSource(id, source) {
+  setLayerSource(id, source, { loop = true } = {}) {
     const entry = this._entry(id);
     if (source?.type === "video") {
       const url = this._resolveUrl(source.url);
@@ -196,9 +231,12 @@ export class LayerStack {
         const video = document.createElement("video");
         video.src = url;
         video.crossOrigin = "anonymous";
-        video.loop = true;
+        video.loop = loop;
         video.muted = true; // corrected by setLayerMuted() per the audio-owner policy
         video.playsInline = true;
+        video.addEventListener("ended", () => {
+          if (this.onClipEnded) this.onClipEnded(id);
+        });
         video.play().catch((err) => console.warn(`[layers] could not play "${url}":`, err.message));
         entry.videoEl = video;
       } else {
@@ -252,6 +290,92 @@ export class LayerStack {
   setLayerMuted(id, muted) {
     const entry = this.entries.get(id);
     if (entry?.videoEl) entry.videoEl.muted = muted;
+  }
+
+  // Applies transport control (play/pause, rate, loop in/out via manual seek, palindrome
+  // direction, pan/vol via Web Audio) to a layer's <video> element. Reverse playback
+  // (negative rate) is NOT implemented — no browser allows a negative
+  // HTMLMediaElement.playbackRate; VPT8's own reverse-rate support has no browser
+  // equivalent and is an explicit, stated non-goal (design spec, Section 3).
+  applyTransport(layer, entry) {
+    const video = entry.videoEl;
+    if (!video) return;
+    const t = layer.transport;
+    if (!t) return;
+
+    if (t.playing && video.paused) video.play().catch(() => {});
+    if (!t.playing && !video.paused) video.pause();
+    video.playbackRate = Math.max(0.0625, t.rate ?? 1); // browsers reject 0 and clamp very small values inconsistently; floor it
+
+    if (t.loopIn != null && t.loopOut != null && t.loopOut > t.loopIn) {
+      if (!entry._loopHandler) {
+        entry._loopDir = 1;
+        entry._loopHandler = () => {
+          const layerT = entry._latestTransport;
+          if (!layerT || layerT.loopIn == null || layerT.loopOut == null) return;
+          if (layerT.loopMode === "palindrome") {
+            if (entry._loopDir === 1 && video.currentTime >= layerT.loopOut) {
+              entry._loopDir = -1;
+              video.pause();
+              this._startPalindromeReverse(entry, layerT);
+            } else if (entry._loopDir === -1) {
+              // handled by _startPalindromeReverse's own rAF loop, not here
+            }
+          } else if (video.currentTime >= layerT.loopOut) {
+            video.currentTime = layerT.loopIn;
+          }
+        };
+        video.addEventListener("timeupdate", entry._loopHandler);
+      }
+      entry._latestTransport = t;
+    }
+
+    // One shared AudioContext for the whole LayerStack (this.audioCtx, created lazily
+    // below), not one per layer — browsers cap the number of live AudioContexts (around
+    // 6 in Chrome), and this render client can have far more layers than that.
+    // entry._audioNodes is tied to THIS video element's identity (entry._audioNodesFor)
+    // so a source change that replaces entry.videoEl (via _stopSource) gets fresh nodes
+    // instead of silently keeping pan/vol routed to a dead element — createMediaElementSource
+    // can only be called once per element for its lifetime, so this check must never
+    // re-call it on the same still-live element either.
+    if (entry._audioNodesFor !== video && window.AudioContext) {
+      try {
+        if (!this.audioCtx) this.audioCtx = new AudioContext();
+        const source = this.audioCtx.createMediaElementSource(video);
+        const gainNode = this.audioCtx.createGain();
+        const pannerNode = this.audioCtx.createStereoPanner ? this.audioCtx.createStereoPanner() : null;
+        if (pannerNode) { source.connect(pannerNode); pannerNode.connect(gainNode); }
+        else source.connect(gainNode);
+        gainNode.connect(this.audioCtx.destination);
+        entry._audioNodes = { gainNode, pannerNode };
+        entry._audioNodesFor = video;
+      } catch {
+        entry._audioNodes = null;
+        entry._audioNodesFor = video; // still mark as "attempted for this element" so we don't retry every frame
+      }
+    }
+    if (entry._audioNodes) {
+      entry._audioNodes.gainNode.gain.value = t.vol ?? 1;
+      if (entry._audioNodes.pannerNode) entry._audioNodes.pannerNode.pan.value = t.pan ?? 0;
+    } else {
+      video.volume = t.vol ?? 1;
+    }
+  }
+
+  _startPalindromeReverse(entry, transport) {
+    const video = entry.videoEl;
+    const step = () => {
+      if (entry._loopDir !== -1 || !video) return;
+      const dt = (1 / 60) * Math.abs(transport.rate ?? 1);
+      video.currentTime = Math.max(transport.loopIn, video.currentTime - dt);
+      if (video.currentTime <= transport.loopIn) {
+        entry._loopDir = 1;
+        video.play().catch(() => {});
+        return;
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   removeLayer(id) {
@@ -317,6 +441,8 @@ export class LayerStack {
       } else if (!isColor) {
         this._uploadSourceFrame(entry);
       }
+
+      if (!isColor && !isSlot) this.applyTransport(layer, entry);
 
       // Effects chain: only entered when some stage is active. For color layers the
       // chain's point pass synthesizes the fill, so the blend pass then treats the
