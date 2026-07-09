@@ -136,6 +136,14 @@ const DEFAULT_STATE = {
   // WebMIDI CC bindings (the panel browser owns the MIDI hardware; mappings live in
   // shared state so they survive reloads and can be edited from any panel).
   midiMap: {},
+
+  // Shared, optionally-hot-swappable source slots (VPT8's 8-slot sourcebank.maxpat).
+  // Layers default to a direct `source` (unchanged); pointing a layer's source at
+  // { type: "slot", slotId } instead makes it track whichever content this slot holds,
+  // live. A slot's content is either a media-library reference or a "mix" — two other
+  // sources (each a media/camera ref, or a slot reference — but never another mix-
+  // holding slot, enforced below) crossfaded by a chosen blend mode.
+  sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null })),
 };
 
 // `applyUpdate` only patches EXISTING leaves, so state loaded from an older
@@ -163,6 +171,7 @@ export function ensureStateDefaults(state) {
     midiMap: {},
     master: 1,
     media: {},
+    sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null })),
   });
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
   for (const preset of Object.values(state.presets ?? {})) {
@@ -220,12 +229,57 @@ export function walkToParent(state, keys) {
   return node;
 }
 
+// A slot's content may be a "mix" of two other sources; a mix's own a/b refs may point
+// at a media-holding slot but never at another mix-holding slot (directly, or through
+// one level of slot indirection) — otherwise a self- or mutually-referencing mix would
+// recurse without bound at render time. Enforced here, the sole write path for
+// client-originated state changes; render-client/src/patch.js intentionally does NOT
+// duplicate this guard (see docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md
+// Global Constraints — it only ever applies server-broadcast, already-validated state).
+function slotContentType(state, slotId) {
+  const slot = (state.sourceBank ?? []).find((s) => s.id === slotId);
+  return slot?.content?.type ?? null;
+}
+
+function refIsMixSlot(state, ref) {
+  if (ref?.type !== "slot") return false;
+  return slotContentType(state, ref.slotId) === "mix";
+}
+
+// True if some OTHER slot's mix currently uses `slotId` as an input — i.e. turning
+// `slotId` itself into a mix now would retroactively create a mix-of-mix through that
+// other slot (the ordering hole described above).
+function isUsedAsMixInputElsewhere(state, slotId) {
+  return (state.sourceBank ?? []).some((s) => {
+    if (s.id === slotId || s.content?.type !== "mix") return false;
+    return (s.content.a?.type === "slot" && s.content.a.slotId === slotId) || (s.content.b?.type === "slot" && s.content.b.slotId === slotId);
+  });
+}
+
+export function wouldCreateMixCycle(state, path, value) {
+  // Path shape: "sourceBank.<index>.content"
+  const match = /^sourceBank\.(\d+)\.content$/.exec(path);
+  if (!match || value?.type !== "mix") return false;
+  const thisSlot = state.sourceBank?.[Number(match[1])];
+  if (!thisSlot) return false;
+  // Self-reference: always a cycle, regardless of this slot's current content type.
+  if (value.a?.type === "slot" && value.a.slotId === thisSlot.id) return true;
+  if (value.b?.type === "slot" && value.b.slotId === thisSlot.id) return true;
+  // Direct: an input that's itself a mix-holding slot right now.
+  if (refIsMixSlot(state, value.a) || refIsMixSlot(state, value.b)) return true;
+  // Ordering hole: this slot is already someone else's mix input — becoming a mix now
+  // would make that other slot a mix-of-mix without ever revalidating its own write.
+  if (isUsedAsMixInputElsewhere(state, thisSlot.id)) return true;
+  return false;
+}
+
 // Patches an EXISTING leaf ("layers.layer-1.opacity"). Never creates new keys —
 // use applyCreate for that. Returns true if the path was valid and the value changed.
 export function applyUpdate(state, path, value) {
   const keys = path.split(".");
   const last = keys.pop();
   if (isUnsafePath(keys) || UNSAFE_KEYS.has(last)) return false;
+  if (wouldCreateMixCycle(state, path, value)) return false;
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   if (node[last] === value) return false;
@@ -257,6 +311,24 @@ export function applyDelete(state, path) {
   if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   delete node[last];
   return true;
+}
+
+// Called after a media entry or a source-bank slot is deleted: clears any reference to
+// it rather than leaving a dangling id. A slot referencing deleted media becomes empty
+// (content: null). A mix slot whose a/b referenced a deleted media/slot passes the
+// other input through at full weight rather than rendering black — matches how the
+// design spec defines "missing input" behavior for a mix.
+export function resolveDanglingSourceRefs(state, kind, id) {
+  const refMatches = (ref) => (kind === "media" ? ref?.type === "media" && ref.mediaId === id : ref?.type === "slot" && ref.slotId === id);
+  for (const slot of state.sourceBank ?? []) {
+    if (!slot.content) continue;
+    if (slot.content.type === "media" && kind === "media" && slot.content.mediaId === id) {
+      slot.content = null;
+    } else if (slot.content.type === "mix") {
+      if (refMatches(slot.content.a)) slot.content = { ...slot.content, a: null };
+      if (refMatches(slot.content.b)) slot.content = { ...slot.content, b: null };
+    }
+  }
 }
 
 export function nextLayerOrder(state) {

@@ -25,7 +25,7 @@ export function mediaTypeForName(name) {
 import { createReadStream, createWriteStream, statSync, existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { applyCreate, applyDelete } from "./state.js";
+import { applyCreate, applyDelete, resolveDanglingSourceRefs } from "./state.js";
 
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
 
@@ -155,8 +155,10 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
       try { unlinkSync(join(mediaDir, entry.filename)); } catch { /* already gone */ }
     }
     applyDelete(state, `media.${id}`);
+    resolveDanglingSourceRefs(state, "media", id);
     scheduleSave();
     broadcast({ type: "delete", path: `media.${id}` });
+    broadcast({ type: "state", state }); // slot content may have changed too
     sendJson(res, 200, { ok: true });
   }
 

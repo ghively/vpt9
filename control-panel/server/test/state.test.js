@@ -194,3 +194,16 @@ test("ensureStateDefaults backfills media as {} on an older state without it", (
   ensureStateDefaults(state);
   assert.deepEqual(state.media, {});
 });
+
+test("DEFAULT_STATE has 8 empty source-bank slots", () => {
+  const state = structuredClone(loadState("/nonexistent/path/for/test.json"));
+  assert.equal(state.sourceBank.length, 8);
+  assert.equal(state.sourceBank[0].id, "slot-1");
+  assert.equal(state.sourceBank[0].content, null);
+});
+
+test("ensureStateDefaults backfills sourceBank as 8 empty slots on an older state without it", () => {
+  const state = { layers: {}, presets: {} };
+  ensureStateDefaults(state);
+  assert.equal(state.sourceBank.length, 8);
+});
