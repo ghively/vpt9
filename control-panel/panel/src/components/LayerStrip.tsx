@@ -4,7 +4,7 @@ import { Fader } from "./primitives/Fader";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { FxDrawer } from "./FxDrawer";
-import { BLEND_MODES, type Layer, type MediaItem } from "./types";
+import { BLEND_MODES, type Layer, type MediaItem, type SourceBankSlot } from "./types";
 
 export interface LayerNeighbors {
   /** Whether a move toward the front / back of the stack is possible. */
@@ -25,6 +25,8 @@ export interface LayerStripProps {
   canPaste?: boolean;
   /** Library items offered in the source picker when the layer source is a URL. */
   media?: MediaItem[];
+  /** Source-bank slots offered in the source picker when the layer source is "Shared Slot". */
+  sourceBank?: SourceBankSlot[];
   /** Opens the on-canvas mask editor for this layer. */
   onEditMask?: () => void;
   /** Opens the on-canvas warp editor for this layer. */
@@ -50,6 +52,7 @@ export function LayerStrip({
   onPaste,
   canPaste,
   media,
+  sourceBank,
   onEditMask,
   onEditWarp,
   onApplyCornerPreset,
@@ -84,6 +87,7 @@ export function LayerStrip({
               { value: "video", label: "Video URL" },
               { value: "color", label: "Solid color" },
               { value: "camera", label: "Camera" },
+              { value: "slot", label: "Shared Slot" },
             ]}
             onChange={(v) =>
               onUpdate?.(
@@ -92,13 +96,21 @@ export function LayerStrip({
                   ? { type: "color", color: layer.source?.color ?? [0.5, 0.5, 0.5] }
                   : v === "camera"
                     ? { type: "camera" }
-                    : { type: "video", url: layer.source?.url ?? "" },
+                    : v === "slot"
+                      ? { type: "slot", slotId: sourceBank?.[0]?.id ?? "slot-1" }
+                      : { type: "video", url: layer.source?.url ?? "" },
               )
             }
           />
           <div className="source-field">
             {layer.source?.type === "camera" ? (
               <span className="mono source-note">live capture</span>
+            ) : layer.source?.type === "slot" ? (
+              <Select
+                value={layer.source.slotId ?? ""}
+                options={(sourceBank ?? []).map((s) => ({ value: s.id, label: s.name }))}
+                onChange={(v) => onUpdate?.("source", { type: "slot", slotId: v })}
+              />
             ) : isColor ? (
               <input
                 type="color"

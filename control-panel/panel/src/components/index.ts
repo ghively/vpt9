@@ -44,6 +44,8 @@ export { FxDrawer } from "./FxDrawer";
 export type { FxDrawerProps } from "./FxDrawer";
 export { MediaLibrary } from "./MediaLibrary";
 export type { MediaLibraryProps } from "./MediaLibrary";
+export { SourceBankPanel } from "./SourceBankPanel";
+export type { SourceBankPanelProps } from "./SourceBankPanel";
 export { MobileTabBar } from "./MobileTabBar";
 export type { MobileTabBarProps, MobileTab } from "./MobileTabBar";
 export { MaskShapeOverlay } from "./MaskShapeOverlay";

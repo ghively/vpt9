@@ -11,6 +11,7 @@ import {
   MobileTabBar,
   PipWindows,
   PresetsBar,
+  SourceBankPanel,
   StatusLamp,
   TimerBank,
   WarpEditor,
@@ -236,10 +237,20 @@ export function App() {
     />
   );
 
+  const sourceBankPane = (
+    <SourceBankPanel
+      slots={state.sourceBank ?? []}
+      media={media}
+      onRename={actions.renameSourceBankSlot}
+      onSetContent={actions.setSourceBankSlotContent}
+    />
+  );
+
   const layerRack = (
     <ChannelRack
       layers={layers}
       media={media}
+      sourceBank={state.sourceBank}
       onUpdateLayer={actions.updateLayer}
       onMoveLayer={actions.moveLayer}
       onRemoveLayer={actions.removeLayer}
@@ -400,7 +411,7 @@ export function App() {
         {faceplate}
         <div className="mobile-view">
           {activeMobileTab === "layers" && <main className="workspace">{layerRack}</main>}
-          {activeMobileTab === "media" && <main className="workspace">{mediaPane}</main>}
+          {activeMobileTab === "media" && <main className="workspace">{mediaPane}{sourceBankPane}</main>}
           {activeMobileTab === "show" && <main className="workspace">{showControl}</main>}
           {activeMobileTab === "screen" && screenAside}
         </div>
@@ -416,6 +427,7 @@ export function App() {
         {/* Left column: the scene (layer rack) + the show (presets/cues/timers/modulation). */}
         <main className="workspace">
           {mediaPane}
+          {sourceBankPane}
           {layerRack}
           {showControl}
         </main>

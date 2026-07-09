@@ -3,9 +3,25 @@
 // so the components carry their own contract with no dependency on the app/container.
 
 export interface LayerSource {
-  type: "video" | "color" | "camera";
+  type: "video" | "color" | "camera" | "slot";
   url?: string;
   color?: [number, number, number];
+  slotId?: string;
+}
+
+export interface SourceRef {
+  type: "media" | "slot";
+  mediaId?: string;
+  slotId?: string;
+}
+
+export interface SourceBankSlot {
+  id: string;
+  name: string;
+  content:
+    | null
+    | { type: "media"; mediaId: string }
+    | { type: "mix"; a: SourceRef | null; b: SourceRef | null; blendMode: string; mix: number };
 }
 
 export type MediaKind = "video" | "gif" | "image";

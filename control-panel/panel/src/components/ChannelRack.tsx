@@ -1,6 +1,6 @@
 import { LayerStrip } from "./LayerStrip";
 import { Button } from "./primitives/Button";
-import type { Layer, MediaItem } from "./types";
+import type { Layer, MediaItem, SourceBankSlot } from "./types";
 
 export interface ChannelRackProps {
   layers: Layer[];
@@ -14,6 +14,8 @@ export interface ChannelRackProps {
   canPaste?: boolean;
   /** Library items, threaded to each strip's source picker. */
   media?: MediaItem[];
+  /** Source-bank slots, threaded to each strip's source picker. */
+  sourceBank?: SourceBankSlot[];
   /** Opens the on-canvas mask editor for a given layer. */
   onEditMaskLayer?: (id: string) => void;
   /** Opens the on-canvas warp editor for a given layer. */
@@ -33,6 +35,7 @@ export function ChannelRack({
   onPasteLayer,
   canPaste,
   media,
+  sourceBank,
   onEditMaskLayer,
   onEditWarpLayer,
   onApplyCornerPresetLayer,
@@ -53,6 +56,7 @@ export function ChannelRack({
             layer={layer}
             neighbors={neighbors}
             media={media}
+            sourceBank={sourceBank}
             onUpdate={(field, value) => onUpdateLayer?.(layer.id, field, value)}
             onMove={(dir) => onMoveLayer?.(layer.id, dir)}
             onRemove={() => onRemoveLayer?.(layer.id)}

@@ -275,6 +275,19 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     renameMedia(id: string, name: string) {
       send({ type: "update", path: `media.${id}.name`, value: name });
     },
+
+    // ── Source bank ──────────────────────────────────────────────────────────
+    // `sourceBank` is a fixed-length array addressed positionally by the existing
+    // applyUpdate dotted-path convention, so writes go by `index`; `slotId` is kept as
+    // a param too (unused here — prefixed `_` for noUnusedParameters) since callers
+    // building `content.a`/`content.b` refs need the id, not the array index, and the
+    // signature stays symmetric with `SourceBankPanelProps.onSetContent`.
+    setSourceBankSlotContent(_slotId: string, index: number, content: unknown) {
+      send({ type: "update", path: `sourceBank.${index}.content`, value: content });
+    },
+    renameSourceBankSlot(index: number, name: string) {
+      send({ type: "update", path: `sourceBank.${index}.name`, value: name });
+    },
   };
 }
 
