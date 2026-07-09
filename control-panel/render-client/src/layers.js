@@ -16,6 +16,13 @@ function mediaKindFromUrl(url) {
   return "video";
 }
 
+// True when a corner-pin warp is a no-op (unwarped identity quad) — used to keep an
+// untouched layer off the FxChain path, matching fxNeedsChain's zero-cost-when-default intent.
+function isIdentityCorners(corners) {
+  const id = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
+  return corners.length === 4 && corners.every((c, i) => c.x === id[i].x && c.y === id[i].y);
+}
+
 const BLEND_VERT = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -37,20 +44,7 @@ uniform int u_blendMode;
 uniform bool u_isColor;
 uniform vec3 u_layerColor;
 
-uniform bool u_maskEnabled;
-uniform int u_maskShape; // 0 = rect, 1 = ellipse
-uniform vec2 u_maskCenter;
-uniform vec2 u_maskRadius;
-uniform float u_maskFeather;
-
 out vec4 outColor;
-
-float maskAlpha() {
-  if (!u_maskEnabled) return 1.0;
-  vec2 d = (v_uv - u_maskCenter) / max(u_maskRadius, vec2(0.0001));
-  float dist = (u_maskShape == 1) ? length(d) : max(abs(d.x), abs(d.y));
-  return 1.0 - smoothstep(1.0 - u_maskFeather, 1.0, dist);
-}
 
 vec3 blend(vec3 base, vec3 top, int mode) {
   if (mode == 1) return base * top;
@@ -64,7 +58,7 @@ vec3 blend(vec3 base, vec3 top, int mode) {
 void main() {
   vec4 prev = texture(u_prev, v_uv);
   vec4 layer = u_isColor ? vec4(u_layerColor, 1.0) : texture(u_layer, v_uv);
-  float a = clamp(u_opacity, 0.0, 1.0) * layer.a * maskAlpha();
+  float a = clamp(u_opacity, 0.0, 1.0) * layer.a;
   vec3 blended = blend(prev.rgb, layer.rgb, u_blendMode);
   outColor = vec4(mix(prev.rgb, blended, a), 1.0);
 }`;
@@ -77,9 +71,7 @@ export class LayerStack {
     this.uniforms = Object.fromEntries(
       [
         ["u_prev", "prev"], ["u_layer", "layer"], ["u_opacity", "opacity"], ["u_blendMode", "blendMode"],
-        ["u_isColor", "isColor"], ["u_layerColor", "layerColor"], ["u_maskEnabled", "maskEnabled"],
-        ["u_maskShape", "maskShape"], ["u_maskCenter", "maskCenter"], ["u_maskRadius", "maskRadius"],
-        ["u_maskFeather", "maskFeather"],
+        ["u_isColor", "isColor"], ["u_layerColor", "layerColor"],
       ].map(([glName, key]) => [key, gl.getUniformLocation(this.program, glName)])
     );
 
@@ -279,11 +271,14 @@ export class LayerStack {
       // result as an ordinary texture.
       let layerTexture = entry.texture;
       let blendAsColor = isColor;
-      if (fxNeedsChain(layer.fx)) {
+      const needsMaskOrWarp = layer.mask?.enabled || layer.warp?.mode === "mesh" || (layer.warp?.corners && !isIdentityCorners(layer.warp.corners));
+      if (fxNeedsChain(layer.fx) || needsMaskOrWarp) {
         if (!entry.fxChain) entry.fxChain = new FxChain(gl, this.fxPasses, this.width, this.height);
         layerTexture = entry.fxChain.process(entry.texture, layer.fx, {
           isColor,
           color: isColor ? layer.source.color : [0, 0, 0],
+          mask: layer.mask,
+          warp: layer.warp,
         });
         blendAsColor = false;
       }
@@ -309,13 +304,6 @@ export class LayerStack {
       gl.uniform1i(u.blendMode, BLEND_INDEX[layer.blendMode] ?? 0);
       gl.uniform1i(u.isColor, blendAsColor ? 1 : 0);
       gl.uniform3fv(u.layerColor, blendAsColor ? layer.source.color : [0, 0, 0]);
-
-      const mask = layer.mask || {};
-      gl.uniform1i(u.maskEnabled, mask.enabled ? 1 : 0);
-      gl.uniform1i(u.maskShape, mask.shape === "rect" ? 0 : 1);
-      gl.uniform2f(u.maskCenter, mask.cx ?? 0.5, mask.cy ?? 0.5);
-      gl.uniform2f(u.maskRadius, mask.rx ?? 0.5, mask.ry ?? 0.5);
-      gl.uniform1f(u.maskFeather, mask.feather ?? 0.05);
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       readIdx = writeIdx;
