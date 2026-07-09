@@ -1,5 +1,6 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
 import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
+import { SourceBank } from "./source-bank.js";
 
 // Order is load-bearing: BLEND_INDEX derives each mode's shader-side integer from
 // array position, and panel/src/components/types.ts's BLEND_MODES must list the exact
@@ -116,10 +117,19 @@ export class LayerStack {
     this.fxPasses = new FxPasses(gl);
     this.entries = new Map(); // layer id -> { texture, videoEl, stream, currentUrl, fxChain }
     this.mediaOrigin = ""; // prefix for /media/... source urls (set from the ?ws= host)
+    this.sourceBank = new SourceBank(gl);
+    this.slots = [];
+    this.media = {};
   }
 
   setMediaOrigin(origin) {
     this.mediaOrigin = origin || "";
+    this.sourceBank.setMediaOrigin(origin);
+  }
+
+  setSourceContext(slots, media) {
+    this.slots = slots ?? [];
+    this.media = media ?? {};
   }
 
   // Library media is stored as a host-independent "/media/<file>" path so a saved show
@@ -295,20 +305,28 @@ export class LayerStack {
     gl.clearColor(...this.groundColor, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
+    this.sourceBank.updateAll(this.slots, this.media);
+
     for (const layer of layers) {
       const entry = this._entry(layer.id);
       const isColor = layer.source?.type === "color";
-      if (!isColor) this._uploadSourceFrame(entry);
+      const isSlot = layer.source?.type === "slot";
+      let sourceTexture = entry.texture;
+      if (isSlot) {
+        sourceTexture = this.sourceBank.resolveTexture(layer.source.slotId, this.slots, this.media) ?? entry.texture;
+      } else if (!isColor) {
+        this._uploadSourceFrame(entry);
+      }
 
       // Effects chain: only entered when some stage is active. For color layers the
       // chain's point pass synthesizes the fill, so the blend pass then treats the
       // result as an ordinary texture.
-      let layerTexture = entry.texture;
+      let layerTexture = sourceTexture;
       let blendAsColor = isColor;
       const needsMaskOrWarp = layer.mask?.enabled || layer.warp?.mode === "mesh" || (layer.warp?.corners && !isIdentityCorners(layer.warp.corners));
       if (fxNeedsChain(layer.fx) || needsMaskOrWarp) {
         if (!entry.fxChain) entry.fxChain = new FxChain(gl, this.fxPasses, this.width, this.height);
-        layerTexture = entry.fxChain.process(entry.texture, layer.fx, {
+        layerTexture = entry.fxChain.process(sourceTexture, layer.fx, {
           isColor,
           color: isColor ? layer.source.color : [0, 0, 0],
           mask: layer.mask,
