@@ -229,105 +229,74 @@ export function walkToParent(state, keys) {
   return node;
 }
 
-// A slot's content may be a "mix" of two other sources; a mix's own a/b refs may point
-// at a media-holding slot but never at another mix-holding slot (directly, or through
-// one level of slot indirection) — otherwise a self- or mutually-referencing mix would
-// recurse without bound at render time. Enforced here, the sole write path for
-// client-originated state changes; render-client/src/patch.js intentionally does NOT
-// duplicate this guard (see docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md
-// Global Constraints — it only ever applies server-broadcast, already-validated state).
-function slotContentType(state, slotId) {
-  const slot = (state.sourceBank ?? []).find((s) => s.id === slotId);
-  return slot?.content?.type ?? null;
-}
-
-// A mix's `a`/`b` are documented as always being a media/camera ref or a slot
-// reference — never an inline "mix" object of their own (see the comment above
-// slotContentType). Nothing else in this module enforces that shape, though: a client
-// can send ANY JSON as `value`, so `candidate.a`/`candidate.b` can themselves be
-// `{type: "mix", a: ..., b: ...}` literals. The direct/self checks below only ever
-// look at `candidate.a`/`candidate.b` one level deep, keyed on `.type === "slot"` — an
-// inline nested mix (type "mix", not "slot") sails straight past both, so a self- or
-// mix-slot-referencing "slot" ref one level further in is never seen. Recursing here
-// closes that: an inline "mix" ref is unwrapped and its own a/b are checked the same
-// way, all the way down. `depth` guards against a pathologically deep client-supplied
-// payload recursing unboundedly — past a few levels there's no legitimate use for
-// nested inline mixes at all (they're not even a documented shape), so treat hitting
-// the cap as a cycle rather than silently letting it through.
-function refCreatesCycle(state, thisSlotId, ref, depth = 0) {
-  if (ref == null || typeof ref !== "object") return false;
-  if (depth > 8) return true;
-  if (ref.type === "slot") return ref.slotId === thisSlotId || slotContentType(state, ref.slotId) === "mix";
-  if (ref.type === "mix") return refCreatesCycle(state, thisSlotId, ref.a, depth + 1) || refCreatesCycle(state, thisSlotId, ref.b, depth + 1);
+// A slot's content may be a "mix" of two other sources; a mix's own a/b refs must
+// never themselves be — or resolve to, in one hop, or via an inline literal at any
+// nesting depth — another mix. Not a general "no cycles in an arbitrary graph" check:
+// simply "no mix may reference any mix," full stop, re-verified over the WHOLE
+// sourceBank after every write that touches it.
+//
+// Five earlier rounds each patched one narrower shape of this (self-reference, direct
+// mix-of-mix, one-level slot indirection, an ordering hole where the OTHER slot's
+// write was never revalidated, a 4-step type-flip dance gated on pre-write state, and
+// an inline-literal wrapper that hid a slot ref from the ordering check) and each fix
+// left a structurally identical bypass one path/depth/step further out — because each
+// attempt reasoned locally about "what could this one write have changed" instead of
+// validating the actual resulting state. This replaces all of it — `wouldCreateMixCycle`
+// no longer enumerates write shapes at all: it reuses `walkToParent` (the same
+// write-simulation primitive `applyUpdate` itself uses, not a reimplementation of path-
+// walking) to apply the candidate write exactly the way applyUpdate would, then
+// re-validates every mix slot in the resulting array. No recursion or depth cap is
+// needed: an inline-nested mix literal is caught by the very first `type === "mix"`
+// check on that structure, regardless of how deep it's nested — the mere presence of a
+// nested mix is already the violation, nothing further needs tracing. Enforced here,
+// the sole write path for client-originated state changes; render-client/src/patch.js
+// intentionally does NOT duplicate this guard (see
+// docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md Global Constraints — it
+// only ever applies server-broadcast, already-validated state).
+function refResolvesToMix(ref, candidateSourceBank) {
+  if (!ref || typeof ref !== "object") return false;
+  if (ref.type === "mix") return true;
+  if (ref.type === "slot") {
+    // `.some(...)`, not `.find(...)` + optional-chain on the first match: sourceBank is
+    // otherwise a fixed-size array of unique-id slots, but nothing at this write layer
+    // enforces that uniqueness (see the `path === "sourceBank"` whole-array-replacement
+    // case below) — matching only the first same-id slot could let a real mix hide
+    // behind an earlier same-id decoy. Matching on ANY same-id slot holding a mix keeps
+    // the check correct even if id-uniqueness is ever violated upstream.
+    return candidateSourceBank.some((s) => s?.id === ref.slotId && s?.content?.type === "mix");
+  }
   return false;
 }
 
-// True if some OTHER slot's mix currently uses `slotId` as an input — i.e. turning
-// `slotId` itself into a mix now would retroactively create a mix-of-mix through that
-// other slot (the ordering hole described above).
-function isUsedAsMixInputElsewhere(state, slotId) {
-  return (state.sourceBank ?? []).some((s) => {
-    if (s.id === slotId || s.content?.type !== "mix") return false;
-    return (s.content.a?.type === "slot" && s.content.a.slotId === slotId) || (s.content.b?.type === "slot" && s.content.b.slotId === slotId);
-  });
-}
-
 export function wouldCreateMixCycle(state, path, value) {
-  // Path shape: "sourceBank.<index>.content" (whole-object replacement) or
-  // "sourceBank.<index>.content.<...anything>" (a write at ANY depth under content —
-  // "a", "a.slotId", "b.type", etc. — only reachable via applyUpdate's existing-leaf
-  // rule when that exact key path already exists). Rather than enumerate specific
-  // sub-path shapes (which only ever catches one depth and keeps getting bypassed one
-  // level deeper — see the fix history above this function), reconstruct what the
-  // slot's WHOLE content would become after the write and validate that.
-  const match = /^sourceBank\.(\d+)\.content(?:\.(.+))?$/.exec(path);
-  if (!match) return false;
+  // Every write that can affect sourceBank content must be reconstructed and
+  // re-validated — not just "sourceBank.<n>.content..." sub-paths. Nothing on the wire
+  // protocol restricts `path` to a sub-path shape (see index.js's `update` WS handler
+  // and OSC handler, which pass any client-supplied path straight through to
+  // applyUpdate), so a whole-array replacement at path "sourceBank" itself must be
+  // caught too, not just "sourceBank.".
+  if (path !== "sourceBank" && !path.startsWith("sourceBank.")) return false;
 
-  const index = Number(match[1]);
-  const subPath = match[2]; // undefined for a whole-content write; a dotted key path otherwise
-  const thisSlot = state.sourceBank?.[index];
-  if (!thisSlot) return false;
+  const candidateState = { sourceBank: structuredClone(state.sourceBank ?? []) };
+  const keys = path.split(".");
+  const last = keys.pop();
+  const node = walkToParent(candidateState, keys);
+  if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
+  node[last] = value;
 
-  let candidate;
-  if (subPath === undefined) {
-    candidate = value;
-  } else {
-    // Apply the write against a clone of the current content, at whatever depth it
-    // targets, so the reconstructed candidate reflects the post-write shape exactly —
-    // no matter how many segments deep the write reaches. Clone from `?? {}` (not bare
-    // `thisSlot.content`) so an empty slot (content: null) still walks/reconstructs
-    // instead of throwing — the Object.hasOwn check just below still rejects a
-    // sub-path write into a key that doesn't exist on that placeholder.
-    candidate = structuredClone(thisSlot.content ?? {});
-    const keys = subPath.split(".");
-    let node = candidate;
-    for (let i = 0; i < keys.length - 1; i++) {
-      if (node == null || typeof node !== "object") return false;
-      node = node[keys[i]];
+  // A whole-array replacement's value isn't necessarily even an array — a client can
+  // send any JSON as `value`. A non-array candidate can't contain a mix-of-mix as this
+  // invariant defines it, and iterating a non-iterable would throw. Whether sourceBank
+  // stays shaped like a well-formed slot array at all is a different, broader
+  // structural concern this check isn't chartered to enforce.
+  if (!Array.isArray(candidateState.sourceBank)) return false;
+
+  for (const slot of candidateState.sourceBank) {
+    if (slot?.content?.type !== "mix") continue;
+    if (refResolvesToMix(slot.content.a, candidateState.sourceBank) || refResolvesToMix(slot.content.b, candidateState.sourceBank)) {
+      return true;
     }
-    const lastKey = keys[keys.length - 1];
-    if (node == null || typeof node !== "object" || !Object.hasOwn(node, lastKey)) return false;
-    node[lastKey] = value;
   }
-
-  // Only a candidate whose RESULTING (post-write) type is "mix" can create a
-  // mix-of-mix. This is checked against `candidate` — what content becomes AFTER this
-  // write — never against `thisSlot.content`'s type BEFORE it. Gating on the pre-write
-  // type let a write sequence flip `content.type` away from "mix" and back across
-  // separate applyUpdate calls, each individually valid, to sneak a cyclic a/b through
-  // on a write where the precondition (keyed on stale pre-write state) always bailed
-  // out before reconstruction ever ran. Checking the reconstructed candidate instead
-  // means there's no state to dodge: whatever the write actually produces is what gets
-  // validated, every time. Also subsumes the old separate `value?.type !== "mix"`
-  // check on the whole-object branch — one gate covers both write shapes.
-  if (candidate?.type !== "mix") return false;
-
-  // Self-reference, and direct/nested mix-of-mix (including an inline "mix" object
-  // planted directly in a/b rather than reached via a slot ref — see refCreatesCycle).
-  if (refCreatesCycle(state, thisSlot.id, candidate.a) || refCreatesCycle(state, thisSlot.id, candidate.b)) return true;
-  // Ordering hole: this slot is already someone else's mix input — becoming a mix now
-  // would make that other slot a mix-of-mix without ever revalidating its own write.
-  if (isUsedAsMixInputElsewhere(state, thisSlot.id)) return true;
   return false;
 }
 
