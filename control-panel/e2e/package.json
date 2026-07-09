@@ -1,0 +1,17 @@
+{
+  "name": "vpt-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  },
+  "dependencies": {
+    "serve-handler": "^6.1.7",
+    "ws": "^8.21.0"
+  }
+}
