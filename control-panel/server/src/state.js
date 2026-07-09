@@ -241,9 +241,25 @@ function slotContentType(state, slotId) {
   return slot?.content?.type ?? null;
 }
 
-function refIsMixSlot(state, ref) {
-  if (ref?.type !== "slot") return false;
-  return slotContentType(state, ref.slotId) === "mix";
+// A mix's `a`/`b` are documented as always being a media/camera ref or a slot
+// reference — never an inline "mix" object of their own (see the comment above
+// slotContentType). Nothing else in this module enforces that shape, though: a client
+// can send ANY JSON as `value`, so `candidate.a`/`candidate.b` can themselves be
+// `{type: "mix", a: ..., b: ...}` literals. The direct/self checks below only ever
+// look at `candidate.a`/`candidate.b` one level deep, keyed on `.type === "slot"` — an
+// inline nested mix (type "mix", not "slot") sails straight past both, so a self- or
+// mix-slot-referencing "slot" ref one level further in is never seen. Recursing here
+// closes that: an inline "mix" ref is unwrapped and its own a/b are checked the same
+// way, all the way down. `depth` guards against a pathologically deep client-supplied
+// payload recursing unboundedly — past a few levels there's no legitimate use for
+// nested inline mixes at all (they're not even a documented shape), so treat hitting
+// the cap as a cycle rather than silently letting it through.
+function refCreatesCycle(state, thisSlotId, ref, depth = 0) {
+  if (ref == null || typeof ref !== "object") return false;
+  if (depth > 8) return true;
+  if (ref.type === "slot") return ref.slotId === thisSlotId || slotContentType(state, ref.slotId) === "mix";
+  if (ref.type === "mix") return refCreatesCycle(state, thisSlotId, ref.a, depth + 1) || refCreatesCycle(state, thisSlotId, ref.b, depth + 1);
+  return false;
 }
 
 // True if some OTHER slot's mix currently uses `slotId` as an input — i.e. turning
@@ -274,14 +290,15 @@ export function wouldCreateMixCycle(state, path, value) {
 
   let candidate;
   if (subPath === undefined) {
-    if (value?.type !== "mix") return false;
     candidate = value;
   } else {
-    if (thisSlot.content?.type !== "mix") return false;
     // Apply the write against a clone of the current content, at whatever depth it
     // targets, so the reconstructed candidate reflects the post-write shape exactly —
-    // no matter how many segments deep the write reaches.
-    candidate = structuredClone(thisSlot.content);
+    // no matter how many segments deep the write reaches. Clone from `?? {}` (not bare
+    // `thisSlot.content`) so an empty slot (content: null) still walks/reconstructs
+    // instead of throwing — the Object.hasOwn check just below still rejects a
+    // sub-path write into a key that doesn't exist on that placeholder.
+    candidate = structuredClone(thisSlot.content ?? {});
     const keys = subPath.split(".");
     let node = candidate;
     for (let i = 0; i < keys.length - 1; i++) {
@@ -293,11 +310,21 @@ export function wouldCreateMixCycle(state, path, value) {
     node[lastKey] = value;
   }
 
-  // Self-reference: always a cycle, regardless of this slot's current content type.
-  if (candidate.a?.type === "slot" && candidate.a.slotId === thisSlot.id) return true;
-  if (candidate.b?.type === "slot" && candidate.b.slotId === thisSlot.id) return true;
-  // Direct: an input that's itself a mix-holding slot right now.
-  if (refIsMixSlot(state, candidate.a) || refIsMixSlot(state, candidate.b)) return true;
+  // Only a candidate whose RESULTING (post-write) type is "mix" can create a
+  // mix-of-mix. This is checked against `candidate` — what content becomes AFTER this
+  // write — never against `thisSlot.content`'s type BEFORE it. Gating on the pre-write
+  // type let a write sequence flip `content.type` away from "mix" and back across
+  // separate applyUpdate calls, each individually valid, to sneak a cyclic a/b through
+  // on a write where the precondition (keyed on stale pre-write state) always bailed
+  // out before reconstruction ever ran. Checking the reconstructed candidate instead
+  // means there's no state to dodge: whatever the write actually produces is what gets
+  // validated, every time. Also subsumes the old separate `value?.type !== "mix"`
+  // check on the whole-object branch — one gate covers both write shapes.
+  if (candidate?.type !== "mix") return false;
+
+  // Self-reference, and direct/nested mix-of-mix (including an inline "mix" object
+  // planted directly in a/b rather than reached via a slot ref — see refCreatesCycle).
+  if (refCreatesCycle(state, thisSlot.id, candidate.a) || refCreatesCycle(state, thisSlot.id, candidate.b)) return true;
   // Ordering hole: this slot is already someone else's mix input — becoming a mix now
   // would make that other slot a mix-of-mix without ever revalidating its own write.
   if (isUsedAsMixInputElsewhere(state, thisSlot.id)) return true;
