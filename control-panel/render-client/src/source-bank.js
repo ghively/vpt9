@@ -33,14 +33,14 @@ vec3 blend(vec3 base, vec3 top, int mode) {
   if (mode == 9) return min(base, top);
   if (mode == 10) return clamp(base / max(1.0 - top, 0.0001), 0.0, 1.0);
   if (mode == 11) return base + top - 2.0 * base * top;
-  if (mode == 12) return clamp(1.0 - pow(1.0 - base, 2.0) / max(top, 0.0001), 0.0, 1.0);
+  if (mode == 12) return clamp(1.0 - pow(1.0 - base, vec3(2.0)) / max(top, 0.0001), 0.0, 1.0);
   if (mode == 13) return clamp((top * top) / max(1.0 - base, 0.0001), 0.0, 1.0);
   if (mode == 14) {
     float luminance = dot(base, vec3(0.2125, 0.7154, 0.0721));
     float mixAmount = clamp((luminance - 0.45) * 10.0, 0.0, 1.0);
     return mix(2.0 * top * base, 1.0 - 2.0 * (1.0 - top) * (1.0 - base), vec3(mixAmount));
   }
-  if (mode == 15) return clamp(1.0 - pow(1.0 - top, 2.0) / max(base, 0.0001), 0.0, 1.0);
+  if (mode == 15) return clamp(1.0 - pow(1.0 - top, vec3(2.0)) / max(base, 0.0001), 0.0, 1.0);
   if (mode == 16) return clamp(top / max(1.0 - base, 0.0001), 0.0, 1.0);
   if (mode == 17) return max(base, top);
   if (mode == 18) return mix(base, top, dot(base, vec3(0.2125, 0.7154, 0.0721)));
