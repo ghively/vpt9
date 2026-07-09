@@ -321,6 +321,17 @@ export function applyUpdate(state, path, value) {
 export function applyCreate(state, containerPath, value) {
   const keys = containerPath.split(".");
   if (isUnsafePath(keys)) return null;
+  // sourceBank is a fixed 8-slot array (see DEFAULT_STATE above) — slots are never
+  // created or deleted individually, only their `content`/`name` fields are ever
+  // legitimately updated via applyUpdate, addressed by index. applyCreate has no
+  // legitimate use case anywhere under sourceBank, and — unlike applyUpdate — it has
+  // no mix-cycle guard at all, so leaving it reachable here would let a client inject
+  // an arbitrary key into an existing slot or its content object (overwriting `a`/`b`
+  // with a self-reference, or replacing a slot's content with a ready-made mix-of-mix)
+  // completely unvalidated. Block outright rather than adapting the cycle guard to a
+  // second, differently-shaped write primitive — see
+  // docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md Task 7.
+  if (containerPath === "sourceBank" || containerPath.startsWith("sourceBank.")) return null;
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object") return null;
   const key = value?.id;

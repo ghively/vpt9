@@ -395,6 +395,48 @@ test("adversarial: a sub-path write to content.mix or content.blendMode never tr
   assert.equal(state.sourceBank[2].content.blendMode, "difference");
 });
 
+// --- applyCreate must never reach under sourceBank: a second write primitive that ----
+// --- bypasses wouldCreateMixCycle entirely (it's wired only into applyUpdate) -------
+
+test("applyCreate attack A: injecting a key into an existing mix's content object cannot smuggle a self-reference", () => {
+  // containerPath resolves to slot-3's *content* object (already a valid mix); the
+  // create's value.id ("a") becomes the injected key, silently overwriting content.a
+  // with a self-reference — with zero cycle validation, since applyCreate never called
+  // wouldCreateMixCycle at all.
+  const state = fixtureState();
+  const before = structuredClone(state.sourceBank);
+  const key = applyCreate(state, "sourceBank.2.content", { id: "a", type: "slot", slotId: "slot-3" });
+  assert.equal(key, null);
+  assert.deepEqual(state.sourceBank, before); // completely unchanged
+});
+
+test("applyCreate attack B: injecting a ready-made mix-of-mix as a slot's `content` key cannot bypass validation", () => {
+  // containerPath resolves to slot-2 itself (the slot object, not its content); the
+  // create's value.id ("content") becomes the injected key, replacing slot-2.content
+  // directly with a pre-built mix-of-mix object — again with no cycle check in the path.
+  const state = fixtureState();
+  const before = structuredClone(state.sourceBank);
+  const key = applyCreate(state, "sourceBank.1", {
+    id: "content",
+    type: "mix",
+    a: { type: "slot", slotId: "slot-3" },
+    b: { type: "media", mediaId: "media-1" },
+    blendMode: "screen",
+    mix: 0.5,
+  });
+  assert.equal(key, null);
+  assert.deepEqual(state.sourceBank, before); // completely unchanged
+});
+
+test("applyCreate refuses any containerPath under sourceBank, even ones with no mix involved at all", () => {
+  const state = fixtureState();
+  const before = structuredClone(state.sourceBank);
+  assert.equal(applyCreate(state, "sourceBank", { id: "slot-9", name: "Slot 9", content: null }), null);
+  assert.equal(applyCreate(state, "sourceBank.0", { id: "extra", value: 1 }), null);
+  assert.equal(applyCreate(state, "sourceBank.1.content", { id: "mediaId", value: "media-1" }), null);
+  assert.deepEqual(state.sourceBank, before); // completely unchanged
+});
+
 // --- resolveDanglingSourceRefs (unrelated to the cycle guard, but shares fixtures) ---
 
 test("resolveDanglingSourceRefs clears a slot's direct media reference", () => {
