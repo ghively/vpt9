@@ -3,7 +3,8 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import http from "node:http";
-import { mkdirSync, copyFileSync } from "node:fs";
+import os from "node:os";
+import { mkdirSync, copyFileSync, rmSync } from "node:fs";
 import handler from "serve-handler";
 import WebSocket from "ws";
 
@@ -12,7 +13,11 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 const WS_PORT = 8180;
 const RENDER_PORT = 8181;
 
-const MEDIA_DIR = path.join(REPO_ROOT, "server", "media");
+// Unique per spec + per process so parallel/repeated runs never share (and pollute)
+// the real control-panel/server/state.json or server/media used by dev/other specs.
+const TMP_BASE = path.join(os.tmpdir(), `vpt-e2e-media-compositing-${process.pid}`);
+const STATE_FILE = `${TMP_BASE}.json`;
+const MEDIA_DIR = `${TMP_BASE}-media`;
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
 // The server only serves filenames matching its server-generated `media-<token>.<ext>`
 // pattern (server/src/media.js's SAFE_FILENAME allowlist) — see media-helpers.test.js's
@@ -30,7 +35,7 @@ async function startServer() {
   }
   serverProc = spawn(process.execPath, ["src/index.js"], {
     cwd: path.join(REPO_ROOT, "server"),
-    env: { ...process.env, PORT: String(WS_PORT), MEDIA_DIR, OSC_PORT: "0" },
+    env: { ...process.env, PORT: String(WS_PORT), STATE_FILE, MEDIA_DIR, OSC_PORT: "0" },
     stdio: "pipe",
   });
   await new Promise((resolve, reject) => {
@@ -68,6 +73,8 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   staticServer?.close();
   serverProc?.kill();
+  rmSync(STATE_FILE, { force: true });
+  rmSync(MEDIA_DIR, { recursive: true, force: true });
 });
 
 test("a jpg and a gif source composite correctly and the gif animates", async ({ page }) => {

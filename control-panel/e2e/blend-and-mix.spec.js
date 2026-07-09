@@ -3,6 +3,8 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import http from "node:http";
+import os from "node:os";
+import { rmSync } from "node:fs";
 import handler from "serve-handler";
 import WebSocket from "ws";
 
@@ -12,10 +14,16 @@ const WS_PORT = 8184;
 const RENDER_PORT = 8185;
 let serverProc, staticServer;
 
+// Unique per spec + per process so parallel/repeated runs never share (and pollute)
+// the real control-panel/server/state.json or server/media used by dev/other specs.
+const TMP_BASE = path.join(os.tmpdir(), `vpt-e2e-blend-and-mix-${process.pid}`);
+const STATE_FILE = `${TMP_BASE}.json`;
+const MEDIA_DIR = `${TMP_BASE}-media`;
+
 async function startServer() {
   serverProc = spawn(process.execPath, ["src/index.js"], {
     cwd: path.join(REPO_ROOT, "server"),
-    env: { ...process.env, PORT: String(WS_PORT), MEDIA_DIR: path.join(REPO_ROOT, "server", "media"), OSC_PORT: "0" },
+    env: { ...process.env, PORT: String(WS_PORT), STATE_FILE, MEDIA_DIR, OSC_PORT: "0" },
     stdio: "pipe",
   });
   await new Promise((resolve, reject) => {
@@ -35,7 +43,12 @@ async function startStatic() {
 function wsSend(socket, message) { return new Promise((resolve) => socket.send(JSON.stringify(message), resolve)); }
 
 test.beforeAll(async () => { await startServer(); await startStatic(); });
-test.afterAll(async () => { staticServer?.close(); serverProc?.kill(); });
+test.afterAll(async () => {
+  staticServer?.close();
+  serverProc?.kill();
+  rmSync(STATE_FILE, { force: true });
+  rmSync(MEDIA_DIR, { recursive: true, force: true });
+});
 
 async function readCenterPixel(page) {
   return page.locator("canvas").evaluate((el) => {
