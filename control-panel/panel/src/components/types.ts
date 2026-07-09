@@ -97,6 +97,19 @@ export interface Warp {
   mesh: { size: number; points: Point[] };
 }
 
+/** Per-layer clip transport (play/rate/loop/pan/vol) — mirrors the sibling
+ *  `lane-server-state` branch's `layers.<id>.transport` shape. Not yet produced by this
+ *  branch's server; the panel only needs the shape to render the Transport FX section. */
+export interface Transport {
+  playing: boolean;
+  rate: number;
+  loopIn: number | null;
+  loopOut: number | null;
+  loopMode: "off" | "loop" | "palindrome";
+  pan: number;
+  vol: number;
+}
+
 export interface Screen {
   id: string;
   name: string;

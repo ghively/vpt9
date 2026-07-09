@@ -99,6 +99,10 @@ export function App() {
   const [canPaste, setCanPaste] = useState(false);
   // Pre-blackout master level, restored by the blackout toggle.
   const preBlackoutRef = useRef(1);
+  // Clip-transport scrub-position telemetry, keyed by layer id. Not `state` — this is
+  // high-frequency, non-persisted display telemetry (Task 14's transportStatus relay),
+  // so it lives outside the store/rerender path rather than as a reducer-driven field.
+  const transportPositionsRef = useRef<Record<string, number>>({});
 
   const preview = usePreviewBus(() => selectedRef.current);
 
@@ -149,6 +153,11 @@ export function App() {
     },
     onPreview(screenId, frame) {
       preview.push(screenId, frame);
+    },
+    onTransportStatus(layerId, position) {
+      // No forceRender here on purpose — this ticks at playback frame rate and is read
+      // directly off the ref by the (future) Transport scrub readout, not the store.
+      transportPositionsRef.current[layerId] = position;
     },
     onStatus(state, url) {
       setStatus({ state, label: `${state} · ${url}` });

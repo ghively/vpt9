@@ -288,6 +288,16 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     renameSourceBankSlot(index: number, name: string) {
       send({ type: "update", path: `sourceBank.${index}.name`, value: name });
     },
+
+    // ── Clip transport + playlist ───────────────────────────────────────────
+    // `layers.<id>.transport.<field>` is reachable via the existing generic
+    // `updateLayer(id, \`transport.${field}\`, value)` above — no dedicated wrapper needed.
+    setSourceMode(id: string, mode: "single" | "playlist") {
+      send({ type: "update", path: `layers.${id}.sourceMode`, value: mode });
+    },
+    setPlaylist(id: string, items: Array<{ ref: unknown; duration?: number }>) {
+      send({ type: "update", path: `layers.${id}.playlist`, value: { items, cursor: 0 } });
+    },
   };
 }
 
