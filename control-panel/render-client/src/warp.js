@@ -7,10 +7,14 @@ import { createProgram } from "./gl-utils.js";
 const WARP_VERT = `#version 300 es
 in vec2 a_uv;
 in vec2 a_dest; // destination position in 0..1 screen space, (0,0) = top-left
+uniform bool u_flipDest; // true when writing to the default framebuffer (GL's bottom-left
+                         // origin needs the destination Y flipped); false when writing to
+                         // an intermediate FBO (already top-left-origin, no flip needed).
 out vec2 v_sceneUv;
 void main() {
-  gl_Position = vec4(a_dest.x * 2.0 - 1.0, 1.0 - a_dest.y * 2.0, 0.0, 1.0);
-  v_sceneUv = vec2(a_uv.x, 1.0 - a_uv.y);
+  float destY = u_flipDest ? (1.0 - a_dest.y * 2.0) : (a_dest.y * 2.0 - 1.0);
+  gl_Position = vec4(a_dest.x * 2.0 - 1.0, destY, 0.0, 1.0);
+  v_sceneUv = vec2(a_uv.x, u_flipDest ? 1.0 - a_uv.y : a_uv.y);
 }`;
 
 const WARP_FRAG = `#version 300 es
@@ -61,6 +65,7 @@ export class ScreenWarp {
     this.program = createProgram(gl, WARP_VERT, WARP_FRAG);
     this.u_scene = gl.getUniformLocation(this.program, "u_scene");
     this.u_master = gl.getUniformLocation(this.program, "u_master");
+    this.u_flipDest = gl.getUniformLocation(this.program, "u_flipDest");
     this.a_uv = gl.getAttribLocation(this.program, "a_uv");
     this.a_dest = gl.getAttribLocation(this.program, "a_dest");
 
@@ -84,7 +89,10 @@ export class ScreenWarp {
   }
 
   // warp: { mode: "corner"|"mesh", corners: [{x,y}x4] TL,TR,BR,BL, mesh: { size, points } }
-  render(sceneTexture, warp, viewportWidth, viewportHeight, master = 1) {
+  // target: null (default framebuffer, on-screen orientation) | { framebuffer, width, height }
+  //   (an offscreen FBO, source-orientation, no display flip) — used by the per-layer warp
+  //   stage (render-client/src/layers.js) so the same geometry math serves both roles.
+  render(sceneTexture, warp, viewportWidth, viewportHeight, master = 1, target = null) {
     const gl = this.gl;
     let size, points;
     if (warp?.mode === "mesh" && warp.mesh?.points?.length) {
@@ -105,12 +113,13 @@ export class ScreenWarp {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.destBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, dest, gl.DYNAMIC_DRAW);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.framebuffer : null);
     gl.viewport(0, 0, viewportWidth, viewportHeight);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, target ? 0 : 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.useProgram(this.program);
+    gl.uniform1i(this.u_flipDest, target ? 0 : 1);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuffer);
     gl.enableVertexAttribArray(this.a_uv);
