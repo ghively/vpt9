@@ -198,6 +198,14 @@ export class LayerStack {
       entry.videoEl.srcObject = null;
       entry.videoEl.removeAttribute("src");
       entry.videoEl.load();
+      // Loop handler (attached by applyTransport) closes over this specific <video>
+      // element — detach it and clear the guard/state so applyTransport re-attaches a
+      // fresh handler to whatever element replaces this one, instead of silently no-op'ing
+      // forever because entry._loopHandler is still (falsely) truthy.
+      if (entry._loopHandler) entry.videoEl.removeEventListener("timeupdate", entry._loopHandler);
+      entry._loopHandler = null;
+      entry._loopDir = 1;
+      entry._latestTransport = null;
       entry.videoEl = null;
       if (entry._audioNodes) {
         entry._audioNodes.gainNode.disconnect();
@@ -221,6 +229,12 @@ export class LayerStack {
 
   setLayerSource(id, source, { loop = true } = {}) {
     const entry = this._entry(id);
+    // Record what was actually resolved and handed to us (the effective source, which
+    // for playlist layers differs from the layer's own static `source` field) so render()
+    // can key its slot-texture path off the same thing this function branched on, rather
+    // than recomputing/trusting layer.source directly.
+    entry.sourceType = source?.type ?? null;
+    entry.slotId = source?.type === "slot" ? source.slotId : null;
     if (source?.type === "video") {
       const url = this._resolveUrl(source.url);
       const kind = mediaKindFromUrl(source.url);
@@ -434,10 +448,13 @@ export class LayerStack {
     for (const layer of layers) {
       const entry = this._entry(layer.id);
       const isColor = layer.source?.type === "color";
-      const isSlot = layer.source?.type === "slot";
+      // Read from entry.sourceType/slotId (set by setLayerSource from the resolved
+      // effective source), not layer.source — for playlist layers the two can differ, and
+      // entry is the single source of truth for what's actually currently loaded.
+      const isSlot = entry.sourceType === "slot";
       let sourceTexture = entry.texture;
       if (isSlot) {
-        sourceTexture = this.sourceBank.resolveTexture(layer.source.slotId, this.slots, this.media) ?? entry.texture;
+        sourceTexture = this.sourceBank.resolveTexture(entry.slotId, this.slots, this.media) ?? entry.texture;
       } else if (!isColor) {
         this._uploadSourceFrame(entry);
       }
