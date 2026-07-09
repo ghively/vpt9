@@ -1,7 +1,19 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
 import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
 
-const BLEND_MODES = ["normal", "multiply", "screen", "overlay", "difference", "add"];
+// Order is load-bearing: BLEND_INDEX derives each mode's shader-side integer from
+// array position, and panel/src/components/types.ts's BLEND_MODES must list the exact
+// same 24 names in the exact same order (checked by
+// server/test/blend-modes-parity.test.js) so the panel's dropdown selects the mode it
+// visually shows. Formulas ported from vpt8 source code/shaders/v001 Mixers/*.fp.glsl —
+// see this plan's Global Constraints for the exact adaptation rule (myInput->top,
+// previousmix->base, outer amount-mix wrapper dropped, divisions guarded against 0).
+const BLEND_MODES = [
+  "normal", "multiply", "screen", "overlay", "difference", "add",
+  "average", "brightlight", "burn", "darken", "dodge", "exclude",
+  "freeze", "glow", "hardlight", "heat", "inverse", "lighten",
+  "lumablend", "negate", "reflect", "softlight", "stamp", "subtractive",
+];
 const BLEND_INDEX = Object.fromEntries(BLEND_MODES.map((mode, i) => [mode, i]));
 
 // Treat a source URL by its file extension. Library files always carry a correct,
@@ -52,7 +64,29 @@ vec3 blend(vec3 base, vec3 top, int mode) {
   if (mode == 3) return mix(2.0 * base * top, 1.0 - 2.0 * (1.0 - base) * (1.0 - top), step(0.5, base));
   if (mode == 4) return abs(base - top);
   if (mode == 5) return min(base + top, 1.0);
-  return top;
+  if (mode == 6) return base + top * 0.5;
+  if (mode == 7) return (1.0 - base) * base * top + base * (1.0 - (1.0 - base) * (1.0 - top));
+  if (mode == 8) return clamp(1.0 - (1.0 - base) / max(top, 0.0001), 0.0, 1.0);
+  if (mode == 9) return min(base, top);
+  if (mode == 10) return clamp(base / max(1.0 - top, 0.0001), 0.0, 1.0);
+  if (mode == 11) return base + top - 2.0 * base * top;
+  if (mode == 12) return clamp(1.0 - pow(1.0 - base, 2.0) / max(top, 0.0001), 0.0, 1.0);
+  if (mode == 13) return clamp((top * top) / max(1.0 - base, 0.0001), 0.0, 1.0);
+  if (mode == 14) {
+    float luminance = dot(base, vec3(0.2125, 0.7154, 0.0721));
+    float mixAmount = clamp((luminance - 0.45) * 10.0, 0.0, 1.0);
+    return mix(2.0 * top * base, 1.0 - 2.0 * (1.0 - top) * (1.0 - base), vec3(mixAmount));
+  }
+  if (mode == 15) return clamp(1.0 - pow(1.0 - top, 2.0) / max(base, 0.0001), 0.0, 1.0);
+  if (mode == 16) return clamp(top / max(1.0 - base, 0.0001), 0.0, 1.0);
+  if (mode == 17) return max(base, top);
+  if (mode == 18) return mix(base, top, dot(base, vec3(0.2125, 0.7154, 0.0721)));
+  if (mode == 19) return 1.0 - abs(1.0 - base - top);
+  if (mode == 20) return clamp((base * base) / max(1.0 - top, 0.0001), 0.0, 1.0);
+  if (mode == 21) return 2.0 * base * top + base * base - 2.0 * base * base * top;
+  if (mode == 22) return base + 2.0 * top - 1.0;
+  if (mode == 23) return base + top - 1.0;
+  return top; // mode 0, normal
 }
 
 void main() {

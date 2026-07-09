@@ -166,10 +166,8 @@ export interface TargetOption {
 }
 
 export const BLEND_MODES = [
-  "normal",
-  "multiply",
-  "screen",
-  "overlay",
-  "difference",
-  "add",
+  "normal", "multiply", "screen", "overlay", "difference", "add",
+  "average", "brightlight", "burn", "darken", "dodge", "exclude",
+  "freeze", "glow", "hardlight", "heat", "inverse", "lighten",
+  "lumablend", "negate", "reflect", "softlight", "stamp", "subtractive",
 ] as const;
