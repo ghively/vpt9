@@ -123,6 +123,65 @@ test("a legitimate sub-path write clearing content.b to null still works", () =>
   assert.deepEqual(state.sourceBank[2].content.a, { type: "slot", slotId: "slot-1" }); // untouched
 });
 
+// Regression: a re-review found that the first fix (matching only ".content.a" /
+// ".content.b" as whole sub-path shapes) still missed a write ONE level deeper —
+// "sourceBank.<n>.content.a.slotId" — because neither the whole-object regex nor the
+// "a"/"b" sub-path regex matched it, so wouldCreateMixCycle returned false without
+// inspecting anything, and applyUpdate's generic existing-leaf rule let the retarget
+// through. The guard must now be depth-general (reconstruct-and-validate), not another
+// pattern added to the enumeration.
+test("a write two levels deep (content.a.slotId) retargeting to a self-reference is rejected (regression: one-level-deeper bypass)", () => {
+  const state = fixtureState();
+  // slot-3 (index 2) holds a mix whose `a` is { type: "slot", slotId: "slot-1" }.
+  // Retarget just the `slotId` leaf to slot-3's own id — a self-reference — without
+  // ever writing to `content` or `content.a` as a whole object.
+  const ok = applyUpdate(state, "sourceBank.2.content.a.slotId", "slot-3");
+  assert.equal(ok, false);
+  assert.deepEqual(state.sourceBank[2].content, {
+    type: "mix",
+    a: { type: "slot", slotId: "slot-1" },
+    b: { type: "media", mediaId: "media-2" },
+    blendMode: "multiply",
+    mix: 0.5,
+  }); // rejected — state unchanged
+});
+
+test("a write two levels deep (content.b.slotId) retargeting to another mix-holding slot is rejected (direct mix-of-mix, regression: one-level-deeper bypass)", () => {
+  const state = fixtureState();
+  // Turn slot-2 (index 1, currently empty) into a mix of two media refs first — allowed.
+  assert.equal(
+    applyUpdate(state, "sourceBank.1.content", { type: "mix", a: { type: "media", mediaId: "media-1" }, b: { type: "slot", slotId: "slot-1" }, blendMode: "screen", mix: 0.5 }),
+    true,
+  );
+  // Now retarget only the `slotId` leaf of `b` (currently pointing at slot-1, a media
+  // slot) to slot-3, which is itself a mix-holding slot — a direct mix-of-mix reachable
+  // only by writing the `slotId` leaf two levels under `content`.
+  const ok = applyUpdate(state, "sourceBank.1.content.b.slotId", "slot-3");
+  assert.equal(ok, false);
+  assert.deepEqual(state.sourceBank[1].content.b, { type: "slot", slotId: "slot-1" }); // rejected — state unchanged
+});
+
+// A third level deep (e.g. "content.a.slotId.<something>") is not reachable: by the
+// time the walk gets to `slotId`, the node is a string primitive, and applyUpdate's
+// existing-leaf rule (`walkToParent` / the reconstruction loop above) requires every
+// intermediate segment to resolve to an object — `typeof node !== "object"` — so the
+// walk bails out (returns null / false) before ever reaching a fourth segment. There's
+// no object-valued leaf under a mix ref (`type` and `slotId`/`mediaId` are always
+// strings) for a write to tunnel through, so no test is constructible for "three
+// levels deep" — the depth-general guard's own object-type check is what closes that
+// off, not a depth limit.
+
+test("a legitimate two-level-deep write (content.a.mediaId on a media ref) still works", () => {
+  const state = fixtureState();
+  // slot-3's mix.a is currently { type: "slot", slotId: "slot-1" } — repoint slot-3's
+  // mix.a to a *different* plain media reference first so it has a mediaId leaf,
+  // exercising a legitimate two-level-deep write path (not just a"/"b" whole-ref writes).
+  assert.equal(applyUpdate(state, "sourceBank.2.content.a", { type: "media", mediaId: "media-1" }), true);
+  const ok = applyUpdate(state, "sourceBank.2.content.a.mediaId", "media-2");
+  assert.equal(ok, true);
+  assert.deepEqual(state.sourceBank[2].content.a, { type: "media", mediaId: "media-2" });
+});
+
 test("resolveDanglingSourceRefs clears a slot's direct media reference", () => {
   const state = fixtureState();
   resolveDanglingSourceRefs(state, "media", "media-1");

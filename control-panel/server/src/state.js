@@ -258,25 +258,39 @@ function isUsedAsMixInputElsewhere(state, slotId) {
 
 export function wouldCreateMixCycle(state, path, value) {
   // Path shape: "sourceBank.<index>.content" (whole-object replacement) or
-  // "sourceBank.<index>.content.a"/".content.b" (granular sub-path write, only
-  // reachable via applyUpdate's existing-leaf rule when that key is already present
-  // on content — i.e. content is already type "mix").
-  const wholeMatch = /^sourceBank\.(\d+)\.content$/.exec(path);
-  const subMatch = /^sourceBank\.(\d+)\.content\.(a|b)$/.exec(path);
-  if (!wholeMatch && !subMatch) return false;
+  // "sourceBank.<index>.content.<...anything>" (a write at ANY depth under content —
+  // "a", "a.slotId", "b.type", etc. — only reachable via applyUpdate's existing-leaf
+  // rule when that exact key path already exists). Rather than enumerate specific
+  // sub-path shapes (which only ever catches one depth and keeps getting bypassed one
+  // level deeper — see the fix history above this function), reconstruct what the
+  // slot's WHOLE content would become after the write and validate that.
+  const match = /^sourceBank\.(\d+)\.content(?:\.(.+))?$/.exec(path);
+  if (!match) return false;
 
-  const index = Number((wholeMatch ?? subMatch)[1]);
+  const index = Number(match[1]);
+  const subPath = match[2]; // undefined for a whole-content write; a dotted key path otherwise
   const thisSlot = state.sourceBank?.[index];
   if (!thisSlot) return false;
 
   let candidate;
-  if (wholeMatch) {
+  if (subPath === undefined) {
     if (value?.type !== "mix") return false;
     candidate = value;
   } else {
     if (thisSlot.content?.type !== "mix") return false;
-    const field = subMatch[2]; // "a" | "b"
-    candidate = { ...thisSlot.content, [field]: value };
+    // Apply the write against a clone of the current content, at whatever depth it
+    // targets, so the reconstructed candidate reflects the post-write shape exactly —
+    // no matter how many segments deep the write reaches.
+    candidate = structuredClone(thisSlot.content);
+    const keys = subPath.split(".");
+    let node = candidate;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (node == null || typeof node !== "object") return false;
+      node = node[keys[i]];
+    }
+    const lastKey = keys[keys.length - 1];
+    if (node == null || typeof node !== "object" || !Object.hasOwn(node, lastKey)) return false;
+    node[lastKey] = value;
   }
 
   // Self-reference: always a cycle, regardless of this slot's current content type.
