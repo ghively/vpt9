@@ -84,6 +84,9 @@ export interface Layer {
   mask: Mask;
   fx: Fx;
   warp: Warp;
+  transport: Transport;
+  sourceMode: "single" | "playlist";
+  playlist: Playlist;
 }
 
 export interface Point {
@@ -97,9 +100,8 @@ export interface Warp {
   mesh: { size: number; points: Point[] };
 }
 
-/** Per-layer clip transport (play/rate/loop/pan/vol) — mirrors the sibling
- *  `lane-server-state` branch's `layers.<id>.transport` shape. Not yet produced by this
- *  branch's server; the panel only needs the shape to render the Transport FX section. */
+/** Per-layer clip transport (play/rate/loop/pan/vol) — mirrors
+ *  `server/src/state.js`'s `defaultTransport()` shape exactly. */
 export interface Transport {
   playing: boolean;
   rate: number;
@@ -108,6 +110,24 @@ export interface Transport {
   loopMode: "off" | "loop" | "palindrome";
   pan: number;
   vol: number;
+}
+
+/** One playlist entry: a source reference (matches `SourceRef`'s media/slot shape) plus
+ *  an optional fixed duration in seconds — set for stills (auto-advance timer), absent
+ *  for video (advances on the native `ended` event instead; see
+ *  render-client/src/layers.js's `shouldLoop()`). */
+export interface PlaylistItem {
+  ref: SourceRef | null;
+  duration?: number;
+}
+
+/** Per-layer clip queue — mirrors `server/src/state.js`'s `defaultTransport`-adjacent
+ *  `playlist: { items: [], cursor: -1 }` layer default. `cursor` indexes the item
+ *  currently playing (-1 = none); advanced server-side by `automation.js`'s
+ *  `tickPlaylists` (stills) or by the render-client's `ended`-event relay (video). */
+export interface Playlist {
+  items: PlaylistItem[];
+  cursor: number;
 }
 
 export interface Screen {

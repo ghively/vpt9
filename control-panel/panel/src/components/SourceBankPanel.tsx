@@ -1,5 +1,6 @@
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
+import { Fader } from "./primitives/Fader";
 import type { SourceBankSlot, MediaItem, SourceRef } from "./types";
 import { BLEND_MODES } from "./types";
 
@@ -68,6 +69,14 @@ export function SourceBankPanel({ slots, media, onRename, onSetContent }: Source
                   options={BLEND_MODES.map((m) => ({ value: m, label: m }))}
                   onChange={(v) => onSetContent?.(slot.id, i, { ...slot.content, blendMode: v } as SourceBankSlot["content"])}
                 />
+                <div className="source-slot-mix">
+                  <Fader
+                    value={slot.content.mix}
+                    ariaLabel="Crossfade amount"
+                    onChange={(v) => onSetContent?.(slot.id, i, { ...slot.content, mix: v } as SourceBankSlot["content"])}
+                  />
+                  <span className="mono source-slot-mix-val">{Math.round(slot.content.mix * 100)}%</span>
+                </div>
               </>
             )}
           </div>

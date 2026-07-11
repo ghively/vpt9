@@ -1,6 +1,6 @@
 // Sample data for Storybook stories (and design-sync preview capture). Not used by the
 // app — purely to render components in isolation.
-import type { Cue, Fx, Layer, Lfo, MidiMapping, Pip, Preset, Screen, TargetOption, Timer, MediaItem } from "./types";
+import type { Cue, Fx, Layer, Lfo, MidiMapping, Pip, Preset, Screen, TargetOption, Timer, MediaItem, Transport, Playlist } from "./types";
 
 export const defaultFx: Fx = {
   flipH: false,
@@ -27,6 +27,10 @@ const identityCorners = [
 
 const defaultWarp = { mode: "corner" as const, corners: identityCorners, mesh: { size: 4, points: [] } };
 
+// Mirrors server/src/state.js's defaultTransport() / layer playlist default.
+export const defaultTransport: Transport = { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1 };
+const defaultPlaylist: Playlist = { items: [], cursor: -1 };
+
 export const sampleLayers: Layer[] = [
   {
     id: "layer-1",
@@ -38,6 +42,9 @@ export const sampleLayers: Layer[] = [
     mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
     fx: { ...defaultFx, zoom: 1.4, blur: 0.2, edgeBlend: { ...defaultFx.edgeBlend, right: 0.15 } },
     warp: defaultWarp,
+    transport: { ...defaultTransport, playing: true },
+    sourceMode: "single",
+    playlist: defaultPlaylist,
   },
   {
     id: "layer-2",
@@ -49,6 +56,15 @@ export const sampleLayers: Layer[] = [
     mask: { enabled: true, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
     fx: defaultFx,
     warp: defaultWarp,
+    transport: defaultTransport,
+    sourceMode: "playlist",
+    playlist: {
+      items: [
+        { ref: { type: "media", mediaId: "media-b2" }, duration: 8 },
+        { ref: { type: "media", mediaId: "media-c3" } },
+      ],
+      cursor: 0,
+    },
   },
 ];
 

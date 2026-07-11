@@ -105,6 +105,13 @@ html, body { height: 100%; }
   .media-row .media-name:focus { outline: none; }
   .media-size { font-size: 10px; color: var(--muted); width: 62px; text-align: right; flex-shrink: 0; }
 
+  /* Source-bank mix slot: A/B pickers + blend mode (unstyled selects, above) plus the
+     crossfade-amount fader — same label+range+readout shape as the layer strip's
+     opacity-field, just scoped to this row. */
+  .source-slot-mix { display: flex; align-items: center; gap: 8px; flex: 1 1 120px; min-width: 100px; }
+  .source-slot-mix input[type="range"] { flex: 1; min-width: 50px; }
+  .source-slot-mix-val { font-size: 10px; width: 34px; text-align: right; color: var(--muted); flex-shrink: 0; }
+
   /* Each layer is a channel strip: a signal rail down the left edge, then the
      controls. The rail lights tungsten so a glance reads the stack as channels. */
   .strip {
@@ -428,6 +435,22 @@ html, body { height: 100%; }
   }
   .fx-val { font-size: 10px; width: 32px; text-align: right; color: var(--muted); }
   .source-note { font-size: 10px; color: var(--muted); padding: 4px 0; display: block; }
+  /* Loop in/out (Transport section): a plain committed-on-blur number field, same
+     control shape as a Fader-backed .fx-control but with a fixed-width text input. */
+  .fx-num { width: 64px; flex: 0 0 auto; }
+
+  /* ── Playlist editor (FX drawer's Playlist section) ──────────────────────────
+     Forces its own line inside the Playlist section's flex-wrap row (it sits below
+     the single/playlist mode toggle), then lays out rows like the cue/timer lists. */
+  .playlist-editor { flex-basis: 100%; display: flex; flex-direction: column; gap: 4px; }
+  .playlist-row { display: flex; align-items: center; gap: 6px; }
+  .playlist-row select { flex: 1; min-width: 0; }
+  .playlist-idx {
+    font-size: 10px; font-weight: 700; color: var(--muted); width: 22px; padding: 4px 0;
+    background: var(--panel-sunken); border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm); text-align: center; flex-shrink: 0;
+  }
+  .playlist-duration { width: 120px; flex: 0 0 auto; }
 
   /* ── Cue transport ───────────────────────────────────────────────────────── */
   .transport { display: flex; align-items: stretch; gap: var(--space-2); margin-bottom: var(--space-3); }

@@ -275,6 +275,8 @@ export function App() {
           preset as "full" | "center" | "leftThird" | "rightThird" | "rotate90" | "rotate180" | "rotate270",
         )
       }
+      onSetSourceModeLayer={actions.setSourceMode}
+      onSetPlaylistLayer={actions.setPlaylist}
     />
   );
 

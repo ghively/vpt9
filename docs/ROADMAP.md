@@ -113,7 +113,14 @@ records — this doc doesn't repeat their findings, it points to them.
 >   (still-image items advance on a server-side wall-clock timer; video items advance only when the
 >   audio-owner render-client observes the native `ended` event and relays it — the server has no
 >   other way to know a video finished). Reverse/negative-rate playback is an explicit non-goal (no
->   browser allows negative `playbackRate` — a hard platform limit VPT8 itself doesn't face).
+>   browser allows negative `playbackRate` — a hard platform limit VPT8 itself doesn't face). A
+>   same-day follow-up closed a wiring gap this update had left behind: the panel's operator UI for
+>   this subsystem (`FxDrawer.tsx`'s Transport section — play/rate/pan/vol/loop mode/loop in-out —
+>   plus a new Playlist section with an ordered media-item editor and the single/playlist mode
+>   toggle) was never connected to the `Layer` type or the layer strip, so it was reachable only via
+>   raw WebSocket/OSC; it's now wired end-to-end through `ChannelRack`/`LayerStrip` to
+>   `actions.setSourceMode`/`actions.setPlaylist`, making the "full software-reachable parity" claim
+>   below accurate without a caveat.
 >
 > **Verification:** `control-panel/e2e/` is a new Playwright harness (didn't exist before this
 > work) with 4 spec files — `media-compositing`, `layer-warp`, `blend-and-mix`,

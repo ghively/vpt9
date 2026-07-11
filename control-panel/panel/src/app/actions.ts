@@ -1,4 +1,4 @@
-import type { Cue, Fx, Point } from "../components/types";
+import type { Cue, Fx, Point, PlaylistItem } from "../components/types";
 import type { PanelState } from "./store";
 import type { SocketMessage } from "./useSocket";
 
@@ -295,7 +295,7 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     setSourceMode(id: string, mode: "single" | "playlist") {
       send({ type: "update", path: `layers.${id}.sourceMode`, value: mode });
     },
-    setPlaylist(id: string, items: Array<{ ref: unknown; duration?: number }>) {
+    setPlaylist(id: string, items: PlaylistItem[]) {
       send({ type: "update", path: `layers.${id}.playlist`, value: { items, cursor: 0 } });
     },
   };

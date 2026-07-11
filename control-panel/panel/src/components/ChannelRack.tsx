@@ -22,6 +22,10 @@ export interface ChannelRackProps {
   onEditWarpLayer?: (id: string) => void;
   /** Applies a named corner-pin preset (from a strip's FX drawer) to a given layer. */
   onApplyCornerPresetLayer?: (id: string, preset: string) => void;
+  /** Switches a given layer between a single fixed source and a playlist. */
+  onSetSourceModeLayer?: (id: string, mode: "single" | "playlist") => void;
+  /** Replaces a given layer's whole playlist item queue. */
+  onSetPlaylistLayer?: (id: string, items: Layer["playlist"]["items"]) => void;
 }
 
 /** The full layer rack: strips shown top-of-stack first, plus an add button. */
@@ -39,6 +43,8 @@ export function ChannelRack({
   onEditMaskLayer,
   onEditWarpLayer,
   onApplyCornerPresetLayer,
+  onSetSourceModeLayer,
+  onSetPlaylistLayer,
 }: ChannelRackProps) {
   // `order` ascends bottom→top; show the top of the stack first, like the vanilla panel.
   const ascending = [...layers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -66,6 +72,8 @@ export function ChannelRack({
             onEditMask={() => onEditMaskLayer?.(layer.id)}
             onEditWarp={() => onEditWarpLayer?.(layer.id)}
             onApplyCornerPreset={(preset) => onApplyCornerPresetLayer?.(layer.id, preset)}
+            onSetSourceMode={(mode) => onSetSourceModeLayer?.(layer.id, mode)}
+            onSetPlaylist={(items) => onSetPlaylistLayer?.(layer.id, items)}
           />
         );
       })}

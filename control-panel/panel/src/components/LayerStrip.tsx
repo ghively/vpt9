@@ -33,6 +33,11 @@ export interface LayerStripProps {
   onEditWarp?: () => void;
   /** Applies a named corner-pin preset (from the FX drawer's Warp section) to this layer. */
   onApplyCornerPreset?: (preset: string) => void;
+  /** Switches this layer between a single fixed source and a playlist (FX drawer's
+   *  Playlist section). */
+  onSetSourceMode?: (mode: "single" | "playlist") => void;
+  /** Replaces this layer's whole playlist item queue (FX drawer's Playlist section). */
+  onSetPlaylist?: (items: Layer["playlist"]["items"]) => void;
 }
 
 function rgbToHex([r, g, b]: [number, number, number]): string {
@@ -56,6 +61,8 @@ export function LayerStrip({
   onEditMask,
   onEditWarp,
   onApplyCornerPreset,
+  onSetSourceMode,
+  onSetPlaylist,
 }: LayerStripProps) {
   const isColor = layer.source?.type === "color";
   const [fxOpen, setFxOpen] = useState(false);
@@ -187,12 +194,18 @@ export function LayerStrip({
         <FxDrawer
           fx={layer.fx}
           mask={layer.mask}
+          transport={layer.transport}
+          sourceMode={layer.sourceMode}
+          playlist={layer.playlist}
+          media={media}
           onUpdate={(field, value) => {
             if (field === "__cornerPreset__") onApplyCornerPreset?.(value as string);
             else onUpdate?.(field, value);
           }}
           onEditMask={onEditMask}
           onEditWarp={onEditWarp}
+          onSetSourceMode={onSetSourceMode}
+          onSetPlaylist={onSetPlaylist}
         />
       )}
     </div>

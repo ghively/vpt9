@@ -2,21 +2,24 @@ import { Fader } from "./primitives/Fader";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
 import { Select } from "./primitives/Select";
-import type { Fx, Mask, Transport } from "./types";
+import { TextField } from "./primitives/TextField";
+import type { Fx, Mask, MediaItem, Playlist, PlaylistItem, Transport } from "./types";
 
 export interface FxDrawerProps {
   fx: Fx;
   /** Mask geometry lives here too (center/size/feather); enable + shape stay on the
    *  strip. Optional so existing fx-only usage keeps working. */
   mask?: Mask;
-  /** Clip transport (play/rate/loop/pan/vol). Optional — server support for
-   *  `layers.<id>.transport` lands on a sibling branch; this section renders once a
-   *  caller supplies it. */
+  /** Clip transport (play/rate/loop/pan/vol/loop-in/loop-out). Optional so existing
+   *  fx-only usage keeps working; the section renders once a caller supplies it. */
   transport?: Transport;
   /** "single" | "playlist" — which source-selection mode the layer is in. */
-  sourceMode?: string;
+  sourceMode?: "single" | "playlist";
   /** Ordered clip queue for playlist mode. */
-  playlist?: { items: Array<{ ref: unknown; duration?: number }> };
+  playlist?: Playlist;
+  /** Library items offered by the playlist item picker — the same list LayerStrip's own
+   *  source picker already receives, threaded through unchanged. */
+  media?: MediaItem[];
   /** Field paths are relative to the layer ("fx.zoom", "mask.feather") so the container
    *  can prefix them with "layers.<id>." unchanged. */
   onUpdate?: (field: string, value: unknown) => void;
@@ -24,6 +27,10 @@ export interface FxDrawerProps {
   onEditMask?: () => void;
   /** Opens the on-canvas warp editor for this layer (Screen tab). */
   onEditWarp?: () => void;
+  /** Switches this layer between a single fixed source and a playlist. */
+  onSetSourceMode?: (mode: "single" | "playlist") => void;
+  /** Replaces the whole playlist item queue (it's one state leaf, like the cue list). */
+  onSetPlaylist?: (items: PlaylistItem[]) => void;
 }
 
 interface SliderSpec {
@@ -118,10 +125,105 @@ function FxSection({
   );
 }
 
+/** A plain numeric field committed on blur/Enter (TextField under the hood — there's no
+ *  dedicated number-input primitive), used for loop in/out and playlist item duration
+ *  where a free-typed value beats a bounded fader. Blank commits `undefined`/`null`
+ *  (caller-supplied) so "no fixed point" stays representable. */
+function NumField({
+  className,
+  value,
+  placeholder,
+  onCommit,
+}: {
+  className?: string;
+  value: number | null | undefined;
+  placeholder?: string;
+  onCommit: (value: number | null) => void;
+}) {
+  return (
+    <TextField
+      className={className}
+      value={value != null ? String(value) : ""}
+      placeholder={placeholder}
+      onCommit={(v) => onCommit(v.trim() === "" ? null : Math.max(0, Number(v) || 0))}
+    />
+  );
+}
+
+function playlistItemLabel(item: PlaylistItem, media: MediaItem[]): string {
+  if (item.ref?.type === "media") return media.find((m) => m.id === item.ref?.mediaId)?.name ?? "(missing media)";
+  if (item.ref?.type === "slot") return `Slot: ${item.ref.slotId}`;
+  return "(empty)";
+}
+
+/** The playlist's ordered item list: media picker + still duration + reorder/remove per
+ *  row, "+ Add item" to append. One state leaf ("layers.<id>.playlist") — edits replace
+ *  the whole array, same convention as CueList's cue editing. */
+function PlaylistEditor({
+  items,
+  media,
+  onChange,
+}: {
+  items: PlaylistItem[];
+  media: MediaItem[];
+  onChange: (items: PlaylistItem[]) => void;
+}) {
+  const patchItem = (index: number, patch: Partial<PlaylistItem>) => {
+    onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+  };
+  const removeItem = (index: number) => onChange(items.filter((_, i) => i !== index));
+  const moveItem = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= items.length) return;
+    const next = [...items];
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+  const addItem = () => onChange([...items, { ref: media[0] ? { type: "media", mediaId: media[0].id } : null }]);
+
+  return (
+    <div className="playlist-editor">
+      {items.length === 0 && <div className="empty-note mono">no items — add one below</div>}
+      {items.map((item, index) => (
+        <div className="playlist-row" key={index}>
+          <span className="playlist-idx mono">{String(index).padStart(2, "0")}</span>
+          <Select
+            value={item.ref?.type === "media" ? (item.ref.mediaId ?? "") : ""}
+            options={media.length ? media.map((m) => ({ value: m.id, label: m.name })) : [{ value: "", label: "(no media)" }]}
+            onChange={(v) => patchItem(index, { ref: v ? { type: "media", mediaId: v } : null })}
+          />
+          <NumField
+            className="playlist-duration"
+            value={item.duration}
+            placeholder="sec (blank = play through)"
+            onCommit={(v) => patchItem(index, { duration: v ?? undefined })}
+          />
+          <ToggleSquare label="▲" title="Move earlier" disabled={index === 0} onClick={() => moveItem(index, -1)} />
+          <ToggleSquare label="▼" title="Move later" disabled={index === items.length - 1} onClick={() => moveItem(index, 1)} />
+          <ToggleSquare className="remove-btn" label="×" title={`Remove "${playlistItemLabel(item, media)}"`} onClick={() => removeItem(index)} />
+        </div>
+      ))}
+      <Button label="+ Add item" onClick={addItem} />
+    </div>
+  );
+}
+
 /** The per-layer effects chain controls (vlayer.maxpat's stages) in captioned sections:
  *  TRANSFORM (flip/tile/zoom/pan), COLOR (blur/trail/brcosa), EDGE BLEND (projector
  *  ramps) and MASK geometry. Rendered inside an expanded LayerStrip. */
-export function FxDrawer({ fx, mask, transport, onUpdate, onEditMask, onEditWarp }: FxDrawerProps) {
+export function FxDrawer({
+  fx,
+  mask,
+  transport,
+  sourceMode,
+  playlist,
+  media,
+  onUpdate,
+  onEditMask,
+  onEditWarp,
+  onSetSourceMode,
+  onSetPlaylist,
+}: FxDrawerProps) {
   const fxRoot = fx as unknown as Record<string, unknown>;
   return (
     <div className="fx-drawer">
@@ -207,6 +309,31 @@ export function FxDrawer({ fx, mask, transport, onUpdate, onEditMask, onEditWarp
               onUpdate?.("transport.loopMode", transport.loopMode === "off" ? "loop" : transport.loopMode === "loop" ? "palindrome" : "off")
             }
           />
+          <label className="fx-control">
+            <span className="fx-label">LOOP IN</span>
+            <NumField className="fx-num" value={transport.loopIn} placeholder="sec" onCommit={(v) => onUpdate?.("transport.loopIn", v)} />
+          </label>
+          <label className="fx-control">
+            <span className="fx-label">LOOP OUT</span>
+            <NumField className="fx-num" value={transport.loopOut} placeholder="sec" onCommit={(v) => onUpdate?.("transport.loopOut", v)} />
+          </label>
+        </FxSection>
+      )}
+      {sourceMode !== undefined && (
+        <FxSection caption="Playlist">
+          <ToggleSquare
+            label={sourceMode === "playlist" ? "Playlist" : "Single"}
+            title="Toggle between a single fixed source and an ordered playlist"
+            active={sourceMode === "playlist"}
+            onClick={() => onSetSourceMode?.(sourceMode === "playlist" ? "single" : "playlist")}
+          />
+          {sourceMode === "playlist" && (
+            <PlaylistEditor
+              items={playlist?.items ?? []}
+              media={media ?? []}
+              onChange={(items) => onSetPlaylist?.(items)}
+            />
+          )}
         </FxSection>
       )}
     </div>

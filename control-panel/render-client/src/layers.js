@@ -507,5 +507,3 @@ export class LayerStack {
     return this.pingpong[readIdx].texture;
   }
 }
-
-export { BLEND_MODES };
