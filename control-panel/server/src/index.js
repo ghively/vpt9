@@ -21,6 +21,13 @@ const PORT = process.env.PORT || 8080;
 const STATE_FILE = process.env.STATE_FILE || "./state.json";
 const OSC_PORT = Number(process.env.OSC_PORT ?? 9000); // 0 disables the OSC listener
 
+// Last-resort net: the known crash sites are fixed at the source (state-shape validation
+// in applyUpdate, the automation tick's own try/catch, and per-handler try/catch below),
+// but an unforeseen throw should still not kill a live-show server. Log and keep running;
+// a real startup bind failure is handled separately by wss.on("error") which does exit.
+process.on("uncaughtException", (err) => console.error("[control-plane] uncaughtException (continuing):", err?.stack || err));
+process.on("unhandledRejection", (reason) => console.error("[control-plane] unhandledRejection (continuing):", reason?.stack || reason));
+
 const state = loadState(STATE_FILE);
 
 const MEDIA_DIR = process.env.MEDIA_DIR || "./media";
@@ -73,6 +80,10 @@ function readJsonBody(req) {
 }
 
 const httpServer = createServer(async (req, res) => {
+  // A throw in any handler below (including an async media/cast path) used to reject the
+  // request promise with nothing awaiting it → unhandledRejection → process death. Contain
+  // it here: log and return a 500 instead of taking the control plane down.
+  try {
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end("ok");
@@ -91,7 +102,11 @@ const httpServer = createServer(async (req, res) => {
   const castMatch = req.method === "POST" && req.url?.match(/^\/api\/pip\/([^/]+)\/cast$/);
   if (castMatch) {
     const pipId = decodeURIComponent(castMatch[1]);
-    if (!state.pip[pipId]) {
+    // Object.hasOwn, not `!state.pip[pipId]`: a plain member-access lets inherited
+    // Object.prototype keys ("__proto__", "constructor") read as "exists" and slip past
+    // the 404 (the write below is then refused by applyUpdate, but the old code still
+    // broadcast a phantom update and returned {ok:true}).
+    if (!Object.hasOwn(state.pip, pipId)) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: `no pip window with id "${pipId}"` }));
       return;
@@ -110,13 +125,15 @@ const httpServer = createServer(async (req, res) => {
       return;
     }
 
-    applyUpdate(state, `pip.${pipId}.videoId`, body.videoId);
-    applyUpdate(state, `pip.${pipId}.visible`, true);
-    if (typeof body.title === "string") applyUpdate(state, `pip.${pipId}.title`, body.title);
-    scheduleSave();
-    broadcast({ type: "update", path: `pip.${pipId}.videoId`, value: body.videoId });
-    broadcast({ type: "update", path: `pip.${pipId}.visible`, value: true });
-    if (typeof body.title === "string") broadcast({ type: "update", path: `pip.${pipId}.title`, value: body.title });
+    // Only broadcast the writes that actually landed — never announce state changes the
+    // server didn't make (which would desync every client).
+    const wroteVideo = applyUpdate(state, `pip.${pipId}.videoId`, body.videoId);
+    const wroteVisible = applyUpdate(state, `pip.${pipId}.visible`, true);
+    const wroteTitle = typeof body.title === "string" && applyUpdate(state, `pip.${pipId}.title`, body.title);
+    if (wroteVideo || wroteVisible || wroteTitle) scheduleSave();
+    if (wroteVideo) broadcast({ type: "update", path: `pip.${pipId}.videoId`, value: body.videoId });
+    if (wroteVisible) broadcast({ type: "update", path: `pip.${pipId}.visible`, value: true });
+    if (wroteTitle) broadcast({ type: "update", path: `pip.${pipId}.title`, value: body.title });
 
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, pip: state.pip[pipId] }));
@@ -127,6 +144,11 @@ const httpServer = createServer(async (req, res) => {
 
   res.writeHead(404);
   res.end();
+  } catch (err) {
+    console.error("[http] handler error:", err?.stack || err);
+    if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
+    if (!res.writableEnded) res.end(JSON.stringify({ error: "internal error" }));
+  }
 });
 
 const wss = new WebSocketServer({ server: httpServer });
@@ -210,6 +232,7 @@ wss.on("connection", (socket) => {
       return;
     }
 
+    try {
     switch (message.type) {
       case "update": {
         if (typeof message.path !== "string") return;
@@ -260,6 +283,11 @@ wss.on("connection", (socket) => {
         return;
       default:
         return;
+    }
+    } catch (err) {
+      // One client's bad message must never crash the process (no uncaughtException net
+      // used to exist). Drop it, rate-limited so a hostile client can't flood the log.
+      warnRateLimited("ws-handler", "[ws] handler error, dropped message:", err?.message);
     }
   });
 });

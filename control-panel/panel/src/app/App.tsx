@@ -21,7 +21,7 @@ import {
   type TargetOption,
 } from "../components";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
-import { useSocket } from "./useSocket";
+import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
 import { useMidi } from "./useMidi";
 import { useIsMobile } from "./useIsMobile";
@@ -129,7 +129,7 @@ export function App() {
     if (!isDraggingRef.current) forceRender();
   }, []);
 
-  const { send } = useSocket(wsUrl, {
+  const { send: rawSend } = useSocket(wsUrl, {
     onState(next) {
       stateRef.current = next;
       const screenIds = Object.keys(next.screens ?? {});
@@ -164,6 +164,24 @@ export function App() {
     },
   });
 
+  // Optimistic local echo: apply an outgoing leaf update to the local mirror immediately.
+  // The control then reflects the operator's input right away, and — crucially — a
+  // concurrent re-render (e.g. a 30 Hz LFO/fade batch) reads the just-set value instead of
+  // snapping the control back to the server's lagging echo. The server still echoes the
+  // write; that echo no-ops (applyUpdate returns false when the value is already current).
+  const send = useCallback(
+    (message: SocketMessage) => {
+      const sent = rawSend(message);
+      // Only mirror locally when the write actually went out. While disconnected, applying
+      // it would show a change the server never received, which the reconnect snapshot then
+      // silently reverts — the StatusLamp already signals the disconnect instead.
+      if (sent && message.type === "update" && typeof message.path === "string") {
+        applyUpdate(stateRef.current, message.path, message.value);
+      }
+      return sent;
+    },
+    [rawSend],
+  );
   const getState = useCallback(() => stateRef.current, []);
   const actions = useMemo(() => createActions(send, getState), [send, getState]);
   const midi = useMidi(getState, send);

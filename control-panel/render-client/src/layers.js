@@ -238,7 +238,14 @@ export class LayerStack {
     if (source?.type === "video") {
       const url = this._resolveUrl(source.url);
       const kind = mediaKindFromUrl(source.url);
-      if (entry.currentUrl === url) return;
+      if (entry.currentUrl === url) {
+        // Same media already loaded, but the loop policy may have changed — e.g. switching a
+        // layer single->playlist whose first clip is this same file: single mode loops, but
+        // a duration-less playlist video must NOT loop, or its native `ended` event never
+        // fires and the playlist can't advance. Keep the element's loop flag in sync.
+        if (entry.videoEl && entry.videoEl.loop !== loop) entry.videoEl.loop = loop;
+        return;
+      }
       entry.currentUrl = url;
       this._stopSource(entry);
       if (kind === "video") {
@@ -321,27 +328,36 @@ export class LayerStack {
     if (!t.playing && !video.paused) video.pause();
     video.playbackRate = Math.max(0.0625, t.rate ?? 1); // browsers reject 0 and clamp very small values inconsistently; floor it
 
-    if (t.loopIn != null && t.loopOut != null && t.loopOut > t.loopIn) {
-      if (!entry._loopHandler) {
-        entry._loopDir = 1;
-        entry._loopHandler = () => {
-          const layerT = entry._latestTransport;
-          if (!layerT || layerT.loopIn == null || layerT.loopOut == null) return;
-          if (layerT.loopMode === "palindrome") {
-            if (entry._loopDir === 1 && video.currentTime >= layerT.loopOut) {
-              entry._loopDir = -1;
-              video.pause();
-              this._startPalindromeReverse(entry, layerT);
-            } else if (entry._loopDir === -1) {
-              // handled by _startPalindromeReverse's own rAF loop, not here
-            }
-          } else if (video.currentTime >= layerT.loopOut) {
-            video.currentTime = layerT.loopIn;
+    // Loop / palindrome. The handler reads the current region + mode from _latestTransport
+    // on every `timeupdate`, and _latestTransport is refreshed (or cleared) here on every
+    // call — so turning loop OFF (mode "off", or blanking loopIn/loopOut) actually releases
+    // the clip. Previously the refresh AND the handler-attach both lived inside the
+    // "loop active" guard, so disabling loop skipped the refresh and left the old handler
+    // firing on stale bounds: the operator could not stop a loop once set.
+    const loopActive = t.loopMode !== "off" && t.loopIn != null && t.loopOut != null && t.loopOut > t.loopIn;
+    entry._latestTransport = loopActive ? t : null;
+    if (loopActive && !entry._loopHandler) {
+      entry._loopDir = 1;
+      entry._loopHandler = () => {
+        const layerT = entry._latestTransport;
+        if (!layerT) return;
+        if (layerT.loopMode === "palindrome") {
+          if (entry._loopDir === 1 && video.currentTime >= layerT.loopOut) {
+            entry._loopDir = -1;
+            video.pause();
+            this._startPalindromeReverse(entry, layerT);
           }
-        };
-        video.addEventListener("timeupdate", entry._loopHandler);
-      }
-      entry._latestTransport = t;
+        } else if (video.currentTime >= layerT.loopOut) {
+          video.currentTime = layerT.loopIn;
+        }
+      };
+      video.addEventListener("timeupdate", entry._loopHandler);
+    } else if (!loopActive && entry._loopHandler) {
+      // Loop disabled: detach the handler and cancel any in-flight palindrome reverse
+      // (its rAF loop bails when _loopDir !== -1).
+      video.removeEventListener("timeupdate", entry._loopHandler);
+      entry._loopHandler = null;
+      entry._loopDir = 1;
     }
 
     // One shared AudioContext for the whole LayerStack (this.audioCtx, created lazily
@@ -397,7 +413,20 @@ export class LayerStack {
     if (!entry) return;
     this._stopSource(entry);
     entry.fxChain?.dispose();
+    if (entry.texture) this.gl.deleteTexture(entry.texture); // was leaked on every layer add/remove
     this.entries.delete(id);
+  }
+
+  // Full teardown: stop every layer's source and free its GL resources, plus the shared
+  // source-bank and AudioContext. Used when the WebGL context is lost (the compositor
+  // rebuilds a fresh LayerStack on restore) and for any explicit teardown.
+  dispose() {
+    for (const id of [...this.entries.keys()]) this.removeLayer(id);
+    this.sourceBank?.dispose?.();
+    if (this.audioCtx) {
+      try { this.audioCtx.close(); } catch { /* already closed */ }
+      this.audioCtx = null;
+    }
   }
 
   _uploadVideoFrame(entry) {

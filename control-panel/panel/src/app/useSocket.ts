@@ -24,10 +24,12 @@ export interface SocketHandlers {
  *  are read through a ref so the socket isn't torn down when they change identity.
  *  Auto-reconnects with capped backoff — the server re-sends the full state snapshot on
  *  every (re)connect, so recovery needs no extra sync. */
-export function useSocket(url: string, handlers: SocketHandlers): { send: (message: SocketMessage) => void } {
+export function useSocket(url: string, handlers: SocketHandlers): { send: (message: SocketMessage) => boolean } {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
-  const sendRef = useRef<(message: SocketMessage) => void>(() => {});
+  // Returns whether the message actually went out — callers use this to avoid mirroring a
+  // change locally that the server never received (which a reconnect snapshot would undo).
+  const sendRef = useRef<(message: SocketMessage) => boolean>(() => false);
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -72,7 +74,11 @@ export function useSocket(url: string, handlers: SocketHandlers): { send: (messa
     connect();
 
     sendRef.current = (message) => {
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(message));
+        return true;
+      }
+      return false;
     };
 
     return () => {

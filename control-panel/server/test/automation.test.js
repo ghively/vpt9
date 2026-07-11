@@ -199,3 +199,33 @@ test("clipEnded() on a layer not in playlist mode is a no-op", () => {
   assert.equal(state.layers["layer-1"].playlist.cursor, -1);
   engine.dispose();
 });
+
+test("an image item reached via clipEnded gets its full duration (stale-timer regression)", async () => {
+  // Mixed playlist: a timed image followed by a video. After the image advances to the
+  // video on wall-clock time and the video later ends (clipEnded advances back to the
+  // image), the image's duration timer must be measured from *now*, not from when the
+  // previous item started — otherwise the image is skipped within one tick.
+  const { state, engine } = makeHarness({
+    layers: {
+      "layer-1": {
+        sourceMode: "playlist",
+        playlist: {
+          items: [
+            { ref: { type: "media", mediaId: "img" }, duration: 0.15 },
+            { ref: { type: "media", mediaId: "vid" } }, // no duration -> video item
+          ],
+          cursor: 0,
+        },
+      },
+    },
+  });
+  await wait(300); // image (0.15s) advances to the video item
+  assert.equal(state.layers["layer-1"].playlist.cursor, 1);
+  await wait(300); // video "plays" — the stale timer ages well past the image duration
+  assert.equal(state.layers["layer-1"].playlist.cursor, 1); // video does not auto-advance
+  engine.clipEnded("layer-1"); // video ended -> back to the image
+  assert.equal(state.layers["layer-1"].playlist.cursor, 0);
+  await wait(100); // < the image's 150ms duration, but > one 33ms tick
+  assert.equal(state.layers["layer-1"].playlist.cursor, 0, "image was skipped by a stale timer");
+  engine.dispose();
+});

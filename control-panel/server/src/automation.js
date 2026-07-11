@@ -193,26 +193,35 @@ export function createAutomationEngine({ state, broadcast, scheduleSave, recallP
     }
   }
 
-  const playlistFired = new Map(); // layerId -> ms timestamp the current item started
+  // layerId -> { cursor, startedAt }: which item we're timing and when it started. Keying
+  // the start time to a specific cursor is what makes an *external* cursor change (a
+  // clipEnded() advance, or an operator jumping the playlist) reset the timer — a plain
+  // "ms the current item started" would keep a stale start time and skip the newly-
+  // selected item within one tick. See automation.test.js "stale-timer regression".
+  const playlistTiming = new Map();
 
   function tickPlaylists(now) {
     // Same leak-prevention pattern tickTimers already uses for timerFired: a layer
     // deleted entirely (not just switched out of playlist mode) would otherwise leave
     // its entry in this Map forever, since the loop below only ever visits ids still
     // present in state.layers.
-    pruneStaleSlots(playlistFired, new Set(Object.keys(state.layers ?? {})));
+    pruneStaleSlots(playlistTiming, new Set(Object.keys(state.layers ?? {})));
     for (const [id, layer] of Object.entries(state.layers ?? {})) {
-      if (layer.sourceMode !== "playlist") { playlistFired.delete(id); continue; }
+      // A layer can be null in a hand-corrupted state.json; never deref it blindly here —
+      // this tick has no error boundary of its own beyond the interval's try/catch.
+      if (!layer || layer.sourceMode !== "playlist") { playlistTiming.delete(id); continue; }
       const pl = layer.playlist;
-      if (!pl?.items?.length) continue;
+      if (!pl?.items?.length) { playlistTiming.delete(id); continue; }
       const item = pl.items[pl.cursor];
       if (!item?.duration) continue; // video items ("play through to end") only advance via clipEnded()
-      const startedAt = playlistFired.get(id);
-      if (startedAt == null) { playlistFired.set(id, now); continue; }
-      if (now - startedAt >= item.duration * 1000) {
+      const timing = playlistTiming.get(id);
+      // First time we see this cursor (fresh item, or the cursor moved out from under us):
+      // start its clock now rather than inheriting the previous item's start time.
+      if (!timing || timing.cursor !== pl.cursor) { playlistTiming.set(id, { cursor: pl.cursor, startedAt: now }); continue; }
+      if (now - timing.startedAt >= item.duration * 1000) {
         const nextCursor = (pl.cursor + 1) % pl.items.length;
         state.layers[id].playlist = { ...pl, cursor: nextCursor };
-        playlistFired.set(id, now);
+        playlistTiming.set(id, { cursor: nextCursor, startedAt: now });
         broadcast({ type: "update", path: `layers.${id}.playlist`, value: state.layers[id].playlist });
       }
     }
@@ -256,19 +265,27 @@ export function createAutomationEngine({ state, broadcast, scheduleSave, recallP
   }
 
   const interval = setInterval(() => {
-    const now = Date.now();
-    const dtSeconds = Math.min(1, (now - lastTickMs) / 1000);
-    lastTickMs = now;
+    // This loop runs for the life of the process. A throw here used to be fatal (no
+    // uncaughtException handler), so a single bad state shape could take the whole control
+    // plane down mid-show. Contain it: log once (rate-limited) and keep ticking — a
+    // degraded automation tick beats a dark stage.
+    try {
+      const now = Date.now();
+      const dtSeconds = Math.min(1, (now - lastTickMs) / 1000);
+      lastTickMs = now;
 
-    if (waitUntil && now >= waitUntil) waitUntil = 0;
+      if (waitUntil && now >= waitUntil) waitUntil = 0;
 
-    const batch = [];
-    tickFade(now, batch);
-    tickLfos(now, dtSeconds, batch);
-    tickCues(now);
-    tickTimers(now);
-    tickPlaylists(now);
-    if (batch.length) broadcast({ type: "batch", updates: batch });
+      const batch = [];
+      tickFade(now, batch);
+      tickLfos(now, dtSeconds, batch);
+      tickCues(now);
+      tickTimers(now);
+      tickPlaylists(now);
+      if (batch.length) broadcast({ type: "batch", updates: batch });
+    } catch (err) {
+      log(`[automation] tick error (continuing): ${err?.stack || err}`);
+    }
   }, TICK_MS);
 
   return {

@@ -97,8 +97,8 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
   ) {
     const activeWarp = warpEditLayer ? warpEditLayer.warp : screen?.warp;
     const isMesh = activeWarp?.mode === "mesh";
-    const points: Point[] = isMesh ? activeWarp?.mesh.points ?? [] : activeWarp?.corners ?? [];
-    const size = activeWarp?.mesh.size ?? 4;
+    const points: Point[] = isMesh ? activeWarp?.mesh?.points ?? [] : activeWarp?.corners ?? [];
+    const size = activeWarp?.mesh?.size ?? 4;
     const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
     // Reset the selection synchronously during render (not in a useEffect) when the point set
     // changes identity — e.g. mesh resize or corner/mesh mode switch. A useEffect runs AFTER
@@ -170,7 +170,7 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
           {isMesh && (
             <Select
               className="mesh-size-select"
-              value={String(activeWarp?.mesh.size ?? 4)}
+              value={String(activeWarp?.mesh?.size ?? 4)}
               options={MESH_SIZES}
               onChange={(v) => (warpEditLayer ? onLayerSetMeshSize : onSetMeshSize)?.(Number(v))}
             />

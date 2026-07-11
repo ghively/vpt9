@@ -47,10 +47,16 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
       el.dataset.active = "false";
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
       onDragEnd?.();
     };
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
+    // pointercancel fires INSTEAD of pointerup when the browser takes over the gesture
+    // (edge back-swipe, scroll takeover, palm rejection on touch). Without handling it,
+    // onDragEnd never runs, so App's isDraggingRef stays true and every server-echoed
+    // update silently stops re-rendering the panel until another full drag completes.
+    el.addEventListener("pointercancel", onUp);
   };
 
   return (

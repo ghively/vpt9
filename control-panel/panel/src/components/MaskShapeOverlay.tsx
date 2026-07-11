@@ -47,10 +47,12 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     const onUp = () => {
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onUp);
+      target.removeEventListener("pointercancel", onUp);
       onDragEnd?.();
     };
     target.addEventListener("pointermove", onMove);
     target.addEventListener("pointerup", onUp);
+    target.addEventListener("pointercancel", onUp); // release the drag if the gesture is canceled (see WarpHandle)
   };
 
   const radius = mask.shape === "rect" ? "2px" : "50%";

@@ -55,9 +55,19 @@ const socket = connectControlPlane(wsUrl, {
   },
 });
 
-compositor.layerStack.onClipEnded = (layerId) => {
-  if (!isAudioOwner || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: "clipEnded", layerId }));
+// Wire the layer stack's clip-ended relay. Re-run after a WebGL context restore, which
+// replaces compositor.layerStack with a fresh instance (whose onClipEnded starts null).
+function wireLayerStack() {
+  compositor.layerStack.onClipEnded = (layerId) => {
+    if (!isAudioOwner || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: "clipEnded", layerId }));
+  };
+}
+wireLayerStack();
+
+compositor.onContextRestored = () => {
+  wireLayerStack();
+  applyDerivedState(); // rebuild all layer sources/warp from the current state
 };
 
 // Per-layer playback-position telemetry: mirrors the ~250ms preview interval below, but

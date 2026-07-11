@@ -237,6 +237,40 @@ function isUnsafePath(keys) {
   return keys.some((key) => UNSAFE_KEYS.has(key));
 }
 
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// Top-level containers whose *type* is load-bearing: create/reorder, the media &
+// source-bank cleanup paths, and the 30 Hz automation tick all iterate these and
+// dereference their elements. `applyUpdate` used to validate only the path (existence +
+// prototype-safety), never the value — so a single LAN message could replace a container
+// with null or a scalar (e.g. `layers` → null, `sourceBank` → 0) and later crash a tick
+// or an HTTP handler that iterates it. With no per-tick error boundary that killed the
+// whole control plane. These sets pin the shapes; leaf *data* (opacity, a null loop point,
+// a source object swapped wholesale, …) stays unrestricted. See
+// test/crash-hardening.test.js.
+const OBJECT_TOPLEVEL = new Set(["layers", "screens", "pip", "presets", "media", "lfos", "midiMap", "automation"]);
+// Keyed collections whose entries are always objects (never scalars) — so an entry write
+// like "layers.<id>" or "pip.<id>" must carry an object, never null/a scalar. (lfos/timers
+// are already null-guarded at their read sites, so they're intentionally not pinned here.)
+const KEYED_OBJECT_COLLECTIONS = new Set(["layers", "screens", "pip", "presets", "media"]);
+
+// True when writing `value` at `[...keys].last` would corrupt a structural container's
+// shape. `keys` are the parent segments, `last` the final segment.
+function corruptsStructure(keys, last, value) {
+  if (keys.length === 0) {
+    if (OBJECT_TOPLEVEL.has(last)) return !isPlainObject(value);
+    if (last === "sourceBank") return !Array.isArray(value);
+    return false;
+  }
+  if (keys.length === 1) {
+    if (KEYED_OBJECT_COLLECTIONS.has(keys[0])) return !isPlainObject(value); // e.g. layers.<id>
+    if (keys[0] === "sourceBank") return !isPlainObject(value); // a slot object
+  }
+  return false;
+}
+
 export function walkToParent(state, keys) {
   let node = state;
   for (const key of keys) {
@@ -325,6 +359,7 @@ export function applyUpdate(state, path, value) {
   const keys = path.split(".");
   const last = keys.pop();
   if (isUnsafePath(keys) || UNSAFE_KEYS.has(last)) return false;
+  if (corruptsStructure(keys, last, value)) return false;
   if (wouldCreateMixCycle(state, path, value)) return false;
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
@@ -377,8 +412,11 @@ export function applyDelete(state, path) {
 // design spec defines "missing input" behavior for a mix.
 export function resolveDanglingSourceRefs(state, kind, id) {
   const refMatches = (ref) => (kind === "media" ? ref?.type === "media" && ref.mediaId === id : ref?.type === "slot" && ref.slotId === id);
-  for (const slot of state.sourceBank ?? []) {
-    if (!slot.content) continue;
+  // Tolerate a hand-corrupted state.json (sourceBank not an array, or holding null/sparse
+  // slots) — applyUpdate blocks this at the write boundary, but disk state bypasses it.
+  const bank = Array.isArray(state.sourceBank) ? state.sourceBank : [];
+  for (const slot of bank) {
+    if (!slot || !slot.content) continue;
     if (slot.content.type === "media" && kind === "media" && slot.content.mediaId === id) {
       slot.content = null;
     } else if (slot.content.type === "mix") {
@@ -389,6 +427,7 @@ export function resolveDanglingSourceRefs(state, kind, id) {
 }
 
 export function nextLayerOrder(state) {
-  const orders = Object.values(state.layers).map((l) => l.order ?? 0);
+  const layers = isPlainObject(state.layers) ? Object.values(state.layers) : [];
+  const orders = layers.filter((l) => l && typeof l === "object").map((l) => l.order ?? 0);
   return orders.length ? Math.max(...orders) + 1 : 1;
 }

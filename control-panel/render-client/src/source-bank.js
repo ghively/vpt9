@@ -138,13 +138,34 @@ export class SourceBank {
   // direct-media a/b inputs. Called once per frame, before layer rendering, mirroring
   // LayerStack's own per-frame upload step.
   updateAll(slots, media) {
+    const activeKeys = new Set();
     for (const slot of slots ?? []) {
       if (slot.content?.type === "media") {
+        activeKeys.add(slot.id);
         this._decodeMediaInto(slot.id, slot.content.mediaId, media);
       } else if (slot.content?.type === "mix") {
-        if (slot.content.a?.type === "media") this._decodeMediaInto(`${slot.id}:a`, slot.content.a.mediaId, media);
-        if (slot.content.b?.type === "media") this._decodeMediaInto(`${slot.id}:b`, slot.content.b.mediaId, media);
+        if (slot.content.a?.type === "media") { activeKeys.add(`${slot.id}:a`); this._decodeMediaInto(`${slot.id}:a`, slot.content.a.mediaId, media); }
+        if (slot.content.b?.type === "media") { activeKeys.add(`${slot.id}:b`); this._decodeMediaInto(`${slot.id}:b`, slot.content.b.mediaId, media); }
       }
+    }
+    // Release any media entry a slot no longer decodes — content cleared, or the slot
+    // switched media<->mix (which re-keys to `${id}:a`/`:b`). Without this its <video> keeps
+    // decoding and looping invisibly forever. (updateAll runs before resolveTexture in the
+    // frame, and only inactive keys are swept, so nothing recreates them this frame.)
+    for (const [key, entry] of [...this.entries]) {
+      if (activeKeys.has(key)) continue;
+      if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); }
+      if (entry.imgEl) entry.imgEl.remove();
+      if (entry.texture) this.gl.deleteTexture(entry.texture);
+      this.entries.delete(key);
+    }
+    // Free mix framebuffers for slots that are no longer mixes.
+    const mixSlotIds = new Set((slots ?? []).filter((s) => s.content?.type === "mix").map((s) => s.id));
+    for (const [slotId, fbo] of [...this.mixFbos]) {
+      if (mixSlotIds.has(slotId)) continue;
+      this.gl.deleteFramebuffer(fbo.framebuffer);
+      this.gl.deleteTexture(fbo.texture);
+      this.mixFbos.delete(slotId);
     }
   }
 
@@ -188,6 +209,18 @@ export class SourceBank {
   }
 
   dispose() {
-    for (const fbo of this.mixFbos.values()) this.gl.deleteFramebuffer(fbo.framebuffer);
+    const gl = this.gl;
+    for (const entry of this.entries.values()) {
+      if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); }
+      if (entry.imgEl) entry.imgEl.remove();
+      if (entry.texture) gl.deleteTexture(entry.texture);
+    }
+    this.entries.clear();
+    for (const fbo of this.mixFbos.values()) {
+      gl.deleteFramebuffer(fbo.framebuffer);
+      gl.deleteTexture(fbo.texture); // was leaked: only the framebuffer was freed
+    }
+    this.mixFbos.clear();
+    gl.deleteProgram(this.mixProgram);
   }
 }

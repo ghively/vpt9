@@ -94,14 +94,26 @@ export class ScreenWarp {
   //   stage (render-client/src/layers.js) so the same geometry math serves both roles.
   render(sceneTexture, warp, viewportWidth, viewportHeight, master = 1, target = null) {
     const gl = this.gl;
+    const cornerFallback = () => {
+      const c = warp?.corners ?? IDENTITY_CORNERS;
+      return { size: 2, points: [c[0], c[1], c[3], c[2]] }; // TL, TR, BL, BR -> row-major grid order
+    };
     let size, points;
     if (warp?.mode === "mesh" && warp.mesh?.points?.length) {
-      size = warp.mesh.size;
-      points = warp.mesh.points;
+      // Derive the grid dimension from the points array, NOT warp.mesh.size: a client
+      // (e.g. an OSC sender) can write mesh.size on its own and desync it from points.
+      // Indexing past the data would collapse the mesh to (0,0), and a NaN size (size
+      // undefined) would throw building the vertex buffer. Require a perfect square;
+      // otherwise fall back to corner-pin rather than render garbage.
+      const derived = Math.round(Math.sqrt(warp.mesh.points.length));
+      if (derived >= 2 && derived * derived === warp.mesh.points.length) {
+        size = derived;
+        points = warp.mesh.points;
+      } else {
+        ({ size, points } = cornerFallback());
+      }
     } else {
-      const c = warp?.corners ?? IDENTITY_CORNERS;
-      size = 2;
-      points = [c[0], c[1], c[3], c[2]]; // TL, TR, BL, BR -> row-major grid order
+      ({ size, points } = cornerFallback());
     }
     this._ensureGrid(size);
 
@@ -136,5 +148,15 @@ export class ScreenWarp {
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
+  }
+
+  // Frees this warp's GL program + buffers. Each FxChain owns a ScreenWarp (fx.js), so
+  // without this a per-layer fx chain leaked a whole program + 3 buffers on every removal.
+  dispose() {
+    const gl = this.gl;
+    gl.deleteProgram(this.program);
+    gl.deleteBuffer(this.uvBuffer);
+    gl.deleteBuffer(this.destBuffer);
+    gl.deleteBuffer(this.indexBuffer);
   }
 }

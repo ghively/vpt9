@@ -313,6 +313,9 @@ export class FxChain {
       gl.deleteFramebuffer(fbo.framebuffer);
       gl.deleteTexture(fbo.texture);
     }
+    // The ScreenWarp built in the constructor owns a GL program + 3 buffers; free them too.
+    this.warpRenderer?.dispose();
+    this.warpRenderer = null;
     this.blurFbo = null;
     this.feedbackFbo = null;
     this.maskFbo = null;

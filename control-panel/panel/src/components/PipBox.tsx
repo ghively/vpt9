@@ -39,10 +39,12 @@ export function PipBox({ pip, onDragStart, onMove, onResize, onDragEnd }: PipBox
     const onPointerUp = () => {
       bar.removeEventListener("pointermove", onPointerMove);
       bar.removeEventListener("pointerup", onPointerUp);
+      bar.removeEventListener("pointercancel", onPointerUp);
       onDragEnd?.();
     };
     bar.addEventListener("pointermove", onPointerMove);
     bar.addEventListener("pointerup", onPointerUp);
+    bar.addEventListener("pointercancel", onPointerUp); // release the drag if the gesture is canceled (see WarpHandle)
   };
 
   const beginResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -70,10 +72,12 @@ export function PipBox({ pip, onDragStart, onMove, onResize, onDragEnd }: PipBox
     const onPointerUp = () => {
       handle.removeEventListener("pointermove", onPointerMove);
       handle.removeEventListener("pointerup", onPointerUp);
+      handle.removeEventListener("pointercancel", onPointerUp);
       onDragEnd?.();
     };
     handle.addEventListener("pointermove", onPointerMove);
     handle.addEventListener("pointerup", onPointerUp);
+    handle.addEventListener("pointercancel", onPointerUp); // release the drag if the gesture is canceled (see WarpHandle)
   };
 
   return (
