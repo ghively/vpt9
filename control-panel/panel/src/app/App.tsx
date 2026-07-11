@@ -2,6 +2,7 @@ import { useCallback, useMemo, useReducer, useRef, useState } from "react";
 import {
   AudioOwner,
   Faceplate,
+  LayerStack,
   MasterControl,
   StatusLamp,
   type ConnectionState,
@@ -128,10 +129,10 @@ export function App() {
     />
   );
 
-  const layerIds = Object.values(stateRef.current.layers)
-    .sort((a, b) => (b.order ?? 0) - (a.order ?? 0)) // top-of-stack first
-    .map((l) => l.id);
-  const selection = useSelection(layerIds[0] ?? null);
+  const layersTopFirst = Object.values(stateRef.current.layers).sort(
+    (a, b) => (b.order ?? 0) - (a.order ?? 0), // top-of-stack first
+  );
+  const selection = useSelection(layersTopFirst[0]?.id ?? null);
 
   return (
     <div className="deck">
@@ -141,8 +142,13 @@ export function App() {
       <div className="cmd">{faceplate}</div>
       <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
         <aside className="rail rail-l">
-          {/* <LayerStack/> and <SlotGrid/> land here in Tasks 2 & 3 */}
-          <div className="sec-head label">Layer stack</div>
+          <LayerStack
+            layers={layersTopFirst}
+            selectedId={selection.selectedLayerId}
+            onSelect={selection.setSelectedLayerId}
+            actions={actions}
+          />
+          {/* <SlotGrid/> lands here in Task 3 */}
           <div className="sec-head label">Source bank</div>
         </aside>
         <main className="stage-wrap">{/* <Stage/> lands here in Task 4 */}</main>

@@ -28,6 +28,8 @@ export { ChannelRack } from "./ChannelRack";
 export type { ChannelRackProps } from "./ChannelRack";
 export { LayerStrip } from "./LayerStrip";
 export type { LayerStripProps, LayerNeighbors } from "./LayerStrip";
+export { LayerStack } from "./deck/LayerStack";
+export type { LayerStackProps } from "./deck/LayerStack";
 export { ConfidenceMonitor } from "./ConfidenceMonitor";
 export type { ConfidenceMonitorProps, ConfidenceMonitorHandle } from "./ConfidenceMonitor";
 export { WarpEditor } from "./WarpEditor";
