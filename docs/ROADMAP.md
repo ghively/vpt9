@@ -85,6 +85,67 @@ records — this doc doesn't repeat their findings, it points to them.
 > work has automated server coverage but no live-browser verification; `control-panel/README.md`'s
 > "What's verified" section accurately reflects this by omission. `control-panel/OPERATOR_GUIDE.md`
 > has been updated to document all of the above.
+>
+> **2026-07-11 status update: sub-projects 2, 3, and 4 are now CLOSED — full VPT8 parity reached.**
+> Built per `docs/superpowers/specs/2026-07-08-parity-finish-line-design.md` and
+> `docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md` (17 tasks, executed via three
+> parallel worktree-isolated lanes with per-task subagent review):
+> - **Per-layer warp/corner-pin** (sub-project 2): `layer.warp` (identical shape to screen warp),
+>   applied via a generalized `ScreenWarp` (now targets an offscreen FBO or the canvas), reordered
+>   so mask bakes into a layer's alpha **before** warp deforms it (`render-client/src/fx.js`'s
+>   `_runMask`/`_runWarp`) — matching VPT8's own mask-then-mesh order. Corner-pin presets
+>   (full/center/thirds/rotations) and an on-canvas editor (`panel/src/components/WarpEditor.tsx`
+>   generalized to edit either a screen or a layer) round it out.
+> - **Source bank + all 24 blend modes + mix-source type** (sub-project 3): `state.sourceBank` (8
+>   shared slots, hybrid model — layers default to direct source assignment, optionally point at a
+>   slot), all 18 remaining blend-mode formulas ported from VPT8's `shaders/v001 Mixers/*.fp.glsl`
+>   (verified formula-by-formula against the original source, including two modes — `heat`/
+>   `hardlight` — whose VPT8 call sites use a non-obvious argument order), and a mix-source type
+>   (`render-client/src/source-bank.js`) that crossfades two inputs into one texture. The mix-cycle
+>   guard (`wouldCreateMixCycle` in `server/src/state.js`, preventing a mix from ever referencing
+>   another mix) went through 8 rounds of adversarial review before converging on a structurally
+>   sound design (full-array revalidation via the same `walkToParent` primitive real writes use,
+>   rather than pattern-matching write shapes) — see `docs/superpowers/plans/2026-07-08-parity-
+>   finish-line-plan.md`'s Task 7 for the full history; this is the most heavily-scrutinized logic
+>   in the codebase.
+> - **Clip transport + playlist sequencing** (sub-project 4): per-layer `transport` (play/pause,
+>   rate, loop in/out via manual seek, palindrome mode, pan/vol via Web Audio) and `playlist`
+>   (still-image items advance on a server-side wall-clock timer; video items advance only when the
+>   audio-owner render-client observes the native `ended` event and relays it — the server has no
+>   other way to know a video finished). Reverse/negative-rate playback is an explicit non-goal (no
+>   browser allows negative `playbackRate` — a hard platform limit VPT8 itself doesn't face).
+>
+> **Verification:** `control-panel/e2e/` is a new Playwright harness (didn't exist before this
+> work) with 4 spec files — `media-compositing`, `layer-warp`, `blend-and-mix`,
+> `transport-and-playlist` — each spawning a real server + render-client with isolated
+> per-spec state (an earlier version shared the real dev `state.json`/media directory across
+> specs, which caused two independent test-review sessions to reach contradictory conclusions
+> about the same commit before the contamination was diagnosed and fixed). Also closed
+> sub-project 1's still-open verification gap named in the 2026-07-08 update above. Current
+> suite: 5 passed, 2 skipped — both skips are documented, known environment limitations, not
+> app bugs (a headless-Chromium gif-frame-advancement limitation already recorded in prior
+> session memory, and a mix-slot pixel check requiring an HTTP-multipart test-fixture helper
+> the harness doesn't have yet). Server test suite: 113/113 passing.
+>
+> **Explicit non-goals, reaffirmed:** VPT8's native per-slot A/B crossfade-on-clip-change
+> smoothness (lost by the source-bank simplification — slots point at media-library entries
+> rather than duplicating a two-decoder crossfade engine); a literal multi-cell clip-launch grid
+> (VPT8's own `clipcontrol.maxpat` is per-source transport + a single-sequence playlist, not that,
+> and this work matches VPT8's actual behavior); Art-Net/DMX/serial/Syphon (2026-07-06 decision).
+>
+> **Two known, tracked follow-ups** (both real, both scoped out of this pass rather than silently
+> dropped — see the plan doc's Task 14 section): a layer's loop in/out timer doesn't survive a
+> *second* source change within the same session before this pass's fix landed (now fixed); and a
+> playlist item that resolves to a shared source-bank slot renders correctly as of this pass (the
+> render-client's slot-detection now reads from the actually-resolved entry, not the layer's static
+> source field) — flagging both as closed, not open, per the Task 14 fix-and-verify commit.
+>
+> **With this update, `control-panel/` has full software-reachable feature parity with VPT8** —
+> every subsystem named across the 2026-07-04 through 2026-07-08 audits is now built. What remains
+> genuinely open: real-hardware verification (physical camera, MIDI controller, Chromecast — see
+> `control-panel/README.md`'s "Not verifiable from this environment" list) and the standing question
+> of whether the actual installation needs Art-Net/DMX/serial hardware integration at all (still a
+> call for whoever runs the show, not resolved here).
 
 ## Status Quo
 

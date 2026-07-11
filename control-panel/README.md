@@ -258,6 +258,27 @@ correctly-sized identity grid in one atomic update, screen rename/add, and an en
 LFO actually oscillating a bound layer's opacity over time — all 8 checks pass with no
 browser console errors.
 
+The 2026-07-11 parity finish line (per-layer warp, source bank + all 24 blend modes +
+mix-source type, clip transport + playlist) added `control-panel/e2e/` — this project's
+first Playwright harness — with four spec files, each spawning a real server +
+render-client with isolated per-spec state: `media-compositing.spec.js` (jpg/gif
+compositing), `layer-warp.spec.js` (a layer's own warp moving independently of screen
+warp, with its mask tracking the deformation — verified by temporarily reintroducing the
+pre-fix mask/warp ordering and confirming the test correctly fails), `blend-and-mix.spec.js`
+(a new blend mode's pixel output; the mix-source type's own pixel check is a documented
+`test.skip` pending an HTTP-multipart test-fixture helper the harness doesn't have yet),
+and `transport-and-playlist.spec.js` (play/pause reflected in real playback via
+screenshot-diff, since `<video>` elements are intentionally kept off-DOM; a still-image
+playlist auto-advancing on its own server-side timer). Current suite: 5 passed, 2 skipped
+(the mix-source gap above, and a headless-Chromium gif-frame-advancement limitation — see
+this repo's session memory on "Headless WebGL flaky GPU" — neither is an app bug). Server
+test suite: 113/113 passing, including a `blend-modes-parity` check that the render-client
+and panel agree on all 24 blend-mode names/order, and 38 tests on the source-bank
+mix-cycle guard alone (`wouldCreateMixCycle` in `server/src/state.js`, which prevents a
+mix from ever referencing another mix — see `docs/superpowers/plans/2026-07-08-parity-
+finish-line-plan.md`'s Task 7 for why that logic needed 8 rounds of adversarial review
+before it converged on a sound design).
+
 Not verifiable from this environment, by nature of what they are:
 
 - **Real YouTube playback inside the PiP iframe** — the embed URL and DOM wiring are
