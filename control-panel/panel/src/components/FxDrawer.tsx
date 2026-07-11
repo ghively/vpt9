@@ -1,18 +1,29 @@
 import { Fader } from "./primitives/Fader";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
-import type { Fx, Mask } from "./types";
+import { Select } from "./primitives/Select";
+import type { Fx, Mask, Transport } from "./types";
 
 export interface FxDrawerProps {
   fx: Fx;
   /** Mask geometry lives here too (center/size/feather); enable + shape stay on the
    *  strip. Optional so existing fx-only usage keeps working. */
   mask?: Mask;
+  /** Clip transport (play/rate/loop/pan/vol). Optional — server support for
+   *  `layers.<id>.transport` lands on a sibling branch; this section renders once a
+   *  caller supplies it. */
+  transport?: Transport;
+  /** "single" | "playlist" — which source-selection mode the layer is in. */
+  sourceMode?: string;
+  /** Ordered clip queue for playlist mode. */
+  playlist?: { items: Array<{ ref: unknown; duration?: number }> };
   /** Field paths are relative to the layer ("fx.zoom", "mask.feather") so the container
    *  can prefix them with "layers.<id>." unchanged. */
   onUpdate?: (field: string, value: unknown) => void;
   /** Opens the on-canvas mask editor for this layer (Screen tab). */
   onEditMask?: () => void;
+  /** Opens the on-canvas warp editor for this layer (Screen tab). */
+  onEditWarp?: () => void;
 }
 
 interface SliderSpec {
@@ -110,7 +121,7 @@ function FxSection({
 /** The per-layer effects chain controls (vlayer.maxpat's stages) in captioned sections:
  *  TRANSFORM (flip/tile/zoom/pan), COLOR (blur/trail/brcosa), EDGE BLEND (projector
  *  ramps) and MASK geometry. Rendered inside an expanded LayerStrip. */
-export function FxDrawer({ fx, mask, onUpdate, onEditMask }: FxDrawerProps) {
+export function FxDrawer({ fx, mask, transport, onUpdate, onEditMask, onEditWarp }: FxDrawerProps) {
   const fxRoot = fx as unknown as Record<string, unknown>;
   return (
     <div className="fx-drawer">
@@ -141,6 +152,24 @@ export function FxDrawer({ fx, mask, onUpdate, onEditMask }: FxDrawerProps) {
           <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
       </FxSection>
+      <FxSection caption="Warp">
+        <Select
+          className="corner-preset-select"
+          value=""
+          options={[
+            { value: "", label: "Preset…" },
+            { value: "full", label: "Full" },
+            { value: "center", label: "Center" },
+            { value: "leftThird", label: "Left third" },
+            { value: "rightThird", label: "Right third" },
+            { value: "rotate90", label: "Rotate 90°" },
+            { value: "rotate180", label: "Rotate 180°" },
+            { value: "rotate270", label: "Rotate 270°" },
+          ]}
+          onChange={(v) => { if (v) onUpdate?.("__cornerPreset__", v); }}
+        />
+        {onEditWarp && <Button label="Edit on canvas" onClick={onEditWarp} />}
+      </FxSection>
       {mask && (
         <FxSection caption="Mask">
           <ToggleSquare
@@ -163,6 +192,21 @@ export function FxDrawer({ fx, mask, onUpdate, onEditMask }: FxDrawerProps) {
               onUpdate={onUpdate}
             />
           ))}
+        </FxSection>
+      )}
+      {transport && (
+        <FxSection caption="Transport">
+          <Button label={transport.playing ? "Pause" : "Play"} onClick={() => onUpdate?.("transport.playing", !transport.playing)} />
+          <FxSlider spec={{ label: "RATE", field: "transport.rate", min: 0.1, max: 4, step: 0.05, neutral: 1 }} root={transport as unknown as Record<string, unknown>} onUpdate={onUpdate} />
+          <FxSlider spec={{ label: "PAN", field: "transport.pan", min: -1, max: 1, step: 0.01, neutral: 0 }} root={transport as unknown as Record<string, unknown>} onUpdate={onUpdate} />
+          <FxSlider spec={{ label: "VOL", field: "transport.vol", min: 0, max: 1, step: 0.01, neutral: 1 }} root={transport as unknown as Record<string, unknown>} onUpdate={onUpdate} />
+          <ToggleSquare
+            label={transport.loopMode === "off" ? "Off" : transport.loopMode === "loop" ? "Loop" : "Pal"}
+            title="Cycle loop mode: off / loop / palindrome"
+            onClick={() =>
+              onUpdate?.("transport.loopMode", transport.loopMode === "off" ? "loop" : transport.loopMode === "loop" ? "palindrome" : "off")
+            }
+          />
         </FxSection>
       )}
     </div>

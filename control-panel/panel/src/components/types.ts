@@ -3,9 +3,25 @@
 // so the components carry their own contract with no dependency on the app/container.
 
 export interface LayerSource {
-  type: "video" | "color" | "camera";
+  type: "video" | "color" | "camera" | "slot";
   url?: string;
   color?: [number, number, number];
+  slotId?: string;
+}
+
+export interface SourceRef {
+  type: "media" | "slot";
+  mediaId?: string;
+  slotId?: string;
+}
+
+export interface SourceBankSlot {
+  id: string;
+  name: string;
+  content:
+    | null
+    | { type: "media"; mediaId: string }
+    | { type: "mix"; a: SourceRef | null; b: SourceRef | null; blendMode: string; mix: number };
 }
 
 export type MediaKind = "video" | "gif" | "image";
@@ -67,6 +83,7 @@ export interface Layer {
   blendMode: string;
   mask: Mask;
   fx: Fx;
+  warp: Warp;
 }
 
 export interface Point {
@@ -78,6 +95,19 @@ export interface Warp {
   mode: "corner" | "mesh";
   corners: Point[];
   mesh: { size: number; points: Point[] };
+}
+
+/** Per-layer clip transport (play/rate/loop/pan/vol) — mirrors the sibling
+ *  `lane-server-state` branch's `layers.<id>.transport` shape. Not yet produced by this
+ *  branch's server; the panel only needs the shape to render the Transport FX section. */
+export interface Transport {
+  playing: boolean;
+  rate: number;
+  loopIn: number | null;
+  loopOut: number | null;
+  loopMode: "off" | "loop" | "palindrome";
+  pan: number;
+  vol: number;
 }
 
 export interface Screen {

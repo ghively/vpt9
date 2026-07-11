@@ -29,6 +29,14 @@ export interface WarpEditorProps {
   maskEditLayer?: Layer | null;
   onMaskChange?: (field: string, value: unknown) => void;
   onMaskEditDone?: () => void;
+  /** When set, the stage edits this layer's own corner-pin/mesh warp instead of the
+   *  selected screen's. */
+  warpEditLayer?: Layer | null;
+  onLayerSetMode?: (mode: "corner" | "mesh") => void;
+  onLayerSetMeshSize?: (size: number) => void;
+  onLayerResetWarp?: () => void;
+  onLayerMovePoint?: (index: number, x: number, y: number) => void;
+  onWarpEditDone?: () => void;
 }
 
 const MESH_SIZES = [3, 4, 6, 8].map((n) => ({ value: String(n), label: `${n}×${n}` }));
@@ -78,13 +86,19 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
       maskEditLayer,
       onMaskChange,
       onMaskEditDone,
+      warpEditLayer,
+      onLayerSetMode,
+      onLayerSetMeshSize,
+      onLayerResetWarp,
+      onLayerMovePoint,
+      onWarpEditDone,
     },
     ref,
   ) {
-    const warp = screen?.warp;
-    const isMesh = warp?.mode === "mesh";
-    const points: Point[] = isMesh ? warp?.mesh.points ?? [] : warp?.corners ?? [];
-    const size = warp?.mesh.size ?? 4;
+    const activeWarp = warpEditLayer ? warpEditLayer.warp : screen?.warp;
+    const isMesh = activeWarp?.mode === "mesh";
+    const points: Point[] = isMesh ? activeWarp?.mesh.points ?? [] : activeWarp?.corners ?? [];
+    const size = activeWarp?.mesh.size ?? 4;
     const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
     // Reset the selection synchronously during render (not in a useEffect) when the point set
     // changes identity — e.g. mesh resize or corner/mesh mode switch. A useEffect runs AFTER
@@ -93,7 +107,7 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
     // "adjusting state when a prop changes" pattern: track the previous trigger values in state
     // (not a ref — a ref mutated during render doesn't replay correctly under StrictMode's
     // dev-mode double-render) and call setState directly, before the JSX below reads `selected`.
-    const resetKey = `${screen?.id ?? ""}|${warp?.mode ?? ""}|${size}`;
+    const resetKey = `${warpEditLayer ? `layer:${warpEditLayer.id}` : `screen:${screen?.id ?? ""}`}|${activeWarp?.mode ?? ""}|${size}`;
     const [prevResetKey, setPrevResetKey] = useState(resetKey);
     if (prevResetKey !== resetKey) {
       setPrevResetKey(resetKey);
@@ -109,6 +123,12 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
           <div className="mask-edit-banner">
             <span className="mono">Editing mask — {maskEditLayer.name || maskEditLayer.id}</span>
             <Button label="Done" onClick={onMaskEditDone} />
+          </div>
+        )}
+        {warpEditLayer && (
+          <div className="mask-edit-banner">
+            <span className="mono">Editing warp — {warpEditLayer.name || warpEditLayer.id}</span>
+            <Button label="Done" onClick={onWarpEditDone} />
           </div>
         )}
         <div className="panel-head">
@@ -137,17 +157,25 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
           </div>
         )}
         <div className="mode-group">
-          <Chip label="Corner pin" active={warp?.mode !== "mesh"} onClick={() => onSetMode?.("corner")} />
-          <Chip label="Mesh" active={warp?.mode === "mesh"} onClick={() => onSetMode?.("mesh")} />
+          <Chip
+            label="Corner pin"
+            active={activeWarp?.mode !== "mesh"}
+            onClick={() => (warpEditLayer ? onLayerSetMode : onSetMode)?.("corner")}
+          />
+          <Chip
+            label="Mesh"
+            active={activeWarp?.mode === "mesh"}
+            onClick={() => (warpEditLayer ? onLayerSetMode : onSetMode)?.("mesh")}
+          />
           {isMesh && (
             <Select
               className="mesh-size-select"
-              value={String(warp?.mesh.size ?? 4)}
+              value={String(activeWarp?.mesh.size ?? 4)}
               options={MESH_SIZES}
-              onChange={(v) => onSetMeshSize?.(Number(v))}
+              onChange={(v) => (warpEditLayer ? onLayerSetMeshSize : onSetMeshSize)?.(Number(v))}
             />
           )}
-          <Chip label="Reset" onClick={onReset} />
+          <Chip label="Reset" onClick={() => (warpEditLayer ? onLayerResetWarp : onReset)?.()} />
         </div>
         <ConfidenceMonitor ref={ref} previewFrame={previewFrame}>
           {maskEditLayer ? (
@@ -170,7 +198,7 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
                 coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
                 onSelect={() => setSelectedPoint(i)}
                 onDragStart={onDragStart}
-                onDragTo={(x, y) => onMovePoint?.(i, x, y)}
+                onDragTo={(x, y) => (warpEditLayer ? onLayerMovePoint : onMovePoint)?.(i, x, y)}
                 onDragEnd={onDragEnd}
               />
             ))
@@ -179,8 +207,16 @@ export const WarpEditor = forwardRef<ConfidenceMonitorHandle, WarpEditorProps>(
         {selected && !maskEditLayer && (
           <div className="warp-coord-entry">
             <span className="warp-coord-tag mono">{selectedLabel}</span>
-            <CoordInput label="X" value={selected.x} onCommit={(x) => onMovePoint?.(selectedPoint!, x, selected.y)} />
-            <CoordInput label="Y" value={selected.y} onCommit={(y) => onMovePoint?.(selectedPoint!, selected.x, y)} />
+            <CoordInput
+              label="X"
+              value={selected.x}
+              onCommit={(x) => (warpEditLayer ? onLayerMovePoint : onMovePoint)?.(selectedPoint!, x, selected.y)}
+            />
+            <CoordInput
+              label="Y"
+              value={selected.y}
+              onCommit={(y) => (warpEditLayer ? onLayerMovePoint : onMovePoint)?.(selectedPoint!, selected.x, y)}
+            />
           </div>
         )}
       </div>

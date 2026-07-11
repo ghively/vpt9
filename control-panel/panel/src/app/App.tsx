@@ -11,6 +11,7 @@ import {
   MobileTabBar,
   PipWindows,
   PresetsBar,
+  SourceBankPanel,
   StatusLamp,
   TimerBank,
   WarpEditor,
@@ -28,6 +29,10 @@ import { createActions } from "./actions";
 
 /** The layer-look fields copy/paste moves between layers (not source/name/order). */
 type LayerLook = Pick<Layer, "opacity" | "blendMode" | "mask" | "fx">;
+
+/** What the screen-aside canvas is currently editing on top of the confidence monitor:
+ *  a layer's mask shape, a layer's own corner-pin/mesh warp, or nothing (screen warp). */
+type CanvasEditTarget = { kind: "mask"; layerId: string } | { kind: "warp"; layerId: string } | null;
 
 type ShowTab = "presets" | "cues" | "timers" | "lfo" | "midi";
 const SHOW_TABS: Array<[ShowTab, string]> = [
@@ -81,7 +86,7 @@ export function App() {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [activeShowTab, setActiveShowTab] = useState<ShowTab>("presets");
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("layers");
-  const [maskEditLayerId, setMaskEditLayerId] = useState<string | null>(null);
+  const [canvasEditTarget, setCanvasEditTarget] = useState<CanvasEditTarget>(null);
   const isMobile = useIsMobile();
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedScreenId;
@@ -94,6 +99,10 @@ export function App() {
   const [canPaste, setCanPaste] = useState(false);
   // Pre-blackout master level, restored by the blackout toggle.
   const preBlackoutRef = useRef(1);
+  // Clip-transport scrub-position telemetry, keyed by layer id. Not `state` — this is
+  // high-frequency, non-persisted display telemetry (Task 14's transportStatus relay),
+  // so it lives outside the store/rerender path rather than as a reducer-driven field.
+  const transportPositionsRef = useRef<Record<string, number>>({});
 
   const preview = usePreviewBus(() => selectedRef.current);
 
@@ -144,6 +153,11 @@ export function App() {
     },
     onPreview(screenId, frame) {
       preview.push(screenId, frame);
+    },
+    onTransportStatus(layerId, position) {
+      // No forceRender here on purpose — this ticks at playback frame rate and is read
+      // directly off the ref by the (future) Transport scrub readout, not the store.
+      transportPositionsRef.current[layerId] = position;
     },
     onStatus(state, url) {
       setStatus({ state, label: `${state} · ${url}` });
@@ -197,13 +211,22 @@ export function App() {
 
   const editMask = useCallback(
     (id: string) => {
-      setMaskEditLayerId(id);
+      setCanvasEditTarget({ kind: "mask", layerId: id });
+      if (isMobile) setActiveMobileTab("screen");
+    },
+    [isMobile],
+  );
+  const editLayerWarp = useCallback(
+    (id: string) => {
+      setCanvasEditTarget({ kind: "warp", layerId: id });
       if (isMobile) setActiveMobileTab("screen");
     },
     [isMobile],
   );
 
   const state = stateRef.current;
+  const maskEditLayerId = canvasEditTarget?.kind === "mask" ? canvasEditTarget.layerId : null;
+  const warpEditLayerId = canvasEditTarget?.kind === "warp" ? canvasEditTarget.layerId : null;
   const sid = selectedScreenId ?? "";
   const layers = Object.values(state.layers ?? {});
   const media = Object.values(state.media ?? {});
@@ -223,10 +246,20 @@ export function App() {
     />
   );
 
+  const sourceBankPane = (
+    <SourceBankPanel
+      slots={state.sourceBank ?? []}
+      media={media}
+      onRename={actions.renameSourceBankSlot}
+      onSetContent={actions.setSourceBankSlotContent}
+    />
+  );
+
   const layerRack = (
     <ChannelRack
       layers={layers}
       media={media}
+      sourceBank={state.sourceBank}
       onUpdateLayer={actions.updateLayer}
       onMoveLayer={actions.moveLayer}
       onRemoveLayer={actions.removeLayer}
@@ -235,6 +268,13 @@ export function App() {
       onPasteLayer={pasteLayer}
       canPaste={canPaste}
       onEditMaskLayer={editMask}
+      onEditWarpLayer={editLayerWarp}
+      onApplyCornerPresetLayer={(id, preset) =>
+        actions.applyLayerCornerPreset(
+          id,
+          preset as "full" | "center" | "leftThird" | "rightThird" | "rotate90" | "rotate180" | "rotate270",
+        )
+      }
     />
   );
 
@@ -338,7 +378,13 @@ export function App() {
         onDragEnd={endDrag}
         maskEditLayer={maskEditLayerId ? state.layers[maskEditLayerId] ?? null : null}
         onMaskChange={(field, value) => { if (maskEditLayerId) actions.updateLayer(maskEditLayerId, field, value); }}
-        onMaskEditDone={() => setMaskEditLayerId(null)}
+        onMaskEditDone={() => setCanvasEditTarget(null)}
+        warpEditLayer={warpEditLayerId ? state.layers[warpEditLayerId] ?? null : null}
+        onLayerSetMode={(mode) => { if (warpEditLayerId) actions.setLayerWarpMode(warpEditLayerId, mode); }}
+        onLayerSetMeshSize={(size) => { if (warpEditLayerId) actions.setLayerMeshSize(warpEditLayerId, size); }}
+        onLayerResetWarp={() => { if (warpEditLayerId) actions.resetLayerWarp(warpEditLayerId); }}
+        onLayerMovePoint={(index, x, y) => { if (warpEditLayerId) actions.moveLayerWarpPoint(warpEditLayerId, index, x, y); }}
+        onWarpEditDone={() => setCanvasEditTarget(null)}
       />
       <PipWindows
         ref={preview.pipMonitor}
@@ -374,7 +420,7 @@ export function App() {
         {faceplate}
         <div className="mobile-view">
           {activeMobileTab === "layers" && <main className="workspace">{layerRack}</main>}
-          {activeMobileTab === "media" && <main className="workspace">{mediaPane}</main>}
+          {activeMobileTab === "media" && <main className="workspace">{mediaPane}{sourceBankPane}</main>}
           {activeMobileTab === "show" && <main className="workspace">{showControl}</main>}
           {activeMobileTab === "screen" && screenAside}
         </div>
@@ -390,6 +436,7 @@ export function App() {
         {/* Left column: the scene (layer rack) + the show (presets/cues/timers/modulation). */}
         <main className="workspace">
           {mediaPane}
+          {sourceBankPane}
           {layerRack}
           {showControl}
         </main>

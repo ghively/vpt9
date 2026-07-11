@@ -1,4 +1,4 @@
-import type { Layer, Screen, Pip, Preset, Automation, Lfo, MidiMapping, MediaItem } from "../components/types";
+import type { Layer, Screen, Pip, Preset, Automation, Lfo, MidiMapping, MediaItem, SourceBankSlot } from "../components/types";
 
 /** The panel's mirror of the control-plane state (server/src/state.js). Held in a mutable
  *  ref and patched in place — exactly like the vanilla panel — with React re-renders
@@ -16,6 +16,11 @@ export interface PanelState {
   midiMap: Record<string, MidiMapping>;
   /** Uploaded media library (server/src/media.js), keyed by id. */
   media: Record<string, MediaItem>;
+  /** Fixed-length source-bank slots (server/src/state.js), addressed positionally —
+   *  same shape/positional convention as Lane A's `sourceBank` state. Declared here so
+   *  the panel typechecks standalone; Lane C only reads/writes this by dotted path and
+   *  never imports server code, per the parity-finish-line plan's lane-independence note. */
+  sourceBank: SourceBankSlot[];
 }
 
 export function emptyState(): PanelState {
@@ -30,6 +35,7 @@ export function emptyState(): PanelState {
     lfos: {},
     midiMap: {},
     media: {},
+    sourceBank: [],
   };
 }
 
