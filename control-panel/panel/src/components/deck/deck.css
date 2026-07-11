@@ -16,7 +16,9 @@
 .deck {
   height: 100vh;
   display: grid;
-  grid-template-rows: 46px 1fr;
+  /* Row sizes to the Faceplate header's own height (padding lives in panel.css)
+   * rather than a hardcoded 46px, so the bar never clips its content. */
+  grid-template-rows: auto 1fr;
 }
 
 /* ---------------- command bar ---------------- */
@@ -27,6 +29,13 @@
   padding: 0 16px;
   border-bottom: 1px solid var(--hairline);
   background: linear-gradient(180deg, var(--panel), #0f1013);
+}
+/* The Faceplate <header> is .cmd's single child; stretch it to fill the bar
+ * so right-pinned content (master fader, blackout, connection status) sits
+ * flush against the screen edge instead of shrinking to content width. */
+.cmd > header {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ---------------- body columns ---------------- */
