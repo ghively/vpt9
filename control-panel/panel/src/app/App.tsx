@@ -146,7 +146,9 @@ export function App() {
             layers={layersTopFirst}
             selectedId={selection.selectedLayerId}
             onSelect={selection.setSelectedLayerId}
-            actions={actions}
+            onAddLayer={actions.addLayer}
+            onMoveLayer={actions.moveLayer}
+            onRemoveLayer={actions.removeLayer}
           />
           {/* <SlotGrid/> lands here in Task 3 */}
           <div className="sec-head label">Source bank</div>

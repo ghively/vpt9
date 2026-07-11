@@ -1,4 +1,3 @@
-import type { PanelActions } from "../../app/actions";
 import { ToggleSquare } from "../primitives/ToggleSquare";
 import type { Layer } from "../types";
 
@@ -7,7 +6,9 @@ export interface LayerStackProps {
   layers: Layer[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  actions: PanelActions;
+  onAddLayer: () => void;
+  onMoveLayer: (id: string, dir: "up" | "down") => void;
+  onRemoveLayer: (id: string) => void;
 }
 
 function rgbToHex([r, g, b]: [number, number, number]): string {
@@ -18,8 +19,8 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 /** Compact left-rail layer list: a color swatch (or gradient placeholder) thumbnail,
  *  name, blend/index meta, and an opacity bar per layer. Rows are selectable (driving
  *  the stage handles + inspector in later tasks) and carry reorder/remove affordances
- *  that call straight into the existing `actions` write path — no new message types. */
-export function LayerStack({ layers, selectedId, onSelect, actions }: LayerStackProps) {
+ *  that call straight into the existing write path — no new message types. */
+export function LayerStack({ layers, selectedId, onSelect, onAddLayer, onMoveLayer, onRemoveLayer }: LayerStackProps) {
   return (
     <>
       <div className="sec-head label">
@@ -64,27 +65,27 @@ export function LayerStack({ layers, selectedId, onSelect, actions }: LayerStack
                   label="▲"
                   title="Move toward front"
                   disabled={i === 0}
-                  onClick={() => actions.moveLayer(layer.id, "up")}
+                  onClick={() => onMoveLayer(layer.id, "up")}
                 />
                 <ToggleSquare
                   className="move-btn"
                   label="▼"
                   title="Move toward back"
                   disabled={i === layers.length - 1}
-                  onClick={() => actions.moveLayer(layer.id, "down")}
+                  onClick={() => onMoveLayer(layer.id, "down")}
                 />
                 <ToggleSquare
                   className="remove-btn"
                   label="×"
                   title="Remove layer"
-                  onClick={() => actions.removeLayer(layer.id)}
+                  onClick={() => onRemoveLayer(layer.id)}
                 />
               </div>
             </div>
           );
         })}
       </div>
-      <button type="button" className="addbtn" onClick={() => actions.addLayer()}>
+      <button type="button" className="addbtn" onClick={() => onAddLayer()}>
         + Add layer
       </button>
     </>
