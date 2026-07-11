@@ -1,0 +1,63 @@
+/* Projection-deck shell layout — ported from the approved mockup
+ * (docs/superpowers/specs/2026-07-11-projection-deck-mockup.html).
+ *
+ * Layout-level rules only: the 3-zone grid (command bar / left rail / stage /
+ * right inspector). Token values are NOT redefined here — they already live in
+ * tokens/tokens.css; this file only references them via var(--...). The mockup's
+ * own :root block (--ink, --panel, --hair, --dim, --beam, --beam-line, ...) maps
+ * onto the real token names as follows:
+ *   --hair      -> --hairline
+ *   --hair-soft -> --hairline-soft
+ *   --dim       -> --muted-dim
+ *   --ink, --panel, --beam, --beam-line, --cool  -> unchanged (already real tokens)
+ */
+
+/* ---------------- shell ---------------- */
+.deck {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 46px 1fr;
+}
+
+/* ---------------- command bar ---------------- */
+.cmd {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: linear-gradient(180deg, var(--panel), #0f1013);
+}
+
+/* ---------------- body columns ---------------- */
+.body {
+  display: grid;
+  grid-template-columns: 232px 1fr 288px;
+  min-height: 0;
+}
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+}
+.rail-l { border-right: 1px solid var(--hairline); }
+.rail-r { border-left: 1px solid var(--hairline); }
+
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+  color: var(--muted-dim);
+  font-size: 9.5px;
+}
+.sec-head::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: var(--beam);
+  box-shadow: 0 0 6px var(--beam-line);
+  flex: none;
+}
+.sec-head .count { margin-left: auto; color: var(--muted-dim); }

@@ -4,3 +4,4 @@
 @import "./tokens/tokens.css";
 @import "./tokens/base.css";
 @import "./components/panel.css";
+@import "./components/deck/deck.css";
