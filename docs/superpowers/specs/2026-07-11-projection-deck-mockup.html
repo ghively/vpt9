@@ -1,0 +1,548 @@
+<title>VPT · Projection Deck redesign</title>
+<style>
+  /* ---- Honoring the existing token system (panel/src/tokens/tokens.css):
+     tungsten amber = the operator (you); projection cyan = render/preview data.
+     Deliberately single-theme: this is a matte AV deck driven in a dark venue. ---- */
+  :root {
+    --ink: #08090b;
+    --panel: #131418;
+    --raised: #1b1d23;
+    --raised-2: #212430;
+    --sunken: #0b0c0e;
+    --hair: #2a2c35;
+    --hair-soft: #1c1e24;
+    --text: #ecebe5;
+    --muted: #8b8a84;
+    --dim: #565760;
+    --beam: #ff9b3d;               /* tungsten — YOU */
+    --beam-dim: rgba(255,155,61,.15);
+    --beam-line: rgba(255,155,61,.5);
+    --cool: #4bd6e2;               /* projection cyan — RENDER */
+    --cool-dim: rgba(75,214,226,.14);
+    --cool-line: rgba(75,214,226,.5);
+    --good: #63d787;
+    --live: #ff4658;
+    --grid: rgba(236,235,229,.05);
+    --font-ui: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+    --r: 3px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 700px at 60% -10%, #101218 0%, var(--ink) 60%);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .label, .eyebrow {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .18em;
+    font-weight: 600;
+  }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+  :focus-visible { outline: 1.5px solid var(--beam); outline-offset: 2px; }
+
+  /* ---------------- shell ---------------- */
+  .deck { height: 100vh; display: grid; grid-template-rows: 46px 1fr; }
+
+  /* ---------------- command bar ---------------- */
+  .cmd {
+    display: flex; align-items: center; gap: 20px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--hair);
+    background: linear-gradient(180deg, var(--panel), #0f1013);
+  }
+  .wordmark { font-family: var(--font-mono); font-weight: 700; letter-spacing: .22em; font-size: 13px; }
+  .wordmark b { color: var(--beam); }
+  .wordmark .slash { color: var(--dim); margin: 0 2px; }
+  .wordmark .sub { color: var(--muted); font-weight: 500; letter-spacing:.16em; }
+  .seg { display: inline-flex; border: 1px solid var(--hair); border-radius: var(--r); overflow: hidden; }
+  .seg button {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 6px 12px; color: var(--muted); border-right: 1px solid var(--hair);
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button[aria-pressed="true"] { color: var(--beam); background: var(--beam-dim); }
+  .cmd-spacer { flex: 1; }
+  .master { display: flex; align-items: center; gap: 10px; }
+  .master .label { color: var(--dim); font-size: 9.5px; }
+  .fader-h { width: 150px; height: 6px; border-radius: 3px; background: var(--sunken); border: 1px solid var(--hair); position: relative; }
+  .fader-h > i { position: absolute; inset: 0 30% 0 0; background: linear-gradient(90deg, #6b3f14, var(--beam)); border-radius: 3px 0 0 3px; }
+  .fader-h > b { position: absolute; top: -4px; right: 30%; width: 3px; height: 14px; background: var(--text); border-radius: 1px; box-shadow: 0 0 6px rgba(0,0,0,.6); }
+  .pct { color: var(--text); font-size: 11px; min-width: 34px; text-align: right; }
+  .blackout {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 6px 12px; border: 1px solid var(--hair); border-radius: var(--r); color: var(--muted);
+  }
+  .blackout:hover { border-color: var(--live); color: var(--live); }
+  .status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; }
+  .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); }
+
+  /* ---------------- body columns ---------------- */
+  .body { display: grid; grid-template-columns: 232px 1fr 288px; min-height: 0; }
+  .rail { display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+  .rail-l { border-right: 1px solid var(--hair); }
+  .rail-r { border-left: 1px solid var(--hair); }
+  .sec-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px 8px;
+    color: var(--dim); font-size: 9.5px;
+  }
+  .sec-head::before { content: ""; width: 5px; height: 5px; background: var(--beam); box-shadow: 0 0 6px var(--beam-line); flex: none; }
+  .sec-head .count { margin-left: auto; color: var(--dim); }
+
+  /* ---------------- layer stack ---------------- */
+  .layers { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 6px; overflow-y: auto; }
+  .layer {
+    display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center;
+    padding: 7px; border: 1px solid var(--hair-soft); border-radius: var(--r);
+    background: var(--raised); cursor: pointer; position: relative;
+    transition: border-color .12s, background .12s;
+  }
+  .layer:hover { border-color: var(--dim); }
+  .layer[aria-selected="true"] { border-color: var(--beam-line); background: #22201c; }
+  .layer[aria-selected="true"]::before { content: ""; position: absolute; left: -1px; top: 6px; bottom: 6px; width: 2px; background: var(--beam); box-shadow: 0 0 8px var(--beam-line); }
+  .thumb { width: 44px; height: 25px; border-radius: 2px; border: 1px solid var(--hair); overflow: hidden; background: var(--sunken); }
+  .layer .nm { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .layer .meta { font-family: var(--font-mono); font-size: 9px; color: var(--muted); letter-spacing: .06em; margin-top: 2px; text-transform: uppercase; }
+  .layer .op { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-align: right; }
+  .layer .opbar { width: 34px; height: 3px; background: var(--sunken); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .layer .opbar > i { display: block; height: 100%; background: var(--beam); opacity: .8; }
+  .addbtn {
+    margin: 4px 10px 0; padding: 8px; border: 1px dashed var(--hair); border-radius: var(--r);
+    color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  }
+  .addbtn:hover { border-color: var(--beam-line); color: var(--beam); }
+
+  /* ---------------- slot grid ---------------- */
+  .slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 0 10px 12px; }
+  .slot {
+    aspect-ratio: 16/10; border: 1px solid var(--hair-soft); border-radius: var(--r);
+    background: var(--sunken); position: relative; overflow: hidden; cursor: pointer;
+    display: flex; align-items: flex-end; padding: 6px;
+    transition: border-color .12s;
+  }
+  .slot:hover { border-color: var(--dim); }
+  .slot .n { font-family: var(--font-mono); font-size: 9px; color: var(--dim); letter-spacing: .1em; }
+  .slot.filled { border-color: var(--cool-line); }
+  .slot.filled::after { content: ""; position: absolute; inset: 0; opacity: .5; }
+  .slot.s3::after { background: radial-gradient(circle at 30% 30%, #2a6b6f, transparent 70%); }
+  .slot.s5::after { background: radial-gradient(circle at 60% 40%, #5a3a72, transparent 70%); }
+  .slot.filled .n { color: var(--cool); }
+
+  /* ---------------- STAGE (the star) ---------------- */
+  .stage-wrap { position: relative; padding: 16px; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+  .stage {
+    position: relative; flex: 1; border-radius: 4px; overflow: hidden;
+    background: var(--sunken); border: 1px solid var(--hair);
+    box-shadow: inset 0 0 0 1px #000, 0 20px 60px -20px #000;
+  }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* faint registration grid + corner ticks: the confidence-monitor signature (cyan = render) */
+  .reg { position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px; }
+  .tick { position: absolute; width: 16px; height: 16px; border: 1px solid var(--cool-line); opacity: .55; pointer-events: none; }
+  .tick.tl { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+  .tick.tr { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+  .tick.bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+  .tick.br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+  .stage-badge {
+    position: absolute; top: 12px; left: 32px; display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .12em; color: var(--cool); text-transform: uppercase;
+  }
+  .stage-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cool); box-shadow: 0 0 8px var(--cool); }
+  .stage-fps { position: absolute; top: 12px; right: 32px; font-family: var(--font-mono); font-size: 9.5px; color: var(--muted); letter-spacing: .1em; }
+
+  /* selection overlay (SVG-ish via divs) — warp quad + corner nodes */
+  .sel-label {
+    position: absolute; transform: translate(-50%,-140%); z-index: 6;
+    display: flex; align-items: center; gap: 6px; padding: 3px 8px;
+    background: rgba(20,16,10,.9); border: 1px solid var(--beam-line); border-radius: var(--r);
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; color: var(--beam); text-transform: uppercase; white-space: nowrap;
+  }
+  .quad { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+  .node {
+    position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; z-index: 5;
+    cursor: grab; touch-action: none;
+  }
+  .node::before, .node::after { content: ""; position: absolute; background: var(--beam); box-shadow: 0 0 6px var(--beam-line); }
+  .node::before { left: 9px; top: 2px; width: 2px; height: 16px; }   /* vertical */
+  .node::after  { top: 9px; left: 2px; height: 2px; width: 16px; }   /* horizontal */
+  .node .ring { position: absolute; inset: 3px; border: 1.5px solid var(--beam); border-radius: 50%; }
+  .node .tag { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 8px; color: var(--beam); letter-spacing: .1em; }
+  .node:active { cursor: grabbing; }
+
+  /* mask ellipse */
+  .mask-shape { position: absolute; z-index: 4; border: 1.5px dashed var(--cool); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 0 30px rgba(75,214,226,.08); pointer-events: none; }
+  .mask-node { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--cool); box-shadow: 0 0 8px var(--cool-line); z-index: 5; cursor: grab; }
+
+  .stage-toolbar { display: flex; align-items: center; gap: 14px; padding: 0 6px; color: var(--muted); }
+  .stage-toolbar .label { font-size: 9px; color: var(--dim); }
+  .stage-toolbar .k { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+  .stage-toolbar .k b { color: var(--text); font-weight: 500; }
+  .hint { margin-left: auto; font-family: var(--font-mono); font-size: 9.5px; color: var(--dim); letter-spacing: .04em; }
+  .hint b { color: var(--beam); font-weight: 500; }
+
+  /* ---------------- inspector ---------------- */
+  .insp { display: flex; flex-direction: column; min-height: 0; }
+  .insp-head { padding: 14px 14px 10px; border-bottom: 1px solid var(--hair-soft); }
+  .insp-title { display: flex; align-items: center; gap: 8px; }
+  .insp-swatch { width: 20px; height: 20px; border-radius: 2px; border: 1px solid var(--hair); }
+  .insp-title .nm { font-size: 15px; color: var(--text); }
+  .insp-title .ix { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--beam); }
+  .insp-sub { font-family: var(--font-mono); font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-top: 5px; }
+  .insp-body { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field > .label { color: var(--dim); font-size: 9px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .select {
+    flex: 1; display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 10px; border: 1px solid var(--hair); border-radius: var(--r); background: var(--raised);
+    font-size: 12px; color: var(--text); cursor: pointer;
+  }
+  .select .car { color: var(--dim); }
+  .swatch-row { display: flex; align-items: center; gap: 8px; }
+  .swatch-lg { flex: 1; height: 22px; border-radius: 2px; border: 1px solid var(--hair); }
+
+  .fader { position: relative; height: 26px; border: 1px solid var(--hair); border-radius: var(--r); background: var(--sunken); overflow: hidden; }
+  .fader > i { position: absolute; inset: 0; width: 82%; background: linear-gradient(90deg, rgba(255,155,61,.18), rgba(255,155,61,.32)); border-right: 1.5px solid var(--beam); }
+  .fader > span { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+  .fader.cool > i { background: linear-gradient(90deg, rgba(75,214,226,.14), rgba(75,214,226,.26)); border-right-color: var(--cool); }
+
+  .modes { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; border: 1px solid var(--hair); border-radius: var(--r); overflow: hidden; }
+  .modes button {
+    padding: 9px 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); border-right: 1px solid var(--hair);
+  }
+  .modes button:last-child { border-right: none; }
+  .modes button[aria-pressed="true"] { color: var(--beam); background: var(--beam-dim); }
+  .ctx { display: flex; flex-direction: column; gap: 13px; border-top: 1px solid var(--hair-soft); padding-top: 13px; }
+  .subhead { font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .subhead .rst { margin-left: auto; color: var(--dim); border: 1px solid var(--hair); border-radius: 2px; padding: 2px 7px; font-size: 8.5px; }
+  .subhead .rst:hover { color: var(--beam); border-color: var(--beam-line); }
+  .coords { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .coord { display: flex; justify-content: space-between; padding: 6px 8px; border: 1px solid var(--hair-soft); border-radius: 2px; background: var(--raised); font-family: var(--font-mono); font-size: 10px; }
+  .coord .t { color: var(--dim); }
+  .coord .v { color: var(--cool); }
+  .mini { display: flex; align-items: center; justify-content: space-between; }
+  .mini .label { color: var(--muted); font-size: 9px; }
+  .mini .val { font-family: var(--font-mono); font-size: 10px; color: var(--text); }
+  .togglepill { display: inline-flex; border: 1px solid var(--hair); border-radius: 20px; overflow: hidden; }
+  .togglepill button { padding: 4px 12px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .togglepill button[aria-pressed="true"] { color: var(--ink); background: var(--beam); }
+
+  .note { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 40;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; color: var(--muted);
+    background: rgba(12,13,16,.86); border: 1px solid var(--hair); border-radius: 20px; padding: 6px 14px; }
+  .note b { color: var(--beam); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+
+<div class="deck">
+  <header class="cmd">
+    <div class="wordmark"><b>VPT</b><span class="slash">/</span><span class="sub">projection deck</span></div>
+    <div class="seg" role="group" aria-label="Screen">
+      <button aria-pressed="true">SCREEN 1</button>
+      <button aria-pressed="false">SCREEN 2</button>
+    </div>
+    <div class="cmd-spacer"></div>
+    <div class="master">
+      <span class="label">Master</span>
+      <div class="fader-h"><i></i><b></b></div>
+      <span class="pct mono">70%</span>
+    </div>
+    <button class="blackout">Blackout</button>
+    <div class="status"><span class="lamp"></span> CONNECTED · ws://localhost:8080</div>
+  </header>
+
+  <div class="body">
+    <!-- LEFT: layer stack + slot grid -->
+    <aside class="rail rail-l">
+      <div class="sec-head label">Layer stack<span class="count mono">top first</span></div>
+      <div class="layers" id="layers"></div>
+      <button class="addbtn">+ Add layer</button>
+      <div class="sec-head label" style="margin-top:6px">Source bank<span class="count mono">8</span></div>
+      <div class="slots" id="slots"></div>
+    </aside>
+
+    <!-- CENTER: the STAGE -->
+    <main class="stage-wrap">
+      <div class="stage" id="stage">
+        <canvas id="scene"></canvas>
+        <div class="reg"></div>
+        <span class="tick tl"></span><span class="tick tr"></span><span class="tick bl"></span><span class="tick br"></span>
+        <div class="stage-badge"><span class="dot"></span> LIVE · SCREEN 1</div>
+        <div class="stage-fps mono">1280×720 · 60fps</div>
+        <!-- selection overlay injected here -->
+        <div id="overlay"></div>
+      </div>
+      <div class="stage-toolbar">
+        <span class="label">Editing</span>
+        <span class="k">layer <b id="tbLayer">Ambient loop</b></span>
+        <span class="k">mode <b id="tbMode">Warp · corner-pin</b></span>
+        <span class="hint">Click an object on the stage to select · drag <b>corners</b> to warp</span>
+      </div>
+    </main>
+
+    <!-- RIGHT: contextual inspector -->
+    <aside class="rail rail-r insp">
+      <div class="insp-head">
+        <div class="insp-title">
+          <span class="insp-swatch" id="ispSwatch"></span>
+          <span class="nm" id="ispName">Ambient loop</span>
+          <span class="ix mono" id="ispIx">L1</span>
+        </div>
+        <div class="insp-sub" id="ispSub">Video · /media/ambient.mp4</div>
+      </div>
+      <div class="insp-body">
+        <div class="field">
+          <span class="label">Source</span>
+          <div class="select" id="ispSource"><span>Video · external URL</span><span class="car">▾</span></div>
+        </div>
+        <div class="field">
+          <span class="label">Opacity</span>
+          <div class="fader"><i id="ispOpFill"></i><span id="ispOp">82%</span></div>
+        </div>
+        <div class="field">
+          <span class="label">Blend</span>
+          <div class="select"><span id="ispBlend">Screen</span><span class="car">▾</span></div>
+        </div>
+
+        <div class="field">
+          <span class="label">Edit on stage</span>
+          <div class="modes" id="modes" role="group" aria-label="Edit mode">
+            <button data-mode="warp" aria-pressed="true">Warp</button>
+            <button data-mode="mask" aria-pressed="false">Mask</button>
+            <button data-mode="fx" aria-pressed="false">FX</button>
+          </div>
+        </div>
+
+        <div class="ctx" id="ctx"><!-- contextual controls injected --></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="note">Interactive mockup — <b>click a layer</b> (rail or on the stage), switch <b>Warp/Mask/FX</b>, and <b>drag the corner nodes</b> on the stage.</div>
+
+<script>
+(() => {
+  const LAYERS = [
+    { id:"L2", name:"Starfield",   src:"Solid color", sub:"Color · #59289C", blend:"Multiply", op:46, color:"#59289c", kind:"color" },
+    { id:"L1", name:"Ambient loop", src:"Video · external URL", sub:"Video · /media/ambient.mp4", blend:"Screen", op:82, color:"#1c3a55", kind:"video" },
+  ];
+  let selIndex = 1;         // Ambient loop selected by default
+  let mode = "warp";
+  // corner-pin state (normalized 0..1) per layer
+  const warp = {
+    L1: [ {x:.10,y:.14}, {x:.88,y:.08}, {x:.93,y:.86}, {x:.06,y:.90} ],
+    L2: [ {x:.04,y:.04}, {x:.96,y:.04}, {x:.96,y:.96}, {x:.04,y:.96} ],
+  };
+  const mask = { L1:{cx:.5,cy:.5,rx:.32,ry:.30}, L2:{cx:.5,cy:.5,rx:.4,ry:.4} };
+  const TAGS = ["TL","TR","BR","BL"];
+
+  // ---------- left rail ----------
+  const layersEl = document.getElementById("layers");
+  function renderLayers(){
+    layersEl.innerHTML = "";
+    LAYERS.forEach((L,i)=>{
+      const el = document.createElement("div");
+      el.className = "layer"; el.setAttribute("aria-selected", i===selIndex);
+      el.innerHTML = `
+        <div class="thumb" style="background:${L.kind==='color'?L.color:'linear-gradient(135deg,#12283b,#0c1620)'}"></div>
+        <div>
+          <div class="nm">${L.name}</div>
+          <div class="meta">${L.blend} · L${LAYERS.length-i}</div>
+        </div>
+        <div>
+          <div class="op">${L.op}%</div>
+          <div class="opbar"><i style="width:${L.op}%"></i></div>
+        </div>`;
+      el.onclick = ()=>{ selIndex=i; sync(); };
+      layersEl.appendChild(el);
+    });
+  }
+  const slotsEl = document.getElementById("slots");
+  ["","","MIX","","CAM 1","","",""].forEach((s,i)=>{
+    const el = document.createElement("div");
+    const filled = s!=="";
+    el.className = "slot" + (filled?` filled s${i+1}`:"");
+    el.innerHTML = `<span class="n">${filled?s:"SLOT "+(i+1)}</span>`;
+    slotsEl.appendChild(el);
+  });
+
+  // ---------- stage scene (canvas) ----------
+  const cv = document.getElementById("scene"), cx = cv.getContext("2d");
+  let W=0,H=0;
+  function resize(){ const r=cv.getBoundingClientRect(); cv.width=W=r.width*devicePixelRatio; cv.height=H=r.height*devicePixelRatio; }
+  const blobs = [
+    {c:"#3a1e6e",x:.34,y:.42,r:.42,dx:.00007,dy:.00005,p:0},
+    {c:"#0d3d5c",x:.66,y:.55,r:.5, dx:-.00006,dy:.00004,p:2},
+    {c:"#6b3410",x:.5,y:.3,r:.3, dx:.00004,dy:-.00006,p:4},
+  ];
+  let reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function draw(t){
+    cx.clearRect(0,0,W,H);
+    cx.fillStyle = "#070809"; cx.fillRect(0,0,W,H);
+    blobs.forEach(b=>{
+      const bx=(b.x + (reduced?0:Math.sin(t*b.dx+b.p)*.06))*W;
+      const by=(b.y + (reduced?0:Math.cos(t*b.dy+b.p)*.05))*H;
+      const g=cx.createRadialGradient(bx,by,0,bx,by,b.r*W);
+      g.addColorStop(0,b.c); g.addColorStop(1,"rgba(0,0,0,0)");
+      cx.globalCompositeOperation="lighter"; cx.fillStyle=g;
+      cx.beginPath(); cx.arc(bx,by,b.r*W,0,7); cx.fill();
+    });
+    cx.globalCompositeOperation="source-over";
+    // faint scanlines
+    cx.fillStyle="rgba(0,0,0,.10)";
+    for(let y=0;y<H;y+=3*devicePixelRatio) cx.fillRect(0,y,W,1);
+    if(!reduced) requestAnimationFrame(draw);
+  }
+
+  // ---------- overlay (selection handles) ----------
+  const stage = document.getElementById("stage");
+  const overlay = document.getElementById("overlay");
+  function stageRect(){ return stage.getBoundingClientRect(); }
+
+  function renderOverlay(){
+    overlay.innerHTML = "";
+    const L = LAYERS[selIndex];
+    const R = stageRect();
+    // floating label at the top-center of the selection
+    if(mode==="warp"){
+      const pts = warp[L.id];
+      const cxp = (pts[0].x+pts[1].x)/2, cyp=(pts[0].y+pts[1].y)/2;
+      addLabel(L.name+" · warp", cxp, Math.min(pts[0].y,pts[1].y));
+      // quad lines
+      const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      svg.setAttribute("class","quad"); svg.setAttribute("viewBox","0 0 100 100"); svg.setAttribute("preserveAspectRatio","none");
+      const poly = document.createElementNS("http://www.w3.org/2000/svg","polygon");
+      poly.setAttribute("points", pts.map(p=>`${p.x*100},${p.y*100}`).join(" "));
+      poly.setAttribute("fill","rgba(255,155,61,.06)"); poly.setAttribute("stroke","rgba(255,155,61,.5)"); poly.setAttribute("stroke-width",".4"); poly.setAttribute("vector-effect","non-scaling-stroke");
+      svg.appendChild(poly); overlay.appendChild(svg);
+      pts.forEach((p,i)=>addNode(p,i,L.id));
+    } else if(mode==="mask"){
+      const m = mask[L.id];
+      addLabel(L.name+" · mask", m.cx, m.cy-m.ry);
+      const e=document.createElement("div"); e.className="mask-shape";
+      e.style.left=`${(m.cx-m.rx)*100}%`; e.style.top=`${(m.cy-m.ry)*100}%`;
+      e.style.width=`${m.rx*200}%`; e.style.height=`${m.ry*200}%`;
+      overlay.appendChild(e);
+      addMaskNode(m.cx,m.cy,"center",L.id);
+      addMaskNode(m.cx+m.rx,m.cy,"rx",L.id);
+      addMaskNode(m.cx,m.cy-m.ry,"ry",L.id);
+    } else {
+      const p=warp[L.id]; const minx=Math.min(...p.map(q=>q.x)),miny=Math.min(...p.map(q=>q.y)),maxx=Math.max(...p.map(q=>q.x)),maxy=Math.max(...p.map(q=>q.y));
+      addLabel(L.name+" · fx", (minx+maxx)/2, miny);
+      const b=document.createElement("div"); b.style.cssText=`position:absolute;left:${minx*100}%;top:${miny*100}%;width:${(maxx-minx)*100}%;height:${(maxy-miny)*100}%;border:1px solid var(--beam-line);border-radius:2px;pointer-events:none;`;
+      overlay.appendChild(b);
+    }
+  }
+  function addLabel(text,x,y){
+    const l=document.createElement("div"); l.className="sel-label"; l.textContent=text;
+    l.style.left=`${x*100}%`; l.style.top=`${Math.max(y,.06)*100}%`;
+    overlay.appendChild(l);
+  }
+  function addNode(p,i,id){
+    const n=document.createElement("div"); n.className="node";
+    n.style.left=`${p.x*100}%`; n.style.top=`${p.y*100}%`;
+    n.innerHTML=`<div class="ring"></div><div class="tag">${TAGS[i]}</div>`;
+    drag(n,(nx,ny)=>{ p.x=clamp(nx); p.y=clamp(ny); renderOverlay(); renderCtx(); });
+    overlay.appendChild(n);
+  }
+  function addMaskNode(x,y,role,id){
+    const n=document.createElement("div"); n.className="mask-node";
+    n.style.left=`${x*100}%`; n.style.top=`${y*100}%`;
+    const m=mask[id];
+    drag(n,(nx,ny)=>{
+      if(role==="center"){ m.cx=clamp(nx); m.cy=clamp(ny); }
+      else if(role==="rx"){ m.rx=clamp(Math.abs(nx-m.cx),.03,.5); }
+      else { m.ry=clamp(Math.abs(m.cy-ny),.03,.5); }
+      renderOverlay(); renderCtx();
+    });
+    overlay.appendChild(n);
+  }
+  function drag(node,onMove){
+    node.addEventListener("pointerdown",e=>{
+      e.preventDefault(); node.setPointerCapture(e.pointerId);
+      const move=ev=>{ const R=stageRect(); onMove((ev.clientX-R.left)/R.width,(ev.clientY-R.top)/R.height); };
+      const up=()=>{ node.removeEventListener("pointermove",move); node.removeEventListener("pointerup",up); node.removeEventListener("pointercancel",up); };
+      node.addEventListener("pointermove",move); node.addEventListener("pointerup",up); node.addEventListener("pointercancel",up);
+    });
+  }
+  const clamp=(v,lo=0,hi=1)=>Math.max(lo,Math.min(hi,v));
+
+  // click on the stage picks the nearest layer (demo: toggles between the two)
+  stage.addEventListener("pointerdown",e=>{
+    if(e.target.closest(".node,.mask-node")) return;
+    const R=stageRect(), x=(e.clientX-R.left)/R.width;
+    selIndex = x < .5 ? 1 : 0;  // left half → Ambient, right → Starfield (demo affordance)
+    sync();
+  });
+
+  // ---------- inspector ----------
+  const modesEl=document.getElementById("modes");
+  modesEl.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; mode=b.dataset.mode; sync(); });
+
+  function renderCtx(){
+    const L=LAYERS[selIndex], ctx=document.getElementById("ctx");
+    if(mode==="warp"){
+      const p=warp[L.id];
+      ctx.innerHTML = `
+        <div class="subhead">Corner-pin<button class="rst">Reset</button></div>
+        <div class="togglepill" style="align-self:flex-start"><button aria-pressed="true">Corner</button><button aria-pressed="false">Mesh</button></div>
+        <div class="coords">
+          ${p.map((q,i)=>`<div class="coord"><span class="t">${TAGS[i]}</span><span class="v">${q.x.toFixed(2)} · ${q.y.toFixed(2)}</span></div>`).join("")}
+        </div>`;
+    } else if(mode==="mask"){
+      const m=mask[L.id];
+      ctx.innerHTML = `
+        <div class="subhead">Mask shape<button class="rst">Reset</button></div>
+        <div class="mini"><span class="label">Enabled</span><div class="togglepill"><button aria-pressed="true">On</button><button aria-pressed="false">Off</button></div></div>
+        <div class="mini"><span class="label">Shape</span><span class="val">Ellipse</span></div>
+        <div class="field"><span class="label">Feather</span><div class="fader cool"><i style="width:24%"></i><span>0.08</span></div></div>
+        <div class="coords">
+          <div class="coord"><span class="t">CENTER</span><span class="v">${m.cx.toFixed(2)} · ${m.cy.toFixed(2)}</span></div>
+          <div class="coord"><span class="t">RADIUS</span><span class="v">${m.rx.toFixed(2)} · ${m.ry.toFixed(2)}</span></div>
+        </div>`;
+    } else {
+      ctx.innerHTML = `
+        <div class="subhead">Effects</div>
+        ${fxRow("Zoom","1.00",62)}${fxRow("Blur","0.00",4)}${fxRow("Brightness","1.00",50)}
+        ${fxRow("Contrast","1.05",54)}${fxRow("Saturation","0.90",46)}`;
+    }
+  }
+  function fxRow(name,val,pct){ return `<div class="field"><span class="label">${name}</span><div class="fader"><i style="width:${pct}%"></i><span>${val}</span></div></div>`; }
+
+  // ---------- sync everything ----------
+  function sync(){
+    const L=LAYERS[selIndex];
+    document.querySelectorAll("#modes button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.mode===mode));
+    document.getElementById("ispName").textContent=L.name;
+    document.getElementById("ispIx").textContent=L.id;
+    document.getElementById("ispSub").textContent=L.sub;
+    document.getElementById("ispSource").firstElementChild.textContent=L.src;
+    document.getElementById("ispBlend").textContent=L.blend;
+    document.getElementById("ispOp").textContent=L.op+"%";
+    document.getElementById("ispOpFill").style.width=L.op+"%";
+    document.getElementById("ispSwatch").style.background = L.kind==="color"?L.color:"linear-gradient(135deg,#12283b,#0c1620)";
+    document.getElementById("tbLayer").textContent=L.name;
+    document.getElementById("tbMode").textContent = mode==="warp"?"Warp · corner-pin":mode==="mask"?"Mask · ellipse":"FX";
+    renderLayers(); renderOverlay(); renderCtx();
+  }
+
+  // ---------- boot ----------
+  function boot(){ resize(); sync(); requestAnimationFrame(draw); }
+  window.addEventListener("resize", ()=>{ resize(); renderOverlay(); });
+  boot();
+})();
+</script>
