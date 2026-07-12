@@ -19,6 +19,7 @@ import {
   MediaLibrary,
   MidiMapPanel,
   MobileTabBar,
+  OscOutSettings,
   PipWindows,
   PresetsBar,
   ScreenSelect,
@@ -518,6 +519,8 @@ export function App() {
             cursor={automation.cursor ?? -1}
             running={!!automation.running}
             presets={presets}
+            sourcePresets={sourceBankPresets}
+            targetOptions={targetOptions}
             onGo={actions.cueGo}
             onStop={actions.cueStop}
             onJump={actions.cueJump}
@@ -544,10 +547,12 @@ export function App() {
         <section className="sc-card">
           <LfoRack
             lfos={Object.values(state.lfos ?? {})}
+            tempoBpm={state.tempoBpm ?? 120}
             targetOptions={targetOptions}
             onAdd={actions.addLfo}
             onUpdate={actions.updateLfo}
             onRemove={actions.removeLfo}
+            onSetTempo={actions.setTempo}
           />
         </section>
       );
@@ -564,6 +569,12 @@ export function App() {
             onUpdate={actions.updateMidiMapping}
             onRemove={actions.removeMidiMapping}
             onLearn={midi.learn}
+          />
+          <OscOutSettings
+            enabled={!!state.oscOut?.enabled}
+            host={state.oscOut?.host ?? "127.0.0.1"}
+            port={state.oscOut?.port ?? 9001}
+            onUpdate={actions.setOscOut}
           />
         </section>
       );

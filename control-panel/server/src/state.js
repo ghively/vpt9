@@ -196,8 +196,18 @@ const DEFAULT_STATE = {
   // on boot (a power-cycled installation shouldn't resume mid-cue-list on its own).
   automation: { cues: [], cursor: -1, running: false, timers: {} },
 
-  // Modulation rack: each slot oscillates one numeric state path between min/max.
+  // Modulation rack: each slot oscillates one numeric state path between min/max. A slot
+  // may instead be a `mixer` (task A19) that blends two other oscillators' outputs.
   lfos: {},
+
+  // Global tempo (BPM) for LFO tempo-sync (task A19): a slot with a `syncNote` division
+  // ("1/4", "1/8", …) derives its rate from this instead of its manual rateHz.
+  tempoBpm: 120,
+
+  // OSC OUTPUT / state mirroring (task A17). When `enabled`, every scalar leaf change is
+  // mirrored out as an OSC message to host:port (the send-side face of the OSC listener).
+  // `enabled` gates only the continuous mirror; an `osc` cue always sends to this host:port.
+  oscOut: { enabled: false, host: "127.0.0.1", port: 9001 },
 
   // WebMIDI CC bindings (the panel browser owns the MIDI hardware; mappings live in
   // shared state so they survive reloads and can be edited from any panel).
@@ -239,6 +249,13 @@ function fillMissing(target, defaults) {
   }
 }
 
+// Modulation-rack fields added by task A19 (mixer kind + phase/invert/tempo-sync). Backfilled
+// onto LFOs saved before A19 so the two-pass tick and the panel's mixer/sync controls have
+// existing leaves to read/patch (applyUpdate only ever writes an EXISTING leaf).
+export function defaultLfoFields() {
+  return { kind: "osc", aId: null, bId: null, blend: "add", mix: 0.5, phase: 0, waveInvert: false, syncNote: null };
+}
+
 export function ensureLayerDefaults(layer) {
   fillMissing(layer, {
     mask: defaultMask(),
@@ -261,10 +278,16 @@ export function ensureStateDefaults(state) {
     midiMap: {},
     master: 1,
     media: {},
+    tempoBpm: 120,
+    oscOut: { enabled: false, host: "127.0.0.1", port: 9001 },
     sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultSlotTransport() })),
     sourceBankPresets: {},
     sourceBankPresetCursor: -1,
   });
+  // Backfill A19 mixer/phase/sync leaves onto LFOs saved before those fields existed.
+  for (const lfo of Object.values(state.lfos ?? {})) {
+    if (lfo && typeof lfo === "object" && !Array.isArray(lfo)) fillMissing(lfo, defaultLfoFields());
+  }
   // Backfill per-slot transport (task A9) onto a sourceBank saved before it existed:
   // fillMissing never recurses into array elements, so each slot object is patched
   // explicitly (adds a whole `transport`, or backfills any missing leaf such as `seek`).
@@ -331,7 +354,7 @@ function isPlainObject(value) {
 // whole control plane. These sets pin the shapes; leaf *data* (opacity, a null loop point,
 // a source object swapped wholesale, …) stays unrestricted. See
 // test/crash-hardening.test.js.
-const OBJECT_TOPLEVEL = new Set(["layers", "screens", "pip", "presets", "media", "lfos", "midiMap", "automation", "sourceBankPresets"]);
+const OBJECT_TOPLEVEL = new Set(["layers", "screens", "pip", "presets", "media", "lfos", "midiMap", "automation", "sourceBankPresets", "oscOut"]);
 // Keyed collections whose entries are always objects (never scalars) — so an entry write
 // like "layers.<id>" or "pip.<id>" must carry an object, never null/a scalar. (lfos/timers
 // are already null-guarded at their read sites, so they're intentionally not pinned here.)
@@ -356,6 +379,9 @@ function corruptsStructure(keys, last, value) {
   if (keys.length === 0) {
     if (OBJECT_TOPLEVEL.has(last)) return !isPlainObject(value);
     if (last === "sourceBank") return !Array.isArray(value);
+    // Global LFO tempo (task A19): the two-pass LFO tick divides by it — a null/scalar/NaN
+    // would NaN every tempo-synced slot. Pin it to a finite positive number.
+    if (last === "tempoBpm") return !(typeof value === "number" && Number.isFinite(value) && value > 0);
     return false;
   }
   if (keys.length === 1) {

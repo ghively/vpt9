@@ -249,11 +249,29 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     },
 
     // ── LFO rack ─────────────────────────────────────────────────────────────
+    // New slots carry every A19 field: applyUpdate only patches leaves that already exist,
+    // so a mixer's aId/blend (or phase/syncNote) could never be filled in later otherwise.
     addLfo() {
       send({
         type: "create",
         path: "lfos",
-        value: { id: `lfo-${Date.now()}`, enabled: false, wave: "sine", rateHz: 0.2, min: 0, max: 1, target: "" },
+        value: {
+          id: `lfo-${Date.now()}`,
+          enabled: false,
+          wave: "sine",
+          rateHz: 0.2,
+          min: 0,
+          max: 1,
+          target: "",
+          kind: "osc",
+          aId: null,
+          bId: null,
+          blend: "add",
+          mix: 0.5,
+          phase: 0,
+          waveInvert: false,
+          syncNote: null,
+        },
       });
     },
     updateLfo(id: string, field: string, value: unknown) {
@@ -261,6 +279,15 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     },
     removeLfo(id: string) {
       send({ type: "delete", path: `lfos.${id}` });
+    },
+    // Global LFO tempo (A19). Guarded server-side to a finite positive number.
+    setTempo(bpm: number) {
+      send({ type: "update", path: "tempoBpm", value: Math.max(1, bpm) });
+    },
+
+    // ── OSC output / state mirroring (A17) ───────────────────────────────────
+    setOscOut(field: "enabled" | "host" | "port", value: unknown) {
+      send({ type: "update", path: `oscOut.${field}`, value });
     },
 
     // ── MIDI map ─────────────────────────────────────────────────────────────

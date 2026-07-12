@@ -507,6 +507,22 @@ html, body { height: 100%; }
   }
   .empty-note { font-size: 10px; color: var(--muted-dim); padding: 4px 0 8px; letter-spacing: 0.05em; }
 
+  /* ── Extra controls added by the automation cluster (A16–A19) ────────────────── */
+  /* Cue rows and LFO rows now carry more per-row controls (new cue types, mixer/sync
+     fields), so let them wrap rather than overflow their narrow drawer column. */
+  .cue-row, .lfo-row { flex-wrap: wrap; }
+  .cue-row select, .lfo-row select { min-width: 0; }
+  .cue-target { flex: 1 1 120px; min-width: 0; }
+  .cue-follow[data-active="true"] { color: var(--beam); border-color: var(--beam); }
+  .lfo-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .lfo-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
+  .lfo-tempo .lfo-num { width: 52px; }
+  #osc-out { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+  .osc-out-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+  .osc-out-state { font-size: 9px; color: var(--cool); letter-spacing: 0.08em; }
+  .osc-out-host { flex: 1 1 100px; min-width: 0; }
+  .osc-out-port { width: 60px; flex: 0 0 auto; text-align: right; }
+
   /* Narrow fallback: single column, everything stacks and scrolls. */
   @media (max-width: 1100px) {
     aside { border-left: none; border-top: 1px solid var(--hairline); }

@@ -139,6 +139,26 @@ test("ensureStateDefaults backfills automation/lfos/midiMap and forces automatio
   assert.equal(Array.isArray(state.automation.cues), true);
 });
 
+test("ensureStateDefaults backfills tempoBpm + oscOut and A19 LFO fields on older state", () => {
+  const state = {
+    layers: {},
+    presets: {},
+    automation: { running: false },
+    // An LFO saved before A19 — has only the pre-A19 fields.
+    lfos: { "lfo-1": { id: "lfo-1", enabled: true, wave: "sine", rateHz: 0.5, min: 0, max: 1, target: "master" } },
+  };
+  ensureStateDefaults(state);
+  assert.equal(state.tempoBpm, 120);
+  assert.deepEqual(state.oscOut, { enabled: false, host: "127.0.0.1", port: 9001 });
+  const lfo = state.lfos["lfo-1"];
+  assert.equal(lfo.kind, "osc"); // backfilled A19 fields
+  assert.equal(lfo.phase, 0);
+  assert.equal(lfo.waveInvert, false);
+  assert.equal(lfo.syncNote, null);
+  assert.equal(lfo.blend, "add");
+  assert.equal(lfo.rateHz, 0.5); // pre-existing fields untouched
+});
+
 test("saveState writes atomically (temp file renamed into place, no partial file left)", () => {
   const dir = mkdtempSync(join(tmpdir(), "vpt-state-test-"));
   const filePath = join(dir, "state.json");

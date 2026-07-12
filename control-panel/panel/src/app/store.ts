@@ -1,4 +1,4 @@
-import type { Layer, Screen, Pip, Preset, Automation, Lfo, MidiMapping, MediaItem, SourceBankSlot, SourceBankPreset } from "../components/types";
+import type { Layer, Screen, Pip, Preset, Automation, Lfo, MidiMapping, MediaItem, SourceBankSlot, SourceBankPreset, OscOut } from "../components/types";
 
 /** The panel's mirror of the control-plane state (server/src/state.js). Held in a mutable
  *  ref and patched in place — exactly like the vanilla panel — with React re-renders
@@ -13,6 +13,10 @@ export interface PanelState {
   master: number;
   automation: Automation;
   lfos: Record<string, Lfo>;
+  /** Global tempo (BPM) for LFO tempo-sync (A19). */
+  tempoBpm: number;
+  /** OSC output / state-mirroring config (A17). */
+  oscOut: OscOut;
   midiMap: Record<string, MidiMapping>;
   /** Uploaded media library (server/src/media.js), keyed by id. */
   media: Record<string, MediaItem>;
@@ -37,6 +41,8 @@ export function emptyState(): PanelState {
     master: 1,
     automation: { cues: [], cursor: -1, running: false, timers: {} },
     lfos: {},
+    tempoBpm: 120,
+    oscOut: { enabled: false, host: "127.0.0.1", port: 9001 },
     midiMap: {},
     media: {},
     sourceBank: [],

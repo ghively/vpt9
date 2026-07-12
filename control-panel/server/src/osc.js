@@ -15,6 +15,61 @@ function readPaddedString(buf, offset) {
   return { str, next };
 }
 
+// Encode one OSC string: the ascii bytes, a null terminator, then zero-padding to the
+// next 4-byte boundary (Buffer.alloc zero-fills, so the terminator + padding come free).
+// The inverse of readPaddedString — same wire format both directions.
+function encodePaddedString(str) {
+  const bytes = Buffer.from(String(str), "ascii");
+  const padded = Math.ceil((bytes.length + 1) / 4) * 4; // +1 = mandatory null terminator
+  const out = Buffer.alloc(padded);
+  bytes.copy(out, 0);
+  return out;
+}
+
+// Encode an OSC 1.0 message: a null-padded address, a "," type-tag string (also padded),
+// then the 4-byte-aligned args. Supports the scalar/string types this app mirrors out:
+// number → int32 ("i") when integral else float32 ("f"), string → "s", boolean → int32
+// 0/1 ("i", OSC-1.0-safe). `forceFloat` sends every number as float32 ("f") regardless of
+// integrality — the state mirror uses it so a numeric leaf that momentarily lands on a
+// whole number (e.g. opacity 1.0) never flips its wire type from float to int mid-drag.
+// null/undefined/object args are skipped (no tag, no bytes) to keep alignment intact.
+export function encodeMessage(address, args = [], { forceFloat = false } = {}) {
+  if (typeof address !== "string" || !address.startsWith("/")) {
+    throw new Error(`OSC address must be a string starting with "/": ${address}`);
+  }
+  let typetags = ",";
+  const argBuffers = [];
+  const int32 = (n) => {
+    const b = Buffer.alloc(4);
+    b.writeInt32BE(n | 0);
+    return b;
+  };
+  const float32 = (n) => {
+    const b = Buffer.alloc(4);
+    b.writeFloatBE(n);
+    return b;
+  };
+  for (const arg of args ?? []) {
+    if (typeof arg === "boolean") {
+      typetags += "i";
+      argBuffers.push(int32(arg ? 1 : 0));
+    } else if (typeof arg === "number" && Number.isFinite(arg)) {
+      if (!forceFloat && Number.isInteger(arg)) {
+        typetags += "i";
+        argBuffers.push(int32(arg));
+      } else {
+        typetags += "f";
+        argBuffers.push(float32(arg));
+      }
+    } else if (typeof arg === "string") {
+      typetags += "s";
+      argBuffers.push(encodePaddedString(arg));
+    }
+    // else: unsupported (null/undefined/object/NaN) — skip to preserve arg alignment.
+  }
+  return Buffer.concat([encodePaddedString(address), encodePaddedString(typetags), ...argBuffers]);
+}
+
 function parseMessage(buf) {
   const addr = readPaddedString(buf, 0);
   if (!addr || !addr.str.startsWith("/")) return null;

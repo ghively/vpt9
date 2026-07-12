@@ -72,6 +72,8 @@ export { LfoRack } from "./LfoRack";
 export type { LfoRackProps } from "./LfoRack";
 export { MidiMapPanel } from "./MidiMapPanel";
 export type { MidiMapPanelProps } from "./MidiMapPanel";
+export { OscOutSettings } from "./OscOutSettings";
+export type { OscOutSettingsProps } from "./OscOutSettings";
 export { MasterControl } from "./MasterControl";
 export type { MasterControlProps } from "./MasterControl";
 

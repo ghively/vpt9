@@ -1,8 +1,9 @@
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
+import { TargetField } from "./primitives/TargetField";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
-import type { Cue, Preset } from "./types";
+import type { Cue, Preset, TargetOption } from "./types";
 
 export interface CueListProps {
   cues: Cue[];
@@ -10,6 +11,10 @@ export interface CueListProps {
   cursor: number;
   running: boolean;
   presets: Preset[];
+  /** Source-bank snapshots (A16) — the `source` cue recalls one of these. */
+  sourcePresets?: Preset[];
+  /** Numeric state paths for the `paramFade` path picker (A16). */
+  targetOptions?: TargetOption[];
   onGo?: () => void;
   onStop?: () => void;
   /** Arm the list so the NEXT go runs cues[index]. */
@@ -21,16 +26,33 @@ export interface CueListProps {
 const CUE_TYPES = [
   { value: "recall", label: "Cut to preset" },
   { value: "fade", label: "Fade to preset" },
+  { value: "source", label: "Recall sources" },
+  { value: "paramFade", label: "Fade parameter" },
+  { value: "osc", label: "Send OSC" },
   { value: "wait", label: "Wait" },
   { value: "goto", label: "Go to cue #" },
 ];
 
 let cueCounter = 0;
 
+/** Parse the comma-separated OSC-args field: numeric tokens become numbers, the rest
+ *  stay strings (so "/go, 1, cue" → ["go" is the address elsewhere], [1, "cue"]). */
+function parseOscArgs(text: string): Array<number | string> {
+  return text
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => {
+      const n = Number(s);
+      return Number.isFinite(n) && /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s) ? n : s;
+    });
+}
+
 /** The sequential cue-list editor + transport — the modern face of VPT8's cuelist
  *  script interpreter. The tungsten row marker tracks the interpreter's cursor. */
-export function CueList({ cues, cursor, running, presets, onGo, onStop, onJump, onSetCues }: CueListProps) {
+export function CueList({ cues, cursor, running, presets, sourcePresets, targetOptions, onGo, onStop, onJump, onSetCues }: CueListProps) {
   const presetOptions = presets.map((p) => ({ value: p.id, label: p.name }));
+  const sourceOptions = (sourcePresets ?? []).map((p) => ({ value: p.id, label: p.name }));
 
   const patchCue = (index: number, patch: Partial<Cue>) => {
     onSetCues?.(cues.map((cue, i) => (i === index ? { ...cue, ...patch } : cue)));
@@ -47,6 +69,12 @@ export function CueList({ cues, cursor, running, presets, onGo, onStop, onJump, 
         presetId: presets[0]?.id,
         seconds: 5,
         target: 0,
+        autoContinue: false,
+        path: "",
+        from: 0,
+        to: 1,
+        address: "/",
+        args: [],
       },
     ]);
   };
@@ -108,13 +136,56 @@ export function CueList({ cues, cursor, running, presets, onGo, onStop, onJump, 
               onChange={(v) => patchCue(index, { presetId: v })}
             />
           )}
-          {(cue.type === "fade" || cue.type === "wait") && (
+          {cue.type === "source" && (
+            <Select
+              value={cue.presetId ?? ""}
+              options={sourceOptions.length ? sourceOptions : [{ value: "", label: "(no snapshots)" }]}
+              onChange={(v) => patchCue(index, { presetId: v })}
+            />
+          )}
+          {(cue.type === "fade" || cue.type === "wait" || cue.type === "paramFade") && (
             <TextField
               className="cue-num"
               value={String(cue.seconds ?? 0)}
               placeholder="sec"
               onCommit={(v) => patchCue(index, { seconds: Math.max(0, Number(v) || 0) })}
             />
+          )}
+          {cue.type === "paramFade" && (
+            <>
+              <TargetField
+                className="cue-target"
+                value={cue.path ?? ""}
+                targetOptions={targetOptions}
+                onChange={(v) => patchCue(index, { path: v })}
+              />
+              <TextField
+                className="cue-num"
+                value={String(cue.from ?? 0)}
+                placeholder="from"
+                onCommit={(v) => patchCue(index, { from: Number(v) || 0 })}
+              />
+              <TextField
+                className="cue-num"
+                value={String(cue.to ?? 0)}
+                placeholder="to"
+                onCommit={(v) => patchCue(index, { to: Number(v) || 0 })}
+              />
+            </>
+          )}
+          {cue.type === "osc" && (
+            <>
+              <TextField
+                value={cue.address ?? "/"}
+                placeholder="/osc/address"
+                onCommit={(v) => patchCue(index, { address: v })}
+              />
+              <TextField
+                value={(cue.args ?? []).join(", ")}
+                placeholder="args (comma-sep)"
+                onCommit={(v) => patchCue(index, { args: parseOscArgs(v) })}
+              />
+            </>
           )}
           {cue.type === "goto" && (
             <TextField
@@ -124,6 +195,13 @@ export function CueList({ cues, cursor, running, presets, onGo, onStop, onJump, 
               onCommit={(v) => patchCue(index, { target: Math.max(0, Math.trunc(Number(v) || 0)) })}
             />
           )}
+          <ToggleSquare
+            className="cue-follow"
+            label="+"
+            title={cue.autoContinue ? "Auto-follow: chains to the next cue" : "Hold: waits for GO"}
+            active={!!cue.autoContinue}
+            onClick={() => patchCue(index, { autoContinue: !cue.autoContinue })}
+          />
           <ToggleSquare className="remove-btn" label="×" title="Remove cue" onClick={() => removeCue(index)} />
         </div>
       ))}

@@ -41,11 +41,30 @@ test("C2: applyUpdate refuses to replace a sourceBank slot with null", () => {
 });
 
 test("other top-level collections are pinned to objects too", () => {
-  const state = { screens: {}, pip: {}, presets: {}, media: {}, lfos: {}, midiMap: {}, automation: { cues: [] } };
-  for (const key of ["screens", "pip", "presets", "media", "lfos", "midiMap", "automation"]) {
+  const state = { screens: {}, pip: {}, presets: {}, media: {}, lfos: {}, midiMap: {}, automation: { cues: [] }, oscOut: {} };
+  for (const key of ["screens", "pip", "presets", "media", "lfos", "midiMap", "automation", "oscOut"]) {
     assert.equal(applyUpdate(state, key, null), false, `${key} accepted null`);
     assert.equal(applyUpdate(state, key, 3), false, `${key} accepted a scalar`);
   }
+});
+
+test("A17: oscOut is pinned to an object but its leaves stay writable", () => {
+  const state = { oscOut: { enabled: false, host: "127.0.0.1", port: 9001 } };
+  assert.equal(applyUpdate(state, "oscOut", "x"), false); // structural guard
+  assert.equal(applyUpdate(state, "oscOut.enabled", true), true);
+  assert.equal(applyUpdate(state, "oscOut.host", "10.0.0.5"), true);
+  assert.equal(applyUpdate(state, "oscOut.port", 7000), true);
+  assert.deepEqual(state.oscOut, { enabled: true, host: "10.0.0.5", port: 7000 });
+});
+
+test("A19: tempoBpm rejects non-positive / non-numeric writes but accepts a valid tempo", () => {
+  const state = { tempoBpm: 120 };
+  for (const bad of [null, "fast", 0, -20, NaN]) {
+    assert.equal(applyUpdate(state, "tempoBpm", bad), false, `accepted ${JSON.stringify(bad)}`);
+  }
+  assert.equal(state.tempoBpm, 120);
+  assert.equal(applyUpdate(state, "tempoBpm", 140), true);
+  assert.equal(state.tempoBpm, 140);
 });
 
 // The validation must NOT over-reach: leaf data (including legitimately-null loop points,

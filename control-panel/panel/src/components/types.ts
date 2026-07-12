@@ -250,14 +250,26 @@ export interface Preset {
 
 /** One cue-list step — the modern equivalent of VPT8's C/F/D/L letter codes:
  *  recall = cut to preset, fade = interpolate to preset over seconds, wait = delay,
- *  goto = jump to cue index (loops). */
+ *  goto = jump to cue index (loops), source = recall a source-bank snapshot (A16),
+ *  paramFade = tween one dotted state path (A16), osc = send a raw OSC message (A17). */
 export interface Cue {
   id: string;
   label: string;
-  type: "recall" | "fade" | "wait" | "goto";
+  type: "recall" | "fade" | "wait" | "goto" | "source" | "paramFade" | "osc";
+  /** recall/fade: scene preset id. source: source-bank preset id (A16). */
   presetId?: string;
   seconds?: number;
   target?: number;
+  /** A18: when true this cue chains to the next automatically once it completes; when
+   *  false (default, VPT8's behavior) the interpreter holds here until an explicit GO. */
+  autoContinue?: boolean;
+  /** A16 paramFade: tween the dotted state `path` from `from` → `to` over `seconds`. */
+  path?: string;
+  from?: number;
+  to?: number;
+  /** A17 osc: the OSC message this cue emits out the OSC-output socket. */
+  address?: string;
+  args?: Array<number | string>;
 }
 
 /** A wall-clock trigger (VPT8's alarm-clock timer bank): fires once per matching
@@ -279,7 +291,11 @@ export interface Automation {
 
 export type LfoWave = "sine" | "triangle" | "square" | "saw" | "random";
 
-/** One slot of the modulation rack: oscillates any numeric state path between min/max. */
+/** Mixer blend of two oscillators' 0..1 outputs (A19). */
+export type LfoBlend = "add" | "mult" | "xfade";
+
+/** One slot of the modulation rack. An `osc` slot (default) oscillates a numeric state path
+ *  between min/max; a `mixer` slot (A19) blends two other oscillators' normalized outputs. */
 export interface Lfo {
   id: string;
   enabled: boolean;
@@ -288,6 +304,29 @@ export interface Lfo {
   min: number;
   max: number;
   target: string;
+  /** A19: "osc" (default, absent) = a plain oscillator; "mixer" = blend aId & bId. */
+  kind?: "osc" | "mixer";
+  /** mixer inputs — ids of two `osc`-kind LFOs (referencing a mixer reads 0). */
+  aId?: string | null;
+  bId?: string | null;
+  blend?: LfoBlend;
+  /** xfade amount 0..1 (0 = all A, 1 = all B). Only used when blend === "xfade". */
+  mix?: number;
+  /** Phase offset 0..1, shifts an oscillator along its cycle. */
+  phase?: number;
+  /** Inverts the (normalized) output: value → 1 - value. */
+  waveInvert?: boolean;
+  /** Tempo-sync division ("1/4", "1/8", …). When set, the rate derives from the global
+   *  tempoBpm and overrides rateHz; null/absent = free-running at rateHz. */
+  syncNote?: string | null;
+}
+
+/** OSC OUTPUT / state-mirroring config (A17). When `enabled`, scalar leaf changes are
+ *  mirrored out as OSC messages to host:port; an `osc` cue always sends to this host:port. */
+export interface OscOut {
+  enabled: boolean;
+  host: string;
+  port: number;
 }
 
 /** A WebMIDI CC binding: controller value 0–127 scales to [min,max] on the target path. */

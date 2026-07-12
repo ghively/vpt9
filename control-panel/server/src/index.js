@@ -4,6 +4,7 @@ import { WebSocketServer } from "ws";
 import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent } from "./state.js";
 import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
+import { createOscOut } from "./osc-out.js";
 import { createMediaRouter } from "./media.js";
 import { createSourceBankPresets } from "./source-bank-presets.js";
 
@@ -168,11 +169,19 @@ wss.on("error", (err) => {
   process.exit(1);
 });
 
+// OSC OUTPUT / state mirroring (task A17): watches every broadcast and, when enabled,
+// mirrors scalar leaf changes ("update"/"batch") out as coalesced OSC messages. Created
+// before broadcast so the interceptor below can reference it.
+const oscOut = createOscOut({ state });
+
 function broadcast(message, exclude) {
   const payload = JSON.stringify(message);
   for (const client of wss.clients) {
     if (client !== exclude && client.readyState === client.OPEN) client.send(payload);
   }
+  // Mirror the same change out over OSC (no-op unless oscOut.enabled). Kept out of the
+  // per-client loop so it fires exactly once per broadcast, whoever the exclude is.
+  oscOut.observe(message);
 }
 
 const mediaRouter = createMediaRouter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES });
@@ -224,7 +233,14 @@ function recallPreset(presetId) {
 // top-level listen(); see server/test/source-bank-presets.test.js.
 const sourceBankPresets = createSourceBankPresets({ state, broadcast, scheduleSave });
 
-const engine = createAutomationEngine({ state, broadcast, scheduleSave, recallPreset });
+const engine = createAutomationEngine({
+  state,
+  broadcast,
+  scheduleSave,
+  recallPreset,
+  recallSourceBankPreset: sourceBankPresets.recall, // A16 `source` cue
+  sendOsc: (address, args) => oscOut.sendRaw(address, args), // A17 `osc` cue
+});
 
 wss.on("connection", (socket) => {
   socket.send(JSON.stringify({ type: "state", state }));
