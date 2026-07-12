@@ -239,7 +239,10 @@ function SourceControl({
 }
 
 const CORNER_TAGS = ["TL", "TR", "BR", "BL"]; // index order matches Warp.corners (see WarpEditor/StageSelectionOverlay)
-const MESH_SIZES = [3, 4, 6, 8].map((n) => ({ value: String(n), label: `${n}×${n}` }));
+// VPT8's mesh warp order range is 2-10 (task A8 parity); the render-client now
+// bicubic-subdivides the control grid (render-client/src/warp.js) so even the sparsest
+// 2x2/3x3 control grids render as a smooth surface, not faceted triangles.
+const MESH_SIZES = [2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ value: String(n), label: `${n}×${n}` }));
 
 /** Warp contextual body: corner/mesh mode toggle, mesh size, reset, and a live
  *  READ-ONLY coordinate readout (the actual drag interaction lives on the stage —

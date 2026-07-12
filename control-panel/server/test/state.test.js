@@ -262,6 +262,28 @@ test("ensureLayerDefaults backfills rotation/anchor/non-uniform-zoom onto an fx 
   assert.equal(layer.fx.zoom, 1.5);
 });
 
+test("ensureLayerDefaults backfills fx.enabled, edgeBlend.invert, and motionBlurMode/Angle onto an fx object saved before those features existed (A6/A7/A21b)", () => {
+  const layer = {
+    id: "layer-1",
+    order: 1,
+    warp: defaultWarp(),
+    fx: {
+      flipH: false, flipV: false, tileX: 1, tileY: 1, zoom: 1.5, zoomX: 1, zoomY: 1,
+      anchorX: 0.5, anchorY: 0.5, rotationDeg: 0, panX: 0, panY: 0,
+      blur: 0, motionBlur: 0.4, brightness: 1, contrast: 1, saturation: 1,
+      edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2 },
+    },
+  };
+  ensureLayerDefaults(layer);
+  assert.deepEqual(layer.fx.enabled, { transform: true, color: true, edgeBlend: true });
+  assert.equal(layer.fx.edgeBlend.invert, false);
+  assert.equal(layer.fx.motionBlurMode, "trail");
+  assert.equal(layer.fx.motionBlurAngle, 0);
+  // Old values on pre-existing fields must survive the backfill untouched.
+  assert.equal(layer.fx.zoom, 1.5);
+  assert.equal(layer.fx.motionBlur, 0.4);
+});
+
 test("defaultMask is a rect/ellipse-shaped mask with empty points and invert off", () => {
   const mask = defaultMask();
   assert.equal(mask.shape, "ellipse");

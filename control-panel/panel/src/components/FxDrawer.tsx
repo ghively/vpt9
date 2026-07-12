@@ -117,14 +117,32 @@ function FxSlider({
 
 function FxSection({
   caption,
+  enabled,
+  onToggleEnabled,
   children,
 }: {
   caption: string;
+  /** When supplied (alongside onToggleEnabled), renders an ON/OFF ToggleSquare in the
+   *  caption row — the per-stage bypass (task A7): decouples "toggle a stage off" from
+   *  "lose its preset value", unlike driving the section purely off a neutral value. */
+  enabled?: boolean;
+  onToggleEnabled?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="fx-section">
-      <span className="fx-cap eyebrow">{caption}</span>
+      <span className="fx-cap eyebrow">
+        {caption}
+        {onToggleEnabled && (
+          <ToggleSquare
+            className="fx-section-enable"
+            label={enabled ? "ON" : "OFF"}
+            title={`${enabled ? "Disable" : "Enable"} the ${caption} stage`}
+            active={!!enabled}
+            onClick={onToggleEnabled}
+          />
+        )}
+      </span>
       <div className="fx-row">{children}</div>
     </div>
   );
@@ -232,7 +250,11 @@ export function FxDrawer({
   const fxRoot = fx as unknown as Record<string, unknown>;
   return (
     <div className="fx-drawer">
-      <FxSection caption="Transform">
+      <FxSection
+        caption="Transform"
+        enabled={fx.enabled?.transform ?? true}
+        onToggleEnabled={() => onUpdate?.("fx.enabled.transform", !(fx.enabled?.transform ?? true))}
+      >
         <ToggleSquare
           label="⇋"
           title="Flip horizontal"
@@ -249,15 +271,47 @@ export function FxDrawer({
           <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
       </FxSection>
-      <FxSection caption="Color">
+      <FxSection
+        caption="Color"
+        enabled={fx.enabled?.color ?? true}
+        onToggleEnabled={() => onUpdate?.("fx.enabled.color", !(fx.enabled?.color ?? true))}
+      >
         {COLOR_SLIDERS.map((spec) => (
           <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
+        <label className="fx-control" data-neutral={(fx.motionBlurMode ?? "trail") === "trail"}>
+          <span className="fx-label">BLUR MODE</span>
+          <Select
+            value={fx.motionBlurMode ?? "trail"}
+            options={[
+              { value: "trail", label: "Trail" },
+              { value: "slide", label: "Slide" },
+            ]}
+            onChange={(v) => onUpdate?.("fx.motionBlurMode", v)}
+          />
+        </label>
+        {fx.motionBlurMode === "slide" && (
+          <FxSlider
+            spec={{ label: "ANGLE", field: "fx.motionBlurAngle", min: -180, max: 180, step: 1, neutral: 0 }}
+            root={fxRoot}
+            onUpdate={onUpdate}
+          />
+        )}
       </FxSection>
-      <FxSection caption="Edge blend">
+      <FxSection
+        caption="Edge blend"
+        enabled={fx.enabled?.edgeBlend ?? true}
+        onToggleEnabled={() => onUpdate?.("fx.enabled.edgeBlend", !(fx.enabled?.edgeBlend ?? true))}
+      >
         {EDGE_SLIDERS.map((spec) => (
           <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
         ))}
+        <ToggleSquare
+          label="INV"
+          title="Invert edge blend (fade the center instead of the edges)"
+          active={!!fx.edgeBlend.invert}
+          onClick={() => onUpdate?.("fx.edgeBlend.invert", !fx.edgeBlend.invert)}
+        />
       </FxSection>
       <FxSection caption="Warp">
         <Select

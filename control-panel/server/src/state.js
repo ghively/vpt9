@@ -51,10 +51,19 @@ export function defaultFx() {
     panY: 0,
     blur: 0,
     motionBlur: 0,
+    // Directional-slide motion-blur variant (VPT8 parity, task A21b) alongside the
+    // temporal-feedback "trail" above: "trail" (default) keeps existing behavior for
+    // every show that never touches this; "slide" smears along motionBlurAngle instead.
+    motionBlurMode: "trail",
+    motionBlurAngle: 0,
     brightness: 1,
     contrast: 1,
     saturation: 1,
-    edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2 },
+    edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2, invert: false },
+    // Per-stage enable/bypass (task A7 — VPT8 parity: a `pattr on` per stage, decoupled
+    // from its value). All default true so an untouched layer's chain behaves exactly as
+    // before this field existed.
+    enabled: { transform: true, color: true, edgeBlend: true },
   };
 }
 

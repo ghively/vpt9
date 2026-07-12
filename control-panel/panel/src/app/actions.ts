@@ -26,10 +26,13 @@ function defaultFx(): Fx {
     panY: 0,
     blur: 0,
     motionBlur: 0,
+    motionBlurMode: "trail",
+    motionBlurAngle: 0,
     brightness: 1,
     contrast: 1,
     saturation: 1,
-    edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2 },
+    edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2, invert: false },
+    enabled: { transform: true, color: true, edgeBlend: true },
   };
 }
 

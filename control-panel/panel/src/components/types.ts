@@ -71,6 +71,9 @@ export interface EdgeBlend {
   top: number;
   bottom: number;
   gamma: number;
+  /** Fades the CENTER instead of the edges (VPT8's `tr.edgeblend01.jxs`:
+   *  `mix(alph, 1.-alph, invert)`). false (default) = normal edge feather. */
+  invert: boolean;
 }
 
 export interface Fx {
@@ -92,10 +95,22 @@ export interface Fx {
   panY: number;
   blur: number;
   motionBlur: number;
+  /** Motion-blur render mode: "trail" (temporal feedback, VPT8's default persistence
+   *  smear) or "slide" (a directional multi-tap smear along `motionBlurAngle`, VPT8's
+   *  alternate directional-slide motion blur). Default "trail". */
+  motionBlurMode: "trail" | "slide";
+  /** Direction of the "slide" smear, in degrees. Only meaningful when
+   *  `motionBlurMode === "slide"`. Default 0. */
+  motionBlurAngle: number;
   brightness: number;
   contrast: number;
   saturation: number;
   edgeBlend: EdgeBlend;
+  /** Section-level stage bypass — decouples "toggle a stage off" from "lose its preset
+   *  value" (VPT8's per-stage `pattr on`). All default true (stage runs, same as before
+   *  this field existed). `color` gates blur + motion-blur/trail + brcosa together;
+   *  `transform` gates flip/tile/zoom/pan/rotation; mask keeps its own `mask.enabled`. */
+  enabled: { transform: boolean; color: boolean; edgeBlend: boolean };
 }
 
 export interface Layer {

@@ -52,6 +52,124 @@ function buildGridUvs(size) {
   return new Float32Array(uvs);
 }
 
+// Task A8 — VPT8 parity: VPT8's mesh warp is a smooth ("NURBS-ish") surface, not the
+// faceted piecewise-linear triangle grid the control points alone draw. This subdivides
+// the NxN CONTROL grid into a denser RENDER grid via bicubic Catmull-Rom interpolation of
+// the control points, so the GPU draws a smooth surface while the control-point count
+// (state, drag handles, mesh.size) is unchanged — only the tessellation density grows.
+// Deliberately NOT used for corner-pin mode (see cornerFallback in render() below): a
+// corner-pin quad is meant to stay a plain 2-triangle affine map (bilinear-ish corner
+// interpolation, not a curved surface) — only genuine "mesh" mode gets the smooth
+// treatment, matching VPT8's own mode split.
+//
+// 6 render-samples per control-grid cell edge sits in the brief's suggested 4-8x range:
+// smooth enough to read as curved, and bounded (10x10 control -> 55x55 render grid,
+// ~3k vertices) even at the top of the widened 2-10 mesh-size range.
+const MESH_SUBDIV = 6;
+
+// Standard uniform Catmull-Rom cubic through p1..p2 (p0/p3 are the outer neighbors that
+// shape the tangents), t in [0,1]. Passes exactly through p1 at t=0 and p2 at t=1.
+function catmullRom1D(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return 0.5 * (
+    2 * p1 +
+    (-p0 + p2) * t +
+    (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+    (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+  );
+}
+
+function catmullRomPoint(p0, p1, p2, p3, t) {
+  return {
+    x: catmullRom1D(p0.x, p1.x, p2.x, p3.x, t),
+    y: catmullRom1D(p0.y, p1.y, p2.y, p3.y, t),
+  };
+}
+
+// Control-grid lookup with a LINEAR-EXTRAPOLATION phantom boundary (row/col one step
+// outside [0, size-1] resolves to `2*nearest - nextNearest`, continuing the sequence's own
+// local slope) rather than clamping/duplicating the edge point. This is what makes the
+// identity mesh subdivide back to itself exactly: for the default, evenly-spaced identity
+// grid, extrapolating the phantom point this way keeps the WHOLE extended row/column an
+// exact arithmetic sequence, and Catmull-Rom through an evenly-spaced collinear sequence
+// reduces algebraically to plain linear interpolation (a well-known Catmull-Rom identity)
+// — including at the boundary cells, where a naive duplicate-the-edge-point boundary rule
+// would NOT reduce to linear and would visibly bow the mesh's outer edge even when unwarped.
+// Recurses at most 2 deep (row-out-of-range resolves via valid-row lookups that may
+// themselves need col extrapolation) — cheap, and only ever invoked for the single
+// neighbor exactly one step past either edge.
+function gridPoint(points, size, row, col) {
+  if (row < 0) {
+    const p0 = gridPoint(points, size, 0, col);
+    const p1 = gridPoint(points, size, 1, col);
+    return { x: 2 * p0.x - p1.x, y: 2 * p0.y - p1.y };
+  }
+  if (row > size - 1) {
+    const p0 = gridPoint(points, size, size - 1, col);
+    const p1 = gridPoint(points, size, size - 2, col);
+    return { x: 2 * p0.x - p1.x, y: 2 * p0.y - p1.y };
+  }
+  if (col < 0) {
+    const p0 = gridPoint(points, size, row, 0);
+    const p1 = gridPoint(points, size, row, 1);
+    return { x: 2 * p0.x - p1.x, y: 2 * p0.y - p1.y };
+  }
+  if (col > size - 1) {
+    const p0 = gridPoint(points, size, row, size - 1);
+    const p1 = gridPoint(points, size, row, size - 2);
+    return { x: 2 * p0.x - p1.x, y: 2 * p0.y - p1.y };
+  }
+  return points[row * size + col] ?? { x: 0, y: 0 };
+}
+
+// Bicubic (tensor-product Catmull-Rom) surface value at a continuous (row, col) position
+// in control-grid space: 4 rows of 1D Catmull-Rom across columns, then one more 1D
+// Catmull-Rom down the resulting 4 row-points. Standard bicubic-spline construction.
+function bicubicSurface(points, size, row, col) {
+  let ci = Math.floor(col);
+  if (ci > size - 2) ci = size - 2;
+  if (ci < 0) ci = 0;
+  let ri = Math.floor(row);
+  if (ri > size - 2) ri = size - 2;
+  if (ri < 0) ri = 0;
+  const fc = col - ci;
+  const fr = row - ri;
+
+  const rows = [];
+  for (let dr = -1; dr <= 2; dr++) {
+    const p0 = gridPoint(points, size, ri + dr, ci - 1);
+    const p1 = gridPoint(points, size, ri + dr, ci);
+    const p2 = gridPoint(points, size, ri + dr, ci + 1);
+    const p3 = gridPoint(points, size, ri + dr, ci + 2);
+    rows.push(catmullRomPoint(p0, p1, p2, p3, fc));
+  }
+  return catmullRomPoint(rows[0], rows[1], rows[2], rows[3], fr);
+}
+
+// Builds the destination-position buffer for a `renderSize` x `renderSize` render grid by
+// bicubic-subdividing the `size` x `size` control grid. Row-major, matching buildGridUvs's
+// vertex ordering (so the UV grid built at `renderSize` lines up 1:1 with this buffer).
+function subdivideMeshDest(points, size, renderSize) {
+  const dest = new Float32Array(renderSize * renderSize * 2);
+  // (size - 1) / (renderSize - 1): maps render-grid index 0..renderSize-1 onto
+  // control-grid space 0..size-1, landing exactly on integers at control-point
+  // locations (render index = control index * MESH_SUBDIV) — so the subdivided surface
+  // still passes exactly through every control point, it just fills in between smoothly.
+  const scale = (size - 1) / (renderSize - 1);
+  for (let row = 0; row < renderSize; row++) {
+    const gr = row * scale;
+    for (let col = 0; col < renderSize; col++) {
+      const gc = col * scale;
+      const p = bicubicSurface(points, size, gr, gc);
+      const idx = (row * renderSize + col) * 2;
+      dest[idx] = p.x;
+      dest[idx + 1] = p.y;
+    }
+  }
+  return dest;
+}
+
 const IDENTITY_CORNERS = [
   { x: 0, y: 0 },
   { x: 1, y: 0 },
@@ -98,7 +216,7 @@ export class ScreenWarp {
       const c = warp?.corners ?? IDENTITY_CORNERS;
       return { size: 2, points: [c[0], c[1], c[3], c[2]] }; // TL, TR, BL, BR -> row-major grid order
     };
-    let size, points;
+    let size, points, smooth;
     if (warp?.mode === "mesh" && warp.mesh?.points?.length) {
       // Derive the grid dimension from the points array, NOT warp.mesh.size: a client
       // (e.g. an OSC sender) can write mesh.size on its own and desync it from points.
@@ -109,18 +227,34 @@ export class ScreenWarp {
       if (derived >= 2 && derived * derived === warp.mesh.points.length) {
         size = derived;
         points = warp.mesh.points;
+        smooth = true; // genuine mesh mode (task A8): bicubic-subdivide, see below
       } else {
         ({ size, points } = cornerFallback());
+        smooth = false;
       }
     } else {
       ({ size, points } = cornerFallback());
+      smooth = false;
     }
-    this._ensureGrid(size);
 
-    const dest = new Float32Array(size * size * 2);
-    for (let i = 0; i < size * size; i++) {
-      dest[i * 2] = points[i]?.x ?? 0;
-      dest[i * 2 + 1] = points[i]?.y ?? 0;
+    let dest;
+    if (smooth) {
+      // Task A8: draw a denser, bicubic-subdivided grid instead of the raw control
+      // points — the control-point COUNT (and hence the drag handles / state) stays
+      // exactly `size`; only the tessellation the GPU draws gets finer.
+      const renderSize = (size - 1) * MESH_SUBDIV + 1;
+      this._ensureGrid(renderSize);
+      dest = subdivideMeshDest(points, size, renderSize);
+    } else {
+      // Corner-pin (or an invalid/degenerate mesh falling back to it): unchanged —
+      // draw the raw 2x2 (or otherwise raw) control grid directly, no subdivision. A
+      // corner-pin quad stays a plain 2-triangle affine map, not a curved surface.
+      this._ensureGrid(size);
+      dest = new Float32Array(size * size * 2);
+      for (let i = 0; i < size * size; i++) {
+        dest[i * 2] = points[i]?.x ?? 0;
+        dest[i * 2 + 1] = points[i]?.y ?? 0;
+      }
     }
     gl.bindBuffer(gl.ARRAY_BUFFER, this.destBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, dest, gl.DYNAMIC_DRAW);

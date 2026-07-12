@@ -39,6 +39,14 @@ uniform vec2 u_pan;
 uniform vec3 u_brcosa;     // brightness, contrast, saturation
 uniform vec4 u_edges;      // left, right, top, bottom fractional widths
 uniform float u_edgeGamma;
+uniform bool u_edgeInvert; // fade the CENTER instead of the edges (VPT8 tr.edgeblend01.jxs)
+// Per-stage enable/bypass (task A7 — VPT8 parity: a "pattr on" per stage, decoupled from
+// its value so a preset amount can be toggled off without losing it). All default true —
+// an untouched layer (fx.enabled absent, or every flag true) renders exactly as before
+// these uniforms existed.
+uniform bool u_enTransform; // gates flip/tile/zoom/pan/rotation
+uniform bool u_enBrcosa;    // gates brightness/contrast/saturation
+uniform bool u_enEdge;      // gates the edge-blend ramp (+ invert)
 out vec4 outColor;
 
 void main() {
@@ -50,44 +58,56 @@ void main() {
   // At the defaults (u_rotation=0, u_zoomXY=(1,1), u_anchor=(0.5,0.5)) this reduces
   // algebraically to the original (v_uv - 0.5) / u_zoom + 0.5 - u_pan — old shows that
   // never touch the new fields render byte-identical to before.
-  vec2 rel = v_uv - u_anchor;
-  float rad = -u_rotation; // inverse-rotate to find the source sample, not the destination
-  float cs = cos(rad), sn = sin(rad);
-  vec2 relRot = vec2(cs * rel.x - sn * rel.y, sn * rel.x + cs * rel.y);
-  vec2 scale = vec2(max(u_zoom, 0.001)) * max(u_zoomXY, vec2(0.001));
-  vec2 uv = relRot / scale + u_anchor - u_pan;
-
   float border = 1.0;
   vec2 suv;
-  if (u_tile.x > 1.0) {
-    suv.x = fract(uv.x * u_tile.x);
+  if (u_enTransform) {
+    vec2 rel = v_uv - u_anchor;
+    float rad = -u_rotation; // inverse-rotate to find the source sample, not the destination
+    float cs = cos(rad), sn = sin(rad);
+    vec2 relRot = vec2(cs * rel.x - sn * rel.y, sn * rel.x + cs * rel.y);
+    vec2 scale = vec2(max(u_zoom, 0.001)) * max(u_zoomXY, vec2(0.001));
+    vec2 uv = relRot / scale + u_anchor - u_pan;
+
+    if (u_tile.x > 1.0) {
+      suv.x = fract(uv.x * u_tile.x);
+    } else {
+      suv.x = uv.x;
+      if (uv.x < 0.0 || uv.x > 1.0) border = 0.0; // zoomed/panned past the frame: transparent
+    }
+    if (u_tile.y > 1.0) {
+      suv.y = fract(uv.y * u_tile.y);
+    } else {
+      suv.y = uv.y;
+      if (uv.y < 0.0 || uv.y > 1.0) border = 0.0;
+    }
+    if (u_flip.x) suv.x = 1.0 - suv.x;
+    if (u_flip.y) suv.y = 1.0 - suv.y;
   } else {
-    suv.x = uv.x;
-    if (uv.x < 0.0 || uv.x > 1.0) border = 0.0; // zoomed/panned past the frame: transparent
+    // Transform stage bypassed: sample straight through, untransformed.
+    suv = v_uv;
   }
-  if (u_tile.y > 1.0) {
-    suv.y = fract(uv.y * u_tile.y);
-  } else {
-    suv.y = uv.y;
-    if (uv.y < 0.0 || uv.y > 1.0) border = 0.0;
-  }
-  if (u_flip.x) suv.x = 1.0 - suv.x;
-  if (u_flip.y) suv.y = 1.0 - suv.y;
 
   vec4 c = u_isColor ? vec4(u_color, 1.0) : texture(u_src, clamp(suv, 0.0, 1.0));
 
   // brcosa: contrast about mid-grey, then brightness gain, then saturation vs. luma.
-  c.rgb = (c.rgb - 0.5) * u_brcosa.y + 0.5;
-  c.rgb *= u_brcosa.x;
-  float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-  c.rgb = mix(vec3(luma), c.rgb, u_brcosa.z);
+  if (u_enBrcosa) {
+    c.rgb = (c.rgb - 0.5) * u_brcosa.y + 0.5;
+    c.rgb *= u_brcosa.x;
+    float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+    c.rgb = mix(vec3(luma), c.rgb, u_brcosa.z);
+  }
 
-  // Edge-blend: per-edge gamma-shaped alpha ramp (projector-overlap feathering).
+  // Edge-blend: per-edge gamma-shaped alpha ramp (projector-overlap feathering), with an
+  // optional invert that fades the CENTER instead (VPT8's tr.edgeblend01.jxs: mix(alph,
+  // 1.-alph, invert)). Bypassed entirely (e stays 1.0, no-op) when the stage is disabled.
   float e = 1.0;
-  if (u_edges.x > 0.0) e *= pow(clamp(v_uv.x / u_edges.x, 0.0, 1.0), u_edgeGamma);
-  if (u_edges.y > 0.0) e *= pow(clamp((1.0 - v_uv.x) / u_edges.y, 0.0, 1.0), u_edgeGamma);
-  if (u_edges.z > 0.0) e *= pow(clamp((1.0 - v_uv.y) / u_edges.z, 0.0, 1.0), u_edgeGamma);
-  if (u_edges.w > 0.0) e *= pow(clamp(v_uv.y / u_edges.w, 0.0, 1.0), u_edgeGamma);
+  if (u_enEdge) {
+    if (u_edges.x > 0.0) e *= pow(clamp(v_uv.x / u_edges.x, 0.0, 1.0), u_edgeGamma);
+    if (u_edges.y > 0.0) e *= pow(clamp((1.0 - v_uv.x) / u_edges.y, 0.0, 1.0), u_edgeGamma);
+    if (u_edges.z > 0.0) e *= pow(clamp((1.0 - v_uv.y) / u_edges.z, 0.0, 1.0), u_edgeGamma);
+    if (u_edges.w > 0.0) e *= pow(clamp(v_uv.y / u_edges.w, 0.0, 1.0), u_edgeGamma);
+    if (u_edgeInvert) e = 1.0 - e;
+  }
 
   outColor = vec4(c.rgb, c.a * border * e);
 }`;
@@ -217,6 +237,14 @@ void main() {
 export function fxNeedsChain(fx) {
   if (!fx) return false;
   const eb = fx.edgeBlend ?? {};
+  const en = fx.enabled;
+  // A stage explicitly switched OFF must still enter the chain even if its own value is
+  // neutral — that's the whole point of a decoupled on/off (task A7): toggling a preset
+  // stage off has to actually suppress it, not silently no-op because "neutral value +
+  // chain skipped" looks the same as "on at neutral" from here. Untouched layers (no
+  // `enabled` object, or every flag true) fall through to the plain value checks below,
+  // so they stay on the old zero-cost path.
+  if (en && (en.transform === false || en.color === false || en.edgeBlend === false)) return true;
   return Boolean(
     fx.flipH || fx.flipV ||
     (fx.tileX ?? 1) !== 1 || (fx.tileY ?? 1) !== 1 ||
@@ -226,7 +254,8 @@ export function fxNeedsChain(fx) {
     (fx.rotationDeg ?? 0) !== 0 ||
     (fx.blur ?? 0) > 0 || (fx.motionBlur ?? 0) > 0 ||
     (fx.brightness ?? 1) !== 1 || (fx.contrast ?? 1) !== 1 || (fx.saturation ?? 1) !== 1 ||
-    (eb.left ?? 0) > 0 || (eb.right ?? 0) > 0 || (eb.top ?? 0) > 0 || (eb.bottom ?? 0) > 0
+    (eb.left ?? 0) > 0 || (eb.right ?? 0) > 0 || (eb.top ?? 0) > 0 || (eb.bottom ?? 0) > 0 ||
+    Boolean(eb.invert)
   );
 }
 
@@ -244,7 +273,8 @@ export class FxPasses {
         [
           "u_src", "u_isColor", "u_color", "u_flip", "u_tile",
           "u_zoom", "u_zoomXY", "u_anchor", "u_rotation", "u_pan",
-          "u_brcosa", "u_edges", "u_edgeGamma",
+          "u_brcosa", "u_edges", "u_edgeGamma", "u_edgeInvert",
+          "u_enTransform", "u_enBrcosa", "u_enEdge",
         ].map((name) => [name, gl.getUniformLocation(this.point, name)])
       ),
       blur: Object.fromEntries(
@@ -313,6 +343,11 @@ export class FxChain {
     gl.uniform3f(u.u_brcosa, fx.brightness ?? 1, fx.contrast ?? 1, fx.saturation ?? 1);
     gl.uniform4f(u.u_edges, eb.left ?? 0, eb.right ?? 0, eb.top ?? 0, eb.bottom ?? 0);
     gl.uniform1f(u.u_edgeGamma, eb.gamma ?? 2);
+    gl.uniform1i(u.u_edgeInvert, eb.invert ? 1 : 0);
+    const en = fx.enabled ?? {};
+    gl.uniform1i(u.u_enTransform, en.transform !== false ? 1 : 0);
+    gl.uniform1i(u.u_enBrcosa, en.color !== false ? 1 : 0);
+    gl.uniform1i(u.u_enEdge, en.edgeBlend !== false ? 1 : 0);
     this._draw(this.passes.point, this.pointFbo);
     return this.pointFbo.texture;
   }
@@ -364,6 +399,33 @@ export class FxChain {
     gl.uniform1f(u.u_amount, Math.min(0.95, Math.max(0, amount)));
     this._draw(this.passes.feedback, write);
     return write.texture;
+  }
+
+  // Directional-slide motion blur (task A21b — VPT8 parity: an alternate motion-blur
+  // variant alongside the temporal-feedback "trail" above). BLUR_FRAG is already a
+  // generic 9-tap smear along an arbitrary `u_dir` vector — _runBlur just happens to call
+  // it twice with axis-aligned dirs to approximate an isotropic gaussian. Reused here,
+  // unmodified, for a SINGLE pass along `angleDeg` instead: a short directional smear
+  // scaled by `amount`, same tap spread convention (amount*4 texels) as _runBlur. Writes
+  // into the feedback FBO pair's slot 0 as scratch (stateless — no ping-pong needed) so
+  // switching a layer between "trail" and "slide" doesn't need its own dedicated FBO.
+  _runSlide(srcTexture, amount, angleDeg) {
+    const gl = this.gl;
+    const u = this.passes.u.blur;
+    if (!this.feedbackFbo) {
+      this.feedbackFbo = [createFramebuffer(gl, this.width, this.height), createFramebuffer(gl, this.width, this.height)];
+    }
+    const rad = (angleDeg * Math.PI) / 180;
+    const spread = amount * 4;
+    const dir = [(Math.cos(rad) * spread) / this.width, (Math.sin(rad) * spread) / this.height];
+    gl.useProgram(this.passes.blur);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, srcTexture);
+    gl.uniform1i(u.u_src, 0);
+    gl.uniform2f(u.u_dir, dir[0], dir[1]);
+    const target = this.feedbackFbo[0];
+    this._draw(this.passes.blur, target);
+    return target.texture;
   }
 
   _runMask(srcTexture, mask, matteTexture) {
@@ -420,9 +482,19 @@ export class FxChain {
   /** Runs the active stages; returns the texture the blend pass should composite.
    *  For color layers the point pass doubles as the fill synthesizer. */
   process(srcTexture, fx, { isColor = false, color = [0, 0, 0], mask = null, warp = null, matteTexture = null } = {}) {
-    let tex = this._runPoint(srcTexture, fx ?? {}, isColor, color);
-    if ((fx?.blur ?? 0) > 0) tex = this._runBlur(tex, fx.blur);
-    if ((fx?.motionBlur ?? 0) > 0) tex = this._runFeedback(tex, fx.motionBlur);
+    const f = fx ?? {};
+    let tex = this._runPoint(srcTexture, f, isColor, color);
+    // Color stage bypass (task A7): blur + motion-blur (trail/slide) + brcosa (brcosa is
+    // gated in-shader, see u_enBrcosa) all live under the Color section's single on/off.
+    const colorEnabled = f.enabled?.color !== false;
+    if (colorEnabled && (f.blur ?? 0) > 0) tex = this._runBlur(tex, f.blur);
+    if (colorEnabled && (f.motionBlur ?? 0) > 0) {
+      // Directional-slide variant (task A21b) vs. the original temporal-feedback trail —
+      // same amount knob (fx.motionBlur), different render path.
+      tex = f.motionBlurMode === "slide"
+        ? this._runSlide(tex, f.motionBlur, f.motionBlurAngle ?? 0)
+        : this._runFeedback(tex, f.motionBlur);
+    }
     if (mask?.enabled) tex = this._runMask(tex, mask, matteTexture);
     if (warp && (warp.mode === "mesh" || warp.corners)) tex = this._runWarp(tex, warp);
     return tex;

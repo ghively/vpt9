@@ -394,7 +394,10 @@ html, body { height: 100%; }
     border-top: 1px solid var(--hairline-soft, var(--hairline));
   }
   .fx-section { display: flex; flex-direction: column; gap: 4px; }
-  .fx-cap { font-size: 8.5px; color: var(--muted-dim); }
+  .fx-cap { font-size: 8.5px; color: var(--muted-dim); display: flex; align-items: center; gap: 6px; }
+  /* Per-stage enable/bypass toggle (task A7), shown inline in the section caption —
+     shrunk from the standard 26px toggle-sq so it doesn't dominate the tiny caption row. */
+  .fx-cap .fx-section-enable { width: 20px; height: 16px; font-size: 7.5px; }
   .fx-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
   .fx-control { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 150px; }
   .fx-control input[type="range"] { flex: 1; min-width: 50px; }
