@@ -5,6 +5,7 @@ import {
   LayerStack,
   MasterControl,
   SlotGrid,
+  Stage,
   StatusLamp,
   type ConnectionState,
 } from "../components";
@@ -158,7 +159,18 @@ export function App() {
             onSetContent={actions.setSourceBankSlotContent}
           />
         </aside>
-        <main className="stage-wrap">{/* <Stage/> lands here in Task 4 */}</main>
+        <main className="stage-wrap">
+          {selectedScreenId && (
+            <Stage
+              screenId={selectedScreenId}
+              frame={preview.frameFor(selectedScreenId) ?? null}
+              width={1280}
+              height={720}
+              overlay={null /* Task 6 fills this with warp/mask handles */}
+              onBackgroundPointerDown={() => {} /* Task 5 wires layer-region selection */}
+            />
+          )}
+        </main>
         <aside className="rail rail-r insp">{/* <Inspector/> lands here in Task 7 */}</aside>
       </div>
     </div>

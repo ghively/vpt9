@@ -187,3 +187,101 @@
   background: var(--panel-raised);
 }
 .slot-editor-inline .media-row { flex-wrap: wrap; }
+
+/* ---------------- STAGE (the star) ----------------
+ * `.stage-wrap` is the `<main>` zone App.tsx already owns; Stage.tsx renders the rest.
+ * The inner frame is `.deck-stage`, NOT `.stage` — panel.css already defines `.stage`/
+ * `.stage__frame` for ConfidenceMonitor's small rail-side monitor (WarpEditor/PipWindows),
+ * sized and laid out differently (aspect-ratio box vs. this dominant, flex-filled one);
+ * reusing that class name verbatim here would fight those rules instead of extending them.
+ * `.preview-img` and `.mono` ARE reused as-is — both are global, unscoped rules in
+ * panel.css (object-fit/cover + edge-blend feather + hide-when-empty for `.preview-img`;
+ * font for `.mono`), so referencing the same class names here inherits that behavior for
+ * free instead of duplicating it. */
+.stage-wrap {
+  position: relative;
+  padding: 16px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.deck-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--panel-sunken);
+  border: 1px solid var(--hairline);
+  box-shadow: inset 0 0 0 1px #000, 0 20px 60px -20px #000;
+}
+.deck-stage__nosignal {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.deck-stage__nosignal > .mono { font-size: 12px; font-weight: 700; letter-spacing: .3em; color: var(--muted-dim); }
+.deck-stage__nosignal-sub { font-size: 9px; font-weight: 400; letter-spacing: .12em; color: var(--muted-dim); opacity: .7; text-transform: lowercase; }
+.deck-stage[data-live="true"] .deck-stage__nosignal { display: none; }
+
+/* Faint registration grid + corner ticks over the frame — the confidence-monitor
+ * signature, cyan = render/preview data (see tokens/tokens.css). */
+.reg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.tick { position: absolute; width: 16px; height: 16px; border: 1px solid var(--cool-line); opacity: .55; pointer-events: none; }
+.tick.tl { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+.tick.tr { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+.tick.bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+.tick.br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+
+.stage-badge {
+  position: absolute;
+  top: 12px;
+  left: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  color: var(--cool);
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.stage-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cool); box-shadow: 0 0 8px var(--cool); }
+.stage-fps {
+  position: absolute;
+  top: 12px;
+  right: 32px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--muted);
+  letter-spacing: .1em;
+  pointer-events: none;
+}
+
+/* Task 5/6 selection/warp/mask handles land here, absolutely positioned by normalized
+ * 0..1 coordinates against this same box. */
+.stage-overlay { position: absolute; inset: 0; }
+
+/* Ported for the (future) "Editing <layer> · <mode>" readout below the stage — not
+ * populated yet; Stage.tsx has no layer/edit-mode data to show until a later task
+ * wires the inspector's selection state through. */
+.stage-toolbar { display: flex; align-items: center; gap: 14px; padding: 0 6px; color: var(--muted); }
+.stage-toolbar .label { font-size: 9px; color: var(--muted-dim); }
+.stage-toolbar .k { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+.stage-toolbar .k b { color: var(--text); font-weight: 500; }
+.stage-toolbar .hint { margin-left: auto; font-family: var(--font-mono); font-size: 9.5px; color: var(--muted-dim); letter-spacing: .04em; }
+.stage-toolbar .hint b { color: var(--beam); font-weight: 500; }

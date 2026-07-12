@@ -32,6 +32,8 @@ export { LayerStack } from "./deck/LayerStack";
 export type { LayerStackProps } from "./deck/LayerStack";
 export { SlotGrid } from "./deck/SlotGrid";
 export type { SlotGridProps } from "./deck/SlotGrid";
+export { Stage } from "./deck/Stage";
+export type { StageProps } from "./deck/Stage";
 export { ConfidenceMonitor } from "./ConfidenceMonitor";
 export type { ConfidenceMonitorProps, ConfidenceMonitorHandle } from "./ConfidenceMonitor";
 export { WarpEditor } from "./WarpEditor";
