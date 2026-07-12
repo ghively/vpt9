@@ -276,12 +276,3 @@
  * 0..1 coordinates against this same box. */
 .stage-overlay { position: absolute; inset: 0; }
 
-/* Ported for the (future) "Editing <layer> · <mode>" readout below the stage — not
- * populated yet; Stage.tsx has no layer/edit-mode data to show until a later task
- * wires the inspector's selection state through. */
-.stage-toolbar { display: flex; align-items: center; gap: 14px; padding: 0 6px; color: var(--muted); }
-.stage-toolbar .label { font-size: 9px; color: var(--muted-dim); }
-.stage-toolbar .k { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
-.stage-toolbar .k b { color: var(--text); font-weight: 500; }
-.stage-toolbar .hint { margin-left: auto; font-family: var(--font-mono); font-size: 9.5px; color: var(--muted-dim); letter-spacing: .04em; }
-.stage-toolbar .hint b { color: var(--beam); font-weight: 500; }

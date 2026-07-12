@@ -162,6 +162,7 @@ export function App() {
         <main className="stage-wrap">
           {selectedScreenId && (
             <Stage
+              ref={preview.warpMonitor}
               screenId={selectedScreenId}
               frame={preview.frameFor(selectedScreenId) ?? null}
               width={1280}

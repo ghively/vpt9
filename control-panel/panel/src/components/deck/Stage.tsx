@@ -1,4 +1,5 @@
-import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { forwardRef, useImperativeHandle, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import type { ConfidenceMonitorHandle } from "../ConfidenceMonitor";
 
 export interface StageProps {
   /** Selected screen id (e.g. "screen-1") — shown in the LIVE badge. Display only; Stage
@@ -38,8 +39,28 @@ export interface StageProps {
  *  it can't collide with (or be broken by) those other monitors.
  *
  *  Presentational only — no imports from `src/app/`. `frame` is a plain prop the
- *  caller (App) reads off the preview bus; Stage renders whatever it's given. */
-export function Stage({ screenId, frame, width, height, overlay, onBackgroundPointerDown }: StageProps) {
+ *  caller (App) reads off the preview bus to SEED the initial render; after that, App
+ *  binds this component's ref (a `ConfidenceMonitorHandle`) to the bus so `push()` can
+ *  drive the `<img>` directly at the render-client's ~250ms cadence, without a
+ *  React re-render (mirrors `ConfidenceMonitor.tsx`'s own `setFrame` contract). */
+export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function Stage(
+  { screenId, frame, width, height, overlay, onBackgroundPointerDown },
+  ref,
+) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setFrame: (dataUrl: string) => {
+        if (imgRef.current) imgRef.current.src = dataUrl;
+        stageRef.current?.setAttribute("data-live", "true");
+      },
+    }),
+    [],
+  );
+
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     if (target.closest(".deck-handle")) return;
@@ -47,10 +68,10 @@ export function Stage({ screenId, frame, width, height, overlay, onBackgroundPoi
   };
 
   return (
-    <div className="deck-stage" data-live={frame != null} onPointerDown={handlePointerDown}>
+    <div className="deck-stage" ref={stageRef} data-live={!!frame} onPointerDown={handlePointerDown}>
       {/* src omitted when there's no frame so panel.css's `.preview-img:not([src])` rule
        *  hides the broken-image glyph instead of showing one. */}
-      <img className="preview-img" src={frame ?? undefined} alt="" />
+      <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" />
       <div className="deck-stage__nosignal" aria-hidden="true">
         <span className="mono">NO SIGNAL</span>
         <span className="deck-stage__nosignal-sub mono">awaiting render-client preview</span>
@@ -69,4 +90,4 @@ export function Stage({ screenId, frame, width, height, overlay, onBackgroundPoi
       <div className="stage-overlay">{overlay}</div>
     </div>
   );
-}
+});
