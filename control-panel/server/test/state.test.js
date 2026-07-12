@@ -14,6 +14,7 @@ import {
   defaultFx,
   defaultWarp,
   defaultTransport,
+  defaultSlotTransport,
   defaultMask,
   loadState,
   saveState,
@@ -238,18 +239,21 @@ test("applyUpdate accepts a scrub seek fraction on a layer transport, and cleari
   assert.equal(state.layers["layer-1"].transport.seek, null);
 });
 
-test("DEFAULT_STATE source-bank slots each carry their own defaultTransport (task A9)", () => {
+test("DEFAULT_STATE source-bank slots each carry an auto-play/loop slot transport (task A9)", () => {
   const state = structuredClone(loadState("/nonexistent/path/for/test-a9.json"));
   assert.equal(state.sourceBank.length, 8);
   for (const slot of state.sourceBank) {
-    assert.deepEqual(slot.transport, defaultTransport());
+    // Slots auto-play + loop by default, preserving the pre-A9 hardcoded slot behavior.
+    assert.deepEqual(slot.transport, defaultSlotTransport());
+    assert.equal(slot.transport.playing, true);
+    assert.equal(slot.transport.loopMode, "loop");
   }
 });
 
-test("ensureStateDefaults backfills a per-slot transport onto a sourceBank saved before task A9", () => {
+test("ensureStateDefaults backfills an auto-play/loop slot transport onto a sourceBank saved before task A9", () => {
   const state = { layers: {}, presets: {}, sourceBank: [{ id: "slot-1", name: "Slot 1", content: null }] };
   ensureStateDefaults(state);
-  assert.deepEqual(state.sourceBank[0].transport, defaultTransport());
+  assert.deepEqual(state.sourceBank[0].transport, defaultSlotTransport());
 });
 
 test("ensureStateDefaults backfills a missing seek leaf onto a slot transport saved before task A11, without touching existing fields", () => {
@@ -266,10 +270,11 @@ test("ensureStateDefaults backfills a missing seek leaf onto a slot transport sa
 
 test("applyUpdate writes per-slot transport fields addressed by index (task A9)", () => {
   const state = structuredClone(loadState("/nonexistent/path/for/test-a9-write.json"));
-  assert.equal(applyUpdate(state, "sourceBank.0.transport.playing", true), true);
+  // Slots default to playing:true, so flip it off here to exercise an actual write.
+  assert.equal(applyUpdate(state, "sourceBank.0.transport.playing", false), true);
   assert.equal(applyUpdate(state, "sourceBank.0.transport.loopMode", "palindrome"), true);
   assert.equal(applyUpdate(state, "sourceBank.0.transport.seek", 0.75), true);
-  assert.equal(state.sourceBank[0].transport.playing, true);
+  assert.equal(state.sourceBank[0].transport.playing, false);
   assert.equal(state.sourceBank[0].transport.loopMode, "palindrome");
   assert.equal(state.sourceBank[0].transport.seek, 0.75);
 });

@@ -105,6 +105,14 @@ export function defaultTransport() {
   return { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1, seek: null };
 }
 
+// A source-bank slot's transport (task A9) auto-plays and loops by default, preserving the
+// pre-A9 behavior where slot media always ran (it was a hardcoded `loop = true` + autoplay
+// in source-bank.js). A slot feeds potentially many layers, so a live-by-default source is
+// the useful default; the operator can still pause/change loop mode per slot.
+export function defaultSlotTransport() {
+  return { ...defaultTransport(), playing: true, loopMode: "loop" };
+}
+
 const DEFAULT_STATE = {
   layers: {
     "layer-1": {
@@ -201,7 +209,7 @@ const DEFAULT_STATE = {
   // holding slot, enforced below) crossfaded by a chosen blend mode. Each slot carries
   // its OWN `transport` (task A9) — because many layers can share one slot, its
   // play/rate/loop state lives on the slot, not the consuming layer.
-  sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultTransport() })),
+  sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultSlotTransport() })),
 };
 
 // `applyUpdate` only patches EXISTING leaves, so state loaded from an older
@@ -236,14 +244,14 @@ export function ensureStateDefaults(state) {
     midiMap: {},
     master: 1,
     media: {},
-    sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultTransport() })),
+    sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultSlotTransport() })),
   });
   // Backfill per-slot transport (task A9) onto a sourceBank saved before it existed:
   // fillMissing never recurses into array elements, so each slot object is patched
   // explicitly (adds a whole `transport`, or backfills any missing leaf such as `seek`).
   if (Array.isArray(state.sourceBank)) {
     for (const slot of state.sourceBank) {
-      if (slot && typeof slot === "object" && !Array.isArray(slot)) fillMissing(slot, { transport: defaultTransport() });
+      if (slot && typeof slot === "object" && !Array.isArray(slot)) fillMissing(slot, { transport: defaultSlotTransport() });
     }
   }
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
