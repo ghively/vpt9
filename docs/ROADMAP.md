@@ -1,17 +1,20 @@
 # VPT Modernization Roadmap
 
-> **⚠️ PARTIALLY SUPERSEDED (2026-07-12).** Two things below are now known to be inaccurate and are
-> pending a rewrite (Phase B task B3): (1) the panel UI has been rebuilt into a **"projection deck"**
-> (see `CLAUDE.md`'s Current State section) — this doc still describes the old two-column console;
-> (2) the **"full VPT8 parity reached" claim was overstated** — a 2026-07-12 adversarial audit
-> (`docs/VPT8-PARITY-GAPS.md`) found ~15 real gaps + a bug + a regression. **For the current live
-> status of what's done and what remains, read `docs/REMAINING-WORK.md`.** The historical record below
-> is kept for context.
-
 This is the current source of truth for what's built, what direction was chosen, and what work
 remains. It supersedes the earlier `docs/ROADMAP.md` (written 2026-07-04, first pass).
 `docs/TECH_DEBT.md` and `docs/CONTROL_PANEL_SPEC_AUDIT.md` remain as closed historical audit
 records — this doc doesn't repeat their findings, it points to them.
+
+**Current status (2026-07-12):** the panel UI is a **"projection deck"** (dominant live-preview
+Stage with click-to-select and on-stage warp/mask handles, a contextual Warp·Mask·FX Inspector,
+compact LayerStack/SlotGrid rails, a Show drawer, a screen selector, mobile layout — see the
+2026-07-12 update near the bottom of this file and `control-panel/README.md` for the current,
+authoritative feature description), and **`control-panel` is now at full VPT8 parity** — a
+2026-07-12 adversarial audit (`docs/VPT8-PARITY-GAPS.md`) found the earlier "full parity" claim
+below (2026-07-11) had been overstated (~15 real gaps + a bug + a regression), and all of them were
+subsequently closed (task-by-task log: `docs/REMAINING-WORK.md`). The blockquoted status updates
+below are kept in date order as a historical narrative — read the 2026-07-12 entry at the bottom
+for the corrections to the two entries that turned out to be premature.
 
 > **2026-07-05 status update:** all three subsystems below are now built and verified (see
 > [`docs/superpowers/specs/2026-07-05-parity-subsystems-design.md`](superpowers/specs/2026-07-05-parity-subsystems-design.md)
@@ -35,7 +38,10 @@ records — this doc doesn't repeat their findings, it points to them.
 > genuinely new capability, house master dim + hard blackout, deliberately excluded
 > from presets/cue fades. `control-panel/README.md` now also links out to a new
 > [`control-panel/OPERATOR_GUIDE.md`](../control-panel/OPERATOR_GUIDE.md) for the
-> person running a show rather than building the software.
+> person running a show rather than building the software. *(Superseded 2026-07-11 —
+> this two-column console was itself replaced by the "projection deck" redesign; see
+> the 2026-07-12 update near the bottom of this file. `control-panel/README.md` and
+> `OPERATOR_GUIDE.md` now describe the deck, not this layout.)*
 >
 > **2026-07-06 update (2):** a fresh pass at "what would full VPT8 parity plus a genuinely better
 > interface require" (prompted by user testing of the running panel) found the remaining gap is
@@ -94,7 +100,12 @@ records — this doc doesn't repeat their findings, it points to them.
 > "What's verified" section accurately reflects this by omission. `control-panel/OPERATOR_GUIDE.md`
 > has been updated to document all of the above.
 >
-> **2026-07-11 status update: sub-projects 2, 3, and 4 are now CLOSED — full VPT8 parity reached.**
+> **2026-07-11 status update: sub-projects 2, 3, and 4 are now CLOSED.** *(This update's closing
+> claim of "full VPT8 parity reached" turned out to be overstated — a 2026-07-12 adversarial audit
+> found ~15 real remaining gaps, a bug, and a regression. See the 2026-07-12 update near the bottom
+> of this file for the correction; all of those gaps were subsequently closed too. The subsystem work
+> described immediately below is accurate as a historical record of what this pass actually built —
+> only the "full parity" framing was premature.)*
 > Built per `docs/superpowers/specs/2026-07-08-parity-finish-line-design.md` and
 > `docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md` (17 tasks, executed via three
 > parallel worktree-isolated lanes with per-task subagent review):
@@ -160,7 +171,52 @@ records — this doc doesn't repeat their findings, it points to them.
 > genuinely open: real-hardware verification (physical camera, MIDI controller, Chromecast — see
 > `control-panel/README.md`'s "Not verifiable from this environment" list) and the standing question
 > of whether the actual installation needs Art-Net/DMX/serial hardware integration at all (still a
-> call for whoever runs the show, not resolved here).
+> call for whoever runs the show, not resolved here). *(This "subsystem is built" reading of parity
+> held up; what didn't was assuming subsystem presence meant full parameter/capability parity within
+> each one — the 2026-07-12 audit found real per-parameter gaps inside already-"closed" subsystems.
+> See the 2026-07-12 update below.)*
+>
+> **2026-07-12 update: the "projection deck" panel redesign, a rigorous parity audit, and the
+> closure of every gap it found.** Two independent efforts landed this pass:
+>
+> 1. **Panel UI redesign — the "projection deck."** User testing of the two-column console (built
+>    2026-07-06) surfaced a clear ask: a dominant live preview, real hierarchy, and the ability to
+>    shape/warp layers directly on the picture instead of in a side panel. Designed in
+>    [`docs/superpowers/specs/2026-07-11-projection-deck-redesign-design.md`](superpowers/specs/2026-07-11-projection-deck-redesign-design.md)
+>    and built as a new `panel/src/components/deck/` tree: a dominant **Stage** (`Stage.tsx`) showing
+>    the live preview with per-layer click-to-select regions; **StageSelectionOverlay.tsx** drawing
+>    the selected layer's warp/mask handles directly on the Stage; a contextual **Inspector.tsx**
+>    with a Warp·Mask·FX segmented switch; compact **LayerStack.tsx** + **SlotGrid.tsx** rails; a
+>    collapsible **ShowDrawer.tsx** (Presets·Cues·Timers·LFO·MIDI·Media·PiP); a screen selector in
+>    the command bar; and a mobile bottom-sheet layout. This replaced the 2026-07-06 two-column
+>    console entirely — see `control-panel/README.md` and `control-panel/OPERATOR_GUIDE.md` for the
+>    current, authoritative description (both fully rewritten, not just patched, for this update).
+> 2. **Adversarial parity audit.** Prompted by a direct question — "does this actually reach full
+>    VPT8 parity?" — a four-agent adversarial audit cross-checked all 11 VPT8 architecture modules
+>    against the actual `control-panel` code, not the ROADMAP's claims. Verdict, recorded in
+>    [`docs/VPT8-PARITY-GAPS.md`](VPT8-PARITY-GAPS.md): **not** at full parity. The 2026-07-11 "full
+>    software-reachable feature parity" claim above reflected subsystem *presence*; it missed
+>    per-parameter gaps inside subsystems already marked closed. Findings: ~15 real gaps (arbitrary-
+>    polygon masking + invert + luminance matte; per-layer rotation + non-uniform zoom + anchor;
+>    shared source-bank transport/presets/camera-color-as-slot/camera-picker; cue codes `S`/`R`/`O`;
+>    OSC output; LFO mixers/tempo/phase; blind mode; per-fx-stage bypass; cue manual-GO checkpoints;
+>    edge-blend invert; clip scrub/seek; per-source downscale; next/prev/random triggers; wider/
+>    smoother mesh warp; cursor-hide), **1 regression** (per-layer copy/paste, present since
+>    2026-07-05, silently dropped when the deck redesign removed the component that held it), and
+>    **1 bug** (a jpg/gif dropped into a shared source-bank slot rendered black).
+>
+> **All of it was subsequently closed**, tracked task-by-task in
+> [`docs/REMAINING-WORK.md`](REMAINING-WORK.md) and executed per
+> [`docs/superpowers/plans/2026-07-12-full-parity-finish-plan.md`](superpowers/plans/2026-07-12-full-parity-finish-plan.md)
+> (24 tasks: A1–A21 parity fixes, B1–B3 this doc rewrite, C1–C4 divorcing the archived VPT8 Max/MSP
+> source, D1–D3 real-world verification pending hardware/a Docker host). **With this pass,
+> `control-panel/` is genuinely at full VPT8 software-reachable parity** — both at the subsystem
+> level (2026-07-11's claim) and the per-parameter level (this audit's bar). `control-panel/README.md`'s
+> feature-set section and "What's verified" section are the current, authoritative record; this
+> document's earlier "full parity" language (2026-07-11, and the "software-reachable feature parity"
+> line above) is corrected by this entry, not deleted, so the sequence of claims and corrections stays
+> legible. Confirmed non-goals are unchanged (see below) — the audit found real gaps, not disagreement
+> with any non-goal decision already made.
 
 ## Status Quo
 
@@ -171,8 +227,9 @@ records — this doc doesn't repeat their findings, it points to them.
 passed). Known coverage gaps admitted by the audit itself: camera sources (`cam1`/`cam2`) never got
 a deep-dive, and the final `s ctrl` dispatch was only traced from the engine side.
 
-**`control-panel/` web replacement (Track B) — functionally complete for parity subsystems 1–3,
-partially verified.** A Node/WebSocket server, WebGL2 render client, React/TypeScript operator
+**`control-panel/` web replacement (Track B) — as of 2026-07-12, at full VPT8 parity (see the
+2026-07-12 update below); this paragraph is the historical build narrative through the 2026-07-06
+UI overhaul.** A Node/WebSocket server, WebGL2 render client, React/TypeScript operator
 panel, and DIAL/SSDP cast-receiver. Built in several passes (Phase 1 scaffold, then the full stack,
 then the parity subsystems below, then a full React/TypeScript rewrite of the panel — see
 [`docs/superpowers/specs/2026-07-05-panel-componentization-design.md`](superpowers/specs/2026-07-05-panel-componentization-design.md)
@@ -241,8 +298,12 @@ VPT8 has three automation paths: the preset module, a sequential cue-list script
 
 **Gap (as of 2026-07-04, now closed):** cue-list interpreter, timer bank, copy-paste.
 **Resolution:** `server/src/automation.js` implements the cue-list interpreter (`recall`/`fade`/
-`wait`/`goto` cue types) and the wall-clock timer bank; the panel's `CueList.tsx`/`TimerBank.tsx`
-drive them and `App.tsx` implements layer copy/paste.
+`wait`/`goto`/`source`/`paramFade`/`osc` cue types, the last three added by the 2026-07-12 parity
+pass) and the wall-clock timer bank; the panel's `CueList.tsx`/`TimerBank.tsx` drive them and layer
+copy/paste is implemented in `panel/src/components/deck/LayerStack.tsx` (originally landed in the
+pre-deck `App.tsx`, dropped as a regression when the 2026-07-11 projection-deck redesign removed
+that component, and restored — see task A2 in `docs/REMAINING-WORK.md` — during the 2026-07-12
+parity-gap closure).
 
 ### 3. Input sources & control surfaces — Priority 3 — CLOSED for everything software-reachable
 
@@ -252,12 +313,16 @@ input, a 100-row control router, and a 10-slot LFO modulation rack. As of 2026-0
 
 **Gap (as of 2026-07-04, now closed for the software-reachable parts):** everything in this
 category.
-**Resolution:** camera source support lives in `render-client/src/layers.js`; WebMIDI CC learn/map
-is `panel/src/app/useMidi.ts` + `panel/src/components/MidiMapPanel.tsx`; the LFO rack is
-`panel/src/components/LfoRack.tsx` with server-side oscillation in `server/src/automation.js`; an
-OSC/UDP listener is `server/src/osc.js`. Art-Net/DMX and serial/sensor input remain out of scope —
-no browser API reaches them; they'd need a small local bridge process speaking the WS/OSC protocol
-`control-panel/README.md` documents as the integration surface for exactly this.
+**Resolution:** camera source support lives in `render-client/src/layers.js` (extended by the
+2026-07-12 pass with a device picker, resolution constraints, and record-to-disk); WebMIDI CC
+learn/map is `panel/src/app/useMidi.ts` + `panel/src/components/MidiMapPanel.tsx`; the LFO rack is
+`panel/src/components/LfoRack.tsx` with server-side oscillation in `server/src/automation.js`
+(extended 2026-07-12 with waveform-mixer rows, tempo/BPM sync, phase offset, and waveform invert);
+an OSC/UDP listener is `server/src/osc.js`, joined 2026-07-12 by an OSC **sender** (`server/src/
+osc-out.js`) that mirrors state changes back out for bidirectional surfaces. Art-Net/DMX and
+serial/sensor input remain out of scope — no browser API reaches them; they'd need a small local
+bridge process speaking the WS/OSC protocol `control-panel/README.md` documents as the integration
+surface for exactly this.
 **Open question (still genuinely open, not an engineering call):** does the actual installation
 this is meant to run need physical hardware control (Art-Net/DMX, serial sensors, a real MIDI
 controller) at all? Every doc that touches this (this one, `control-panel/README.md`'s "Not
@@ -313,3 +378,16 @@ new pieces in a real browser via a scripted check (Playwright) — see `control-
   — sub-project 1 of the 4-part decomposition in the second 2026-07-06 update above: mobile layout,
   touch-target sizing, the media library (server + panel), warp-editor labeling, and the new
   on-canvas mask editor.
+- [`docs/superpowers/specs/2026-07-08-parity-finish-line-design.md`](superpowers/specs/2026-07-08-parity-finish-line-design.md)
+  and [`docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md`](superpowers/plans/2026-07-08-parity-finish-line-plan.md)
+  — the design + 17-task plan for sub-projects 2–4 (per-layer warp, source bank + all 24 blend modes
+  + mix-source type, clip transport + playlist), referenced in the 2026-07-11 status update above.
+- [`docs/VPT8-PARITY-GAPS.md`](VPT8-PARITY-GAPS.md) — the 2026-07-12 four-agent adversarial parity
+  audit that found the 2026-07-11 "full parity" claim above was overstated; the authoritative list
+  of what was actually still missing at that point.
+- [`docs/superpowers/specs/2026-07-11-projection-deck-redesign-design.md`](superpowers/specs/2026-07-11-projection-deck-redesign-design.md)
+  — the design for the "projection deck" panel UI (Stage, Inspector, LayerStack, SlotGrid, Show
+  drawer) that replaced the 2026-07-06 two-column console; see the 2026-07-12 update above.
+- [`docs/superpowers/plans/2026-07-12-full-parity-finish-plan.md`](superpowers/plans/2026-07-12-full-parity-finish-plan.md)
+  — the 24-task plan (parity fixes, this doc rewrite, VPT8-source divorce, real-world verification)
+  that closed every gap `docs/VPT8-PARITY-GAPS.md` found; live status: `docs/REMAINING-WORK.md`.
