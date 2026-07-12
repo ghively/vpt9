@@ -3,6 +3,7 @@ import { Select } from "../primitives/Select";
 import { Fader } from "../primitives/Fader";
 import { TextField } from "../primitives/TextField";
 import { FxDrawer } from "../FxDrawer";
+import { rgbToHex } from "../color";
 import { BLEND_MODES, type Layer, type MediaItem, type PlaylistItem, type SourceBankSlot } from "../types";
 
 /** Which stage-editing mode the segment (and, via `onModeChange`, the Stage's
@@ -44,11 +45,6 @@ export interface InspectorProps {
   onSetWarpMode?: (mode: "corner" | "mesh") => void;
   onSetMeshSize?: (size: number) => void;
   onResetWarp?: () => void;
-}
-
-function rgbToHex([r, g, b]: [number, number, number]): string {
-  const h = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
-  return `#${h(r)}${h(g)}${h(b)}`;
 }
 
 function sourceSummary(source: Layer["source"]): string {

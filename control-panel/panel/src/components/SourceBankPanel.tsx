@@ -1,4 +1,5 @@
 import { SourceBankSlotEditor } from "./SourceBankSlotEditor";
+import { otherSlotOptions } from "./sourceBank";
 import type { SourceBankSlot, MediaItem } from "./types";
 
 export interface SourceBankPanelProps {
@@ -15,7 +16,7 @@ export function SourceBankPanel({ slots, media, onRename, onSetContent }: Source
         <h3>Source bank</h3>
       </div>
       {slots.map((slot, i) => {
-        const otherSlots = slots.filter((s) => s.id !== slot.id).map((s) => ({ id: s.id, name: s.name }));
+        const otherSlots = otherSlotOptions(slots, slot.id);
         return (
           <SourceBankSlotEditor
             key={slot.id}

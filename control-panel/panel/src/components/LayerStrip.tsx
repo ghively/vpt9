@@ -4,6 +4,7 @@ import { Fader } from "./primitives/Fader";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { FxDrawer } from "./FxDrawer";
+import { rgbToHex } from "./color";
 import { BLEND_MODES, type Layer, type MediaItem, type SourceBankSlot } from "./types";
 
 export interface LayerNeighbors {
@@ -38,11 +39,6 @@ export interface LayerStripProps {
   onSetSourceMode?: (mode: "single" | "playlist") => void;
   /** Replaces this layer's whole playlist item queue (FX drawer's Playlist section). */
   onSetPlaylist?: (items: Layer["playlist"]["items"]) => void;
-}
-
-function rgbToHex([r, g, b]: [number, number, number]): string {
-  const h = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
-  return `#${h(r)}${h(g)}${h(b)}`;
 }
 
 /** One layer as a mixer channel strip: index, reorder, name, source, blend, opacity,

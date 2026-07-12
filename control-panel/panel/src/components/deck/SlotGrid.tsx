@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SourceBankSlotEditor } from "../SourceBankSlotEditor";
+import { otherSlotOptions } from "../sourceBank";
 import type { MediaItem, SourceBankSlot } from "../types";
 
 export interface SlotGridProps {
@@ -73,7 +74,7 @@ export function SlotGrid({ slots, media = [], onRename, onSetContent, onEditSlot
             slot={editingSlot}
             index={editingIndex}
             media={media}
-            otherSlots={slots.filter((s) => s.id !== editingSlot.id).map((s) => ({ id: s.id, name: s.name }))}
+            otherSlots={otherSlotOptions(slots, editingSlot.id)}
             onRename={onRename}
             onSetContent={onSetContent}
           />

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ShowDrawer, type ShowTab } from "./ShowDrawer";
 import { CueList } from "../CueList";
 import { LfoRack } from "../LfoRack";
@@ -29,7 +29,7 @@ type Story = StoryObj<typeof ShowDrawer>;
 // The same per-tab wiring shape App.tsx uses (sc-card wrapper + <h3> for the panels
 // that don't render their own — see App.tsx's `activePanel` switch), just fed with
 // fixture data/no-op callbacks instead of live store/actions for isolated preview.
-const PANEL_BY_TAB: Record<ShowTab, React.ReactNode> = {
+const PANEL_BY_TAB: Record<ShowTab, ReactNode> = {
   presets: (
     <section className="sc-card">
       <h3>Presets</h3>

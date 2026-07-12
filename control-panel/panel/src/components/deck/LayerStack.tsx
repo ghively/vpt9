@@ -1,4 +1,5 @@
 import { ToggleSquare } from "../primitives/ToggleSquare";
+import { rgbToHex } from "../color";
 import type { Layer } from "../types";
 
 export interface LayerStackProps {
@@ -9,11 +10,6 @@ export interface LayerStackProps {
   onAddLayer: () => void;
   onMoveLayer: (id: string, dir: "up" | "down") => void;
   onRemoveLayer: (id: string) => void;
-}
-
-function rgbToHex([r, g, b]: [number, number, number]): string {
-  const h = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
-  return `#${h(r)}${h(g)}${h(b)}`;
 }
 
 /** Compact left-rail layer list: a color swatch (or gradient placeholder) thumbnail,

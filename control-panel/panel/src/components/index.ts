@@ -42,8 +42,6 @@ export { ShowDrawer } from "./deck/ShowDrawer";
 export type { ShowDrawerProps, ShowTab } from "./deck/ShowDrawer";
 export { ConfidenceMonitor } from "./ConfidenceMonitor";
 export type { ConfidenceMonitorProps, ConfidenceMonitorHandle } from "./ConfidenceMonitor";
-export { WarpEditor } from "./WarpEditor";
-export type { WarpEditorProps } from "./WarpEditor";
 export { WarpHandle } from "./WarpHandle";
 export type { WarpHandleProps } from "./WarpHandle";
 export { PipWindows } from "./PipWindows";
