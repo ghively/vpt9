@@ -55,6 +55,11 @@ export interface Mask {
    *  inside visible, true = outside visible. Mirrors VPT8's `layermask.maxpat`
    *  `pattr inv`. */
   invert?: boolean;
+  /** Optional luminance/video matte (VPT8's `layermask.maxpat` `pattr source` +
+   *  `cc.alphaglue.jxs` `lum2alpha`, task A5). When set, the mask alpha is driven by this
+   *  source's luminance instead of the geometric shape (still honoring `enabled`/`invert`);
+   *  `null`/absent = geometric mask only. Same `{type,mediaId/slotId}` shape as `SourceRef`. */
+  source?: SourceRef | null;
 }
 
 /** Per-layer effects chain — mirrors vlayer.maxpat's stage order (flip → tile → zoom/pan

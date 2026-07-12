@@ -302,3 +302,62 @@ test("applyUpdate accepts a polygon mask.shape and mask.points on a freshly crea
   assert.deepEqual(state.layers["layer-1"].mask.points, points);
   assert.equal(state.layers["layer-1"].mask.invert, true);
 });
+
+test("defaultMask owns a null matte source (so applyUpdate can later patch it)", () => {
+  const mask = defaultMask();
+  // Present (owns the key) but null = no matte. Included like points/invert so a
+  // "mask.source" WS update patches an existing leaf instead of silently no-op'ing.
+  assert.ok("source" in mask);
+  assert.equal(mask.source, null);
+});
+
+test("ensureLayerDefaults backfills mask.source=null onto a mask saved before matte support, without touching existing fields", () => {
+  const layer = {
+    id: "layer-1", order: 1, fx: defaultFx(), warp: defaultWarp(),
+    mask: { enabled: true, shape: "rect", cx: 0.5, cy: 0.5, rx: 0.3, ry: 0.3, feather: 0.1, points: [], invert: false },
+  };
+  ensureLayerDefaults(layer);
+  assert.equal(layer.mask.source, null);
+  assert.equal(layer.mask.enabled, true);
+  assert.equal(layer.mask.shape, "rect");
+});
+
+test("ensureLayerDefaults does not clobber an existing mask.source matte reference", () => {
+  const layer = {
+    id: "layer-1", order: 1, fx: defaultFx(), warp: defaultWarp(),
+    mask: { ...defaultMask(), source: { type: "media", mediaId: "m1" } },
+  };
+  ensureLayerDefaults(layer);
+  assert.deepEqual(layer.mask.source, { type: "media", mediaId: "m1" });
+});
+
+test("applyUpdate accepts a valid media/slot mask.source matte ref and clearing it back to null", () => {
+  const state = sampleState();
+  ensureLayerDefaults(state.layers["layer-1"]);
+  assert.equal(applyUpdate(state, "layers.layer-1.mask.source", { type: "media", mediaId: "m1" }), true);
+  assert.deepEqual(state.layers["layer-1"].mask.source, { type: "media", mediaId: "m1" });
+  assert.equal(applyUpdate(state, "layers.layer-1.mask.source", { type: "slot", slotId: "slot-2" }), true);
+  assert.deepEqual(state.layers["layer-1"].mask.source, { type: "slot", slotId: "slot-2" });
+  assert.equal(applyUpdate(state, "layers.layer-1.mask.source", null), true);
+  assert.equal(state.layers["layer-1"].mask.source, null);
+});
+
+test("applyUpdate rejects garbage at mask.source (crash-hardening: it's dereferenced as a source ref)", () => {
+  const state = sampleState();
+  ensureLayerDefaults(state.layers["layer-1"]);
+  // Scalars, arrays, unknown types, and refs missing their id are all refused; the
+  // pre-existing null leaf survives untouched.
+  for (const bad of [7, "media", [], { type: "bogus" }, { type: "media" }, { type: "slot" }, { mediaId: "m1" }]) {
+    assert.equal(applyUpdate(state, "layers.layer-1.mask.source", bad), false, `accepted ${JSON.stringify(bad)}`);
+  }
+  assert.equal(state.layers["layer-1"].mask.source, null);
+});
+
+test("applyUpdate does NOT restrict a layer's own top-level source (only mask.source is validated)", () => {
+  // Guard against the mask.source validator over-reaching onto layer.source, which must
+  // stay freely swappable (see crash-hardening.test.js).
+  const state = sampleState();
+  state.layers["layer-1"].source = { type: "video", url: "/a.mp4" };
+  assert.equal(applyUpdate(state, "layers.layer-1.source", { type: "color", color: [0, 0, 0] }), true);
+  assert.deepEqual(state.layers["layer-1"].source, { type: "color", color: [0, 0, 0] });
+});

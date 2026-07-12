@@ -109,7 +109,9 @@ const MASK_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_src;
+uniform sampler2D u_matte; // luminance/video matte source (bound to a DISTINCT unit)
 uniform bool u_maskEnabled;
+uniform bool u_maskUseMatte; // true = alpha from u_matte's luminance, ignoring the shape
 uniform int u_maskShape; // 0 = rect, 1 = ellipse, 2 = polygon
 uniform vec2 u_maskCenter;
 uniform vec2 u_maskRadius;
@@ -157,7 +159,13 @@ void main() {
   vec4 c = texture(u_src, v_uv);
   if (!u_maskEnabled) { outColor = c; return; }
   float a;
-  if (u_maskShape == 2) {
+  if (u_maskUseMatte) {
+    // Luminance/video matte (VPT8 layermask 'source' + cc.alphaglue lum2alpha): the mask
+    // alpha is the matte source's luminance, REPLACING the geometric shape entirely.
+    // Rec.601 luma weights — the classic luminance-key weighting VPT8's alphaglue uses.
+    vec3 m = texture(u_matte, v_uv).rgb;
+    a = dot(m, vec3(0.299, 0.587, 0.114));
+  } else if (u_maskShape == 2) {
     bool inside = maskPolygonContains(v_uv);
     float edgeDist = maskPolygonEdgeDist(v_uv);
     float signedDist = inside ? -edgeDist : edgeDist;
@@ -167,7 +175,7 @@ void main() {
     float dist = (u_maskShape == 1) ? length(d) : max(abs(d.x), abs(d.y));
     a = 1.0 - smoothstep(1.0 - u_maskFeather, 1.0, dist);
   }
-  // invert: flips which side is visible, for every shape (VPT8's layermask.maxpat pattr inv).
+  // invert: flips which side is visible, for every shape AND the matte (VPT8's layermask.maxpat pattr inv).
   a = mix(a, 1.0 - a, u_maskInvert);
   outColor = vec4(c.rgb, c.a * a);
 }`;
@@ -247,7 +255,7 @@ export class FxPasses {
       ),
       mask: {
         ...Object.fromEntries(
-          ["u_src", "u_maskEnabled", "u_maskShape", "u_maskCenter", "u_maskRadius", "u_maskFeather", "u_maskCount", "u_maskInvert"]
+          ["u_src", "u_matte", "u_maskEnabled", "u_maskUseMatte", "u_maskShape", "u_maskCenter", "u_maskRadius", "u_maskFeather", "u_maskCount", "u_maskInvert"]
             .map((name) => [name, gl.getUniformLocation(this.mask, name)])
         ),
         // Array uniforms: query the first element explicitly ("name[0]") — the portable
@@ -358,13 +366,23 @@ export class FxChain {
     return write.texture;
   }
 
-  _runMask(srcTexture, mask) {
+  _runMask(srcTexture, mask, matteTexture) {
     const gl = this.gl;
     const u = this.passes.u.mask;
+    // A matte only replaces the geometric alpha when a source is set AND resolved to a
+    // texture (an unresolvable/deleted matte ref falls back to the geometric shape).
+    const useMatte = Boolean(mask?.source && matteTexture);
     gl.useProgram(this.passes.mask);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, srcTexture);
     gl.uniform1i(u.u_src, 0);
+    // Matte sampler on a DISTINCT unit. Every declared sampler needs a valid texture
+    // bound even when unread (WebGL undefined-behavior otherwise); when there's no matte
+    // we bind the source there as a harmless stand-in and gate reads with u_maskUseMatte.
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, matteTexture ?? srcTexture);
+    gl.uniform1i(u.u_matte, 1);
+    gl.uniform1i(u.u_maskUseMatte, useMatte ? 1 : 0);
     gl.uniform1i(u.u_maskEnabled, mask?.enabled ? 1 : 0);
     gl.uniform1i(u.u_maskShape, mask?.shape === "rect" ? 0 : mask?.shape === "polygon" ? 2 : 1);
     gl.uniform2f(u.u_maskCenter, mask?.cx ?? 0.5, mask?.cy ?? 0.5);
@@ -384,6 +402,10 @@ export class FxChain {
     }
     if (!this.maskFbo) this.maskFbo = createFramebuffer(gl, this.width, this.height);
     this._draw(this.passes.mask, this.maskFbo);
+    // Restore GL state: unbind the matte unit and return the active unit to 0 so the next
+    // pass (warp/blend) starts from a clean, conventional state instead of a stray unit-1 binding.
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
     return this.maskFbo.texture;
   }
 
@@ -397,11 +419,11 @@ export class FxChain {
 
   /** Runs the active stages; returns the texture the blend pass should composite.
    *  For color layers the point pass doubles as the fill synthesizer. */
-  process(srcTexture, fx, { isColor = false, color = [0, 0, 0], mask = null, warp = null } = {}) {
+  process(srcTexture, fx, { isColor = false, color = [0, 0, 0], mask = null, warp = null, matteTexture = null } = {}) {
     let tex = this._runPoint(srcTexture, fx ?? {}, isColor, color);
     if ((fx?.blur ?? 0) > 0) tex = this._runBlur(tex, fx.blur);
     if ((fx?.motionBlur ?? 0) > 0) tex = this._runFeedback(tex, fx.motionBlur);
-    if (mask?.enabled) tex = this._runMask(tex, mask);
+    if (mask?.enabled) tex = this._runMask(tex, mask, matteTexture);
     if (warp && (warp.mode === "mesh" || warp.corners)) tex = this._runWarp(tex, warp);
     return tex;
   }

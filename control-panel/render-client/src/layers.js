@@ -120,6 +120,11 @@ export class LayerStack {
     this.sourceBank = new SourceBank(gl);
     this.slots = [];
     this.media = {};
+    // Mask-matte decoders for MEDIA-ref mattes (mask.source of type "media"), keyed by
+    // mediaId: { texture, videoEl, imgEl, imgKind, imgUploaded, currentUrl }. Slot-ref
+    // mattes reuse the shared source-bank instead, so they never land here. Swept each
+    // frame (render()) for mediaIds no layer references anymore.
+    this.matteEntries = new Map();
     this.onClipEnded = null; // settable callback: (layerId) => void, wired by compositor.js/main.js
   }
 
@@ -422,6 +427,7 @@ export class LayerStack {
   // rebuilds a fresh LayerStack on restore) and for any explicit teardown.
   dispose() {
     for (const id of [...this.entries.keys()]) this.removeLayer(id);
+    this._sweepMatteEntries(new Set()); // tear down every matte decoder + its texture
     this.sourceBank?.dispose?.();
     if (this.audioCtx) {
       try { this.audioCtx.close(); } catch { /* already closed */ }
@@ -460,6 +466,80 @@ export class LayerStack {
     return true;
   }
 
+  // Resolves a mask matte source ref (mask.source) to a texture for the current frame, or
+  // null when unresolvable. SLOT refs reuse the shared source-bank (already frame-updated
+  // by sourceBank.updateAll() before the layer loop — essentially free). MEDIA refs decode
+  // through the per-mediaId matte cache below, mirroring setLayerSource's kind-branching.
+  _resolveMatteTexture(source) {
+    if (!source || typeof source !== "object") return null;
+    if (source.type === "slot") {
+      return this.sourceBank.resolveTexture(source.slotId, this.slots, this.media) ?? null;
+    }
+    if (source.type === "media") {
+      return this._matteMediaTexture(source.mediaId);
+    }
+    return null;
+  }
+
+  // Decodes/uploads a media-library item's current frame into a cached texture keyed by
+  // mediaId, and returns it (null if the item is missing). Reuses this.media's server-
+  // recorded `kind` to branch <img> (gif/image) vs <video> — the same fix as
+  // source-bank.js's _decodeMediaInto — and reuses this stack's own _uploadSourceFrame for
+  // the per-frame GL upload rather than duplicating texImage2D code.
+  _matteMediaTexture(mediaId) {
+    const item = this.media?.[mediaId];
+    if (!item) return null;
+    const url = this._resolveUrl(`/media/${item.filename}`);
+    let entry = this.matteEntries.get(mediaId);
+    if (!entry) {
+      entry = { texture: createTexture(this.gl), videoEl: null, imgEl: null, imgKind: null, imgUploaded: false, currentUrl: null };
+      this.matteEntries.set(mediaId, entry);
+    }
+    if (entry.currentUrl !== url) {
+      entry.currentUrl = url;
+      if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); entry.videoEl = null; }
+      if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
+      entry.imgKind = null;
+      entry.imgUploaded = false;
+      const kind = item.kind ?? "video";
+      if (kind === "video") {
+        const el = document.createElement("video");
+        el.src = url;
+        el.crossOrigin = "anonymous";
+        el.loop = true; // a matte plays continuously; it has no transport of its own
+        el.muted = true;
+        el.playsInline = true;
+        el.play().catch(() => {});
+        entry.videoEl = el;
+      } else {
+        // Still image (jpg/png) or animated gif: same off-screen-but-attached <img> the
+        // source paths use so gif frame-advancement works in engines that need it.
+        const img = document.createElement("img");
+        img.crossOrigin = "anonymous";
+        img.style.cssText = "position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none;";
+        img.addEventListener("load", () => { entry.imgUploaded = false; });
+        img.src = url;
+        document.body.appendChild(img);
+        entry.imgEl = img;
+        entry.imgKind = kind; // "gif" | "image"
+      }
+    }
+    this._uploadSourceFrame(entry);
+    return entry.texture;
+  }
+
+  // Frees any matte decoder for a mediaId no layer references this frame (mirrors
+  // source-bank's updateAll sweep) — otherwise its <video>/<img> keeps decoding forever.
+  _sweepMatteEntries(activeMatteMediaIds) {
+    for (const [mediaId, entry] of [...this.matteEntries]) {
+      if (activeMatteMediaIds.has(mediaId)) continue;
+      if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); }
+      if (entry.imgEl) entry.imgEl.remove();
+      if (entry.texture) this.gl.deleteTexture(entry.texture);
+      this.matteEntries.delete(mediaId);
+    }
+  }
+
   // layers: array of layer state objects, sorted by `order` ascending (bottom -> top).
   // Returns the WebGLTexture holding the fully composited scene.
   render(layers) {
@@ -473,6 +553,7 @@ export class LayerStack {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     this.sourceBank.updateAll(this.slots, this.media);
+    const activeMatteMediaIds = new Set();
 
     for (const layer of layers) {
       const entry = this._entry(layer.id);
@@ -493,6 +574,17 @@ export class LayerStack {
       // Effects chain: only entered when some stage is active. For color layers the
       // chain's point pass synthesizes the fill, so the blend pass then treats the
       // result as an ordinary texture.
+      // Resolve the mask matte (VPT8 layermask `source` + cc.alphaglue lum2alpha): when
+      // mask.source is set on an enabled mask, its luminance drives the alpha instead of
+      // the geometric shape. Resolve just before process() so the texture is current.
+      let matteTexture = null;
+      if (layer.mask?.enabled && layer.mask.source) {
+        matteTexture = this._resolveMatteTexture(layer.mask.source);
+        if (layer.mask.source.type === "media" && layer.mask.source.mediaId) {
+          activeMatteMediaIds.add(layer.mask.source.mediaId);
+        }
+      }
+
       let layerTexture = sourceTexture;
       let blendAsColor = isColor;
       const needsMaskOrWarp = layer.mask?.enabled || layer.warp?.mode === "mesh" || (layer.warp?.corners && !isIdentityCorners(layer.warp.corners));
@@ -503,6 +595,7 @@ export class LayerStack {
           color: isColor ? layer.source.color : [0, 0, 0],
           mask: layer.mask,
           warp: layer.warp,
+          matteTexture,
         });
         blendAsColor = false;
       }
@@ -533,6 +626,7 @@ export class LayerStack {
       readIdx = writeIdx;
     }
 
+    this._sweepMatteEntries(activeMatteMediaIds);
     return this.pingpong[readIdx].texture;
   }
 }

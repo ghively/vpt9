@@ -67,7 +67,12 @@ export function defaultFx() {
 // object already OWNS these keys — applyUpdate only ever patches an existing leaf,
 // so a later "mask.points"/"mask.invert" WS update would silently no-op otherwise.
 export function defaultMask() {
-  return { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08, points: [], invert: false };
+  // `source` is the optional luminance/video matte (VPT8 layermask.maxpat's `pattr source`
+  // + cc.alphaglue.jxs's `lum2alpha`, task A5): when set to a {type,mediaId/slotId} ref the
+  // mask alpha is driven by that source's luminance instead of the geometric shape. Owned
+  // as an explicit `null` key (like points/invert) so a later "mask.source" WS update
+  // patches an existing leaf — applyUpdate never creates keys, so an absent one would no-op.
+  return { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08, points: [], invert: false, source: null };
 }
 
 export function defaultWarp() {
@@ -280,6 +285,18 @@ const OBJECT_TOPLEVEL = new Set(["layers", "screens", "pip", "presets", "media",
 // are already null-guarded at their read sites, so they're intentionally not pinned here.)
 const KEYED_OBJECT_COLLECTIONS = new Set(["layers", "screens", "pip", "presets", "media"]);
 
+// A mask's optional matte reference (task A5): either null (no matte) or a source ref
+// { type: "media", mediaId } / { type: "slot", slotId }. The render-client dereferences
+// this as a source ref, so a LAN client must not be able to wedge a scalar/array/garbage
+// object into it — validate the shape here rather than leaving the leaf unrestricted.
+function isValidMaskSource(value) {
+  if (value === null) return true;
+  if (!isPlainObject(value)) return false;
+  if (value.type === "media") return typeof value.mediaId === "string";
+  if (value.type === "slot") return typeof value.slotId === "string";
+  return false;
+}
+
 // True when writing `value` at `[...keys].last` would corrupt a structural container's
 // shape. `keys` are the parent segments, `last` the final segment.
 function corruptsStructure(keys, last, value) {
@@ -292,6 +309,10 @@ function corruptsStructure(keys, last, value) {
     if (KEYED_OBJECT_COLLECTIONS.has(keys[0])) return !isPlainObject(value); // e.g. layers.<id>
     if (keys[0] === "sourceBank") return !isPlainObject(value); // a slot object
   }
+  // "...mask.source" (last === "source" under a "mask" parent) is the matte ref — pinned
+  // to null-or-source-ref. Keyed on the immediate parent, so a layer's OWN top-level
+  // `source` (parent = the layer id, not "mask") stays unrestricted and freely swappable.
+  if (last === "source" && keys[keys.length - 1] === "mask") return !isValidMaskSource(value);
   return false;
 }
 

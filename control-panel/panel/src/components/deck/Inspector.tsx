@@ -4,7 +4,7 @@ import { Fader } from "../primitives/Fader";
 import { TextField } from "../primitives/TextField";
 import { FxDrawer } from "../FxDrawer";
 import { rgbToHex } from "../color";
-import { BLEND_MODES, type Layer, type MediaItem, type PlaylistItem, type Screen, type SourceBankSlot, type Warp } from "../types";
+import { BLEND_MODES, type Layer, type MediaItem, type PlaylistItem, type Screen, type SourceBankSlot, type SourceRef, type Warp } from "../types";
 
 /** Which stage-editing mode the segment (and, via `onModeChange`, the Stage's
  *  StageSelectionOverlay — Task 6) is showing for the selected layer. Mirrors
@@ -296,19 +296,71 @@ function WarpBody({
   );
 }
 
+/** The mask-matte source picker (task A5 — VPT8 parity: `layermask.maxpat`'s `pattr
+ *  source` + `cc.alphaglue.jxs` `lum2alpha`). Mirrors `SourceBankSlotEditor`'s `RefPicker`
+ *  value-encoding (`media:<id>`/`slot:<id>`, `""` = none) but offers a "None" option to
+ *  clear the matte back to the geometric shape. When a matte is set, the render-client
+ *  drives the mask alpha from this source's luminance, overriding the shape. */
+function MatteSourcePicker({
+  value,
+  media = [],
+  sourceBank = [],
+  onChange,
+}: {
+  value: SourceRef | null | undefined;
+  media?: MediaItem[];
+  sourceBank?: SourceBankSlot[];
+  onChange: (ref: SourceRef | null) => void;
+}) {
+  const options = [
+    { value: "", label: "None (use shape)" },
+    ...media.map((m) => ({ value: `media:${m.id}`, label: `Media · ${m.name}` })),
+    ...sourceBank.map((s) => ({ value: `slot:${s.id}`, label: `Slot · ${s.name}` })),
+  ];
+  const current = value ? `${value.type}:${value.type === "media" ? value.mediaId : value.slotId}` : "";
+  return (
+    <Select
+      value={current}
+      options={options}
+      onChange={(v) => {
+        if (!v) return onChange(null);
+        const idx = v.indexOf(":");
+        const type = v.slice(0, idx);
+        const id = v.slice(idx + 1);
+        onChange(type === "media" ? { type: "media", mediaId: id } : { type: "slot", slotId: id });
+      }}
+    />
+  );
+}
+
 /** Mask contextual body: enable toggle, shape toggle (rect/ellipse/polygon), invert
- *  toggle, feather fader, and — for rect/ellipse only — a live read-only center/radius
- *  readout (dragged on the stage, same rationale as WarpBody). Enable/shape/feather/
- *  invert write via `updateLayer(id, "mask.<k>", v)` — the same path FxDrawer's own
- *  MASK_SLIDERS and LayerStrip's mask ToggleSquares already use.
+ *  toggle, feather fader, a matte-source picker (task A5), and — for rect/ellipse only —
+ *  a live read-only center/radius readout (dragged on the stage, same rationale as
+ *  WarpBody). Enable/shape/feather/invert/source write via `updateLayer(id, "mask.<k>", v)`
+ *  — the same path FxDrawer's own MASK_SLIDERS and LayerStrip's mask ToggleSquares use.
  *
  *  Polygon (task A4a — VPT8 parity: code/pointmask01.js's free-form draggable mask +
  *  layermask.maxpat's `pattr inv`) has no cx/cy/rx/ry: its vertices (`mask.points`)
  *  are set programmatically here and will get an on-canvas drag editor in task A4b —
- *  this body only shows a note in their place, no point-editor. */
-function MaskBody({ layer, onUpdate }: { layer: Layer; onUpdate?: (field: string, value: unknown) => void }) {
+ *  this body only shows a note in their place, no point-editor.
+ *
+ *  Matte (task A5 — layermask.maxpat's `pattr source` + cc.alphaglue's `lum2alpha`): when
+ *  `mask.source` is set, that source's luminance drives the alpha instead of the shape;
+ *  the shape/feather controls stay editable but a note flags that the matte overrides them. */
+function MaskBody({
+  layer,
+  media,
+  sourceBank,
+  onUpdate,
+}: {
+  layer: Layer;
+  media?: MediaItem[];
+  sourceBank?: SourceBankSlot[];
+  onUpdate?: (field: string, value: unknown) => void;
+}) {
   const mask = layer.mask;
   const isPolygon = mask.shape === "polygon";
+  const hasMatte = Boolean(mask.source);
   return (
     <>
       <div className="subhead">Mask shape</div>
@@ -347,29 +399,44 @@ function MaskBody({ layer, onUpdate }: { layer: Layer; onUpdate?: (field: string
         />
       </div>
       <div className="field">
-        <span className="label">Feather</span>
-        <div className="row">
-          <Fader value={mask.feather} min={0} max={0.5} step={0.005} ariaLabel="Mask feather" onChange={(v) => onUpdate?.("mask.feather", v)} />
-          <span className="mono">{mask.feather.toFixed(2)}</span>
-        </div>
+        <span className="label">Matte</span>
+        <MatteSourcePicker
+          value={mask.source}
+          media={media}
+          sourceBank={sourceBank}
+          onChange={(ref) => onUpdate?.("mask.source", ref)}
+        />
       </div>
-      {isPolygon ? (
-        <p className="mask-note">Drag the polygon points on the stage. Click near an edge to insert a vertex. Delete removes the selected vertex.</p>
+      {hasMatte ? (
+        <p className="mask-note">Matte active: the mask alpha follows this source&apos;s luminance (bright = visible), overriding the shape. Invert still applies.</p>
       ) : (
-        <div className="coords">
-          <div className="coord">
-            <span className="t">CENTER</span>
-            <span className="v mono">
-              {mask.cx.toFixed(2)} · {mask.cy.toFixed(2)}
-            </span>
+        <>
+          <div className="field">
+            <span className="label">Feather</span>
+            <div className="row">
+              <Fader value={mask.feather} min={0} max={0.5} step={0.005} ariaLabel="Mask feather" onChange={(v) => onUpdate?.("mask.feather", v)} />
+              <span className="mono">{mask.feather.toFixed(2)}</span>
+            </div>
           </div>
-          <div className="coord">
-            <span className="t">RADIUS</span>
-            <span className="v mono">
-              {mask.rx.toFixed(2)} · {mask.ry.toFixed(2)}
-            </span>
-          </div>
-        </div>
+          {isPolygon ? (
+            <p className="mask-note">Drag the polygon points on the stage. Click near an edge to insert a vertex. Delete removes the selected vertex.</p>
+          ) : (
+            <div className="coords">
+              <div className="coord">
+                <span className="t">CENTER</span>
+                <span className="v mono">
+                  {mask.cx.toFixed(2)} · {mask.cy.toFixed(2)}
+                </span>
+              </div>
+              <div className="coord">
+                <span className="t">RADIUS</span>
+                <span className="v mono">
+                  {mask.rx.toFixed(2)} · {mask.ry.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </>
   );
@@ -523,7 +590,7 @@ export function Inspector(props: InspectorProps) {
           {mode === "warp" && (
             <WarpBody warp={layer.warp} onSetWarpMode={onSetWarpMode} onSetMeshSize={onSetMeshSize} onResetWarp={onResetWarp} />
           )}
-          {mode === "mask" && <MaskBody layer={layer} onUpdate={onUpdate} />}
+          {mode === "mask" && <MaskBody layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} />}
           {mode === "fx" && (
             <FxDrawer
               fx={layer.fx}
