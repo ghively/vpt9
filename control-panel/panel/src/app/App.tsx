@@ -371,7 +371,7 @@ export function App() {
     [actions, selectedLayer],
   );
   const onMask = useCallback(
-    (patch: Partial<{ cx: number; cy: number; rx: number; ry: number }>) => {
+    (patch: Partial<{ cx: number; cy: number; rx: number; ry: number; points: { x: number; y: number }[] }>) => {
       if (!selectedLayer) return;
       for (const [k, v] of Object.entries(patch)) actions.updateLayer(selectedLayer.id, `mask.${k}`, v);
     },

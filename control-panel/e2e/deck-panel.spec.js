@@ -244,3 +244,138 @@ test("switching to Screen edit target and dragging a corner handle sends the SCR
   // action/path — no new WS message type), not just a local-only DOM change.
   await expect.poll(async () => (await readScreenCorners())[0]).not.toEqual({ x: 0, y: 0 });
 });
+
+test("polygon mask vertices are draggable on the stage and persist through the existing mask update path", async ({ page }) => {
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      id: "layer-poly-ui",
+      name: "polygon ui test",
+      order: 120,
+      source: { type: "color", color: [0.9, 0.2, 0.2] },
+      opacity: 1,
+      blendMode: "normal",
+      mask: {
+        enabled: true,
+        shape: "polygon",
+        cx: 0.5,
+        cy: 0.5,
+        rx: 0.25,
+        ry: 0.25,
+        feather: 0,
+        points: [
+          { x: 0.25, y: 0.25 },
+          { x: 0.75, y: 0.25 },
+          { x: 0.75, y: 0.75 },
+          { x: 0.25, y: 0.75 },
+        ],
+        invert: false,
+      },
+      fx: null,
+      warp: {
+        mode: "corner",
+        corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+        mesh: { size: 4, points: [] },
+      },
+    },
+  });
+  socket.close();
+
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+
+  const stage = page.locator(".deck-stage");
+  await expect(stage).toBeVisible();
+  const box = await stage.boundingBox();
+
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-poly-ui");
+
+  const targetToggle = page.locator(".insp-target");
+  await expect(targetToggle).toBeVisible();
+  await targetToggle.getByRole("button", { name: "Layer", exact: true }).click();
+  await page.locator(".modes").getByRole("button", { name: "Mask", exact: true }).click();
+  await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
+
+  const vertex = page.locator(".mask-point").first();
+  await expect(vertex).toBeVisible();
+
+  const readMaskPoints = async () => {
+    const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+    return state.layers["layer-poly-ui"].mask.points;
+  };
+  const before = await readMaskPoints();
+  expect(before[0]).toEqual({ x: 0.25, y: 0.25 });
+
+  const vertexBox = await vertex.boundingBox();
+  await page.mouse.move(vertexBox.x + vertexBox.width / 2, vertexBox.y + vertexBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(vertexBox.x + 60, vertexBox.y + 18, { steps: 5 });
+  await page.mouse.up();
+
+  await expect.poll(async () => (await readMaskPoints())[0]).not.toEqual({ x: 0.25, y: 0.25 });
+});
+
+test("polygon mask edges insert a vertex and Delete removes the selected point", async ({ page }) => {
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      id: "layer-poly-insert",
+      name: "polygon insert test",
+      order: 121,
+      source: { type: "color", color: [0.2, 0.6, 0.9] },
+      opacity: 1,
+      blendMode: "normal",
+      mask: {
+        enabled: true,
+        shape: "polygon",
+        cx: 0.5,
+        cy: 0.5,
+        rx: 0.25,
+        ry: 0.25,
+        feather: 0,
+        points: [
+          { x: 0.25, y: 0.25 },
+          { x: 0.75, y: 0.25 },
+          { x: 0.75, y: 0.75 },
+          { x: 0.25, y: 0.75 },
+        ],
+        invert: false,
+      },
+      fx: null,
+      warp: {
+        mode: "corner",
+        corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+        mesh: { size: 4, points: [] },
+      },
+    },
+  });
+  socket.close();
+
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+
+  const stage = page.locator(".deck-stage");
+  const box = await stage.boundingBox();
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.locator(".insp-target").getByRole("button", { name: "Layer", exact: true }).click();
+  await page.locator(".modes").getByRole("button", { name: "Mask", exact: true }).click();
+  await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
+
+  const readMaskPoints = async () => {
+    const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+    return state.layers["layer-poly-insert"].mask.points;
+  };
+
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.25);
+  await expect.poll(async () => (await readMaskPoints()).length).toBe(5);
+
+  await page.keyboard.press("Delete");
+  await expect.poll(async () => (await readMaskPoints()).length).toBe(4);
+});

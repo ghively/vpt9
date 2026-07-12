@@ -329,6 +329,11 @@ html, body { height: 100%; }
     background: rgba(255,155,61,0.06); box-shadow: var(--glow-beam);
     touch-action: none;
   }
+  .mask-shape-root {
+    position: absolute;
+    inset: 0;
+    touch-action: none;
+  }
   .mask-shape__body { position: absolute; inset: 0; cursor: move; }
   .mask-shape__edge {
     position: absolute; width: 14px; height: 14px; background: var(--beam);
@@ -339,6 +344,17 @@ html, body { height: 100%; }
   .mask-shape__feather {
     position: absolute; border: 1px dashed var(--beam-line); opacity: 0.5; pointer-events: none;
   }
+  .mask-shape__poly {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    fill: rgba(255,155,61,0.08);
+    stroke: var(--beam);
+    stroke-width: 1.5px;
+    vector-effect: non-scaling-stroke;
+  }
+  .mask-shape__poly polygon { vector-effect: non-scaling-stroke; }
+  .mask-point { z-index: 8; }
 
   /* ── Preset chips ────────────────────────────────────────────────────────── */
   #presets-bar .bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }

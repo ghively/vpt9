@@ -41,7 +41,7 @@ export interface StageSelectionOverlayLayerProps extends StageSelectionOverlaySh
    *  `MaskShapeOverlay`'s own `onChange` contract. The container fans this out over
    *  `actions.updateLayer(layer.id, \`mask.${k}\`, v)` per key, mirroring
    *  `WarpEditor`'s existing `onMaskChange` wiring for `maskEditLayer`. */
-  onMask?: (patch: Partial<Pick<Mask, "cx" | "cy" | "rx" | "ry">>) => void;
+  onMask?: (patch: Partial<Pick<Mask, "cx" | "cy" | "rx" | "ry" | "points">>) => void;
 }
 
 export interface StageSelectionOverlayScreenProps extends StageSelectionOverlaySharedProps {
@@ -162,7 +162,17 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
 
   if (mode === "mask") {
     const { mask } = layer;
-    const anchor = { x: mask.cx, y: mask.cy - mask.ry };
+    const anchor =
+      mask.shape === "polygon" && (mask.points?.length ?? 0) > 0
+        ? (() => {
+            const xs = (mask.points ?? []).map((p) => p.x);
+            const ys = (mask.points ?? []).map((p) => p.y);
+            const minx = Math.min(...xs);
+            const maxx = Math.max(...xs);
+            const miny = Math.min(...ys);
+            return { x: (minx + maxx) / 2, y: miny };
+          })()
+        : { x: mask.cx, y: mask.cy - mask.ry };
     return (
       <>
         <SelLabel x={anchor.x} y={anchor.y} text={`${layer.name || layer.id} · mask`} />

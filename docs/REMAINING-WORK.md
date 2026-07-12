@@ -5,34 +5,23 @@ deck redesign). This is the running status of the finish plan
 (`docs/superpowers/plans/2026-07-12-full-parity-finish-plan.md`), grounded in the parity audit
 (`docs/VPT8-PARITY-GAPS.md`). It lists every remaining item and what needs to be done.
 
-**Done so far (4 tasks, all verified — green gates + e2e):**
+**Done so far (7 tasks, all verified - green gates + e2e):**
 - ✅ **A1** — fixed the bug where jpg/gif in a source-bank slot rendered black.
 - ✅ **A2** — restored per-layer copy/paste (the regression the deck redesign introduced).
 - ✅ **A3** — per-layer rotation + non-uniform zoom + anchor (`td.rota.jxs` parity).
 - ✅ **A4a** — polygon-mask state + shader + invert (rect/ellipse unchanged).
+- ✅ **A4-DIAG** — confirmed rotation + later mask updates are live on the same layer and across
+  layers; the earlier stale-pixel concern was a shared-test isolation artifact, not a render bug.
 
-**Remaining: 24 tasks + 1 diagnostic** — Phase A (17 parity), Phase B (3 docs), Phase C (4 divorce),
+
+- ✅ **A4b** — on-canvas polygon vertex editor (drag, insert-on-outline, delete-selected).
+
+**Remaining: 23 tasks** — Phase A (16 parity), Phase B (3 docs), Phase C (4 divorce),
 Phase D (3 real-world verification). Effort tags: **S** ≤ half-day, **M** ~1 day, **L** multi-day.
 
 ---
 
 ## Phase A — remaining parity gaps
-
-### A4-DIAG — confirm the rotation+mask "stale pixels" concern *(S — do before merge)*
-A4a's implementer saw stale pixels when a rotated layer (A3) coexisted with a mask change, but only
-in `layer-warp.spec.js`'s shared-server test sequence; a fresh isolated server renders correctly, and
-the render path re-uploads every uniform every frame (no cache). **What's needed:** a small isolated
-e2e — (1) rotate layer A, then change A's mask, assert it updates; (2) rotate A, mask B, assert B
-updates. If it reproduces, fix the fx-chain re-render/uniform path; if not, it's a test-isolation
-artifact — harden `layer-warp.spec.js` isolation and close.
-
-### A4b — on-canvas polygon vertex editor *(M) — Tier 1*
-A4a made polygon masks work when points are set programmatically; there's no way to draw one yet.
-**What's needed:** extend `panel/src/components/MaskShapeOverlay.tsx` with a polygon mode — draggable
-vertex handles (reuse `WarpHandle` + `deck-handle` + `pointercancel`), click an empty spot on the
-outline to insert a vertex, delete the selected vertex — mirroring VPT8's `code/pointmask01.js`. Wire
-drags to `layers.<id>.mask.points` via the existing update path. e2e: drag a vertex → assert
-`mask.points` changed in `/state`.
 
 ### A5 — mask source = luminance/video matte *(M) — Tier 1*
 VPT8 can drive a layer's mask from another movie/image's luminance (`cc.alphaglue.jxs @param lum2alpha`).

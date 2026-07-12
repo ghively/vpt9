@@ -354,7 +354,7 @@ function MaskBody({ layer, onUpdate }: { layer: Layer; onUpdate?: (field: string
         </div>
       </div>
       {isPolygon ? (
-        <p className="mask-note">Polygon vertices are edited on the stage (coming soon) — center/radius don&apos;t apply to this shape.</p>
+        <p className="mask-note">Drag the polygon points on the stage. Click near an edge to insert a vertex. Delete removes the selected vertex.</p>
       ) : (
         <div className="coords">
           <div className="coord">
