@@ -1,15 +1,33 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import {
   AudioOwner,
+  CueList,
   Faceplate,
   Inspector,
   LayerStack,
+  LfoRack,
   MasterControl,
+  MediaLibrary,
+  MidiMapPanel,
+  PresetsBar,
+  ShowDrawer,
   SlotGrid,
   Stage,
   StageSelectionOverlay,
   StatusLamp,
+  TimerBank,
   type ConnectionState,
+  type ShowTab,
+  type TargetOption,
 } from "../components";
 import { layerQuad, pickTopLayer } from "../components/deck/layerGeometry";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
@@ -18,6 +36,44 @@ import { usePreviewBus } from "./usePreviewBus";
 import { useMidi } from "./useMidi";
 import { createActions } from "./actions";
 import { useSelection } from "./useSelection";
+
+/** Numeric per-layer paths offered by the LFO/MIDI target pickers. Recovered verbatim
+ *  from the pre-Task-1 flat-layout App.tsx (see git show 3dcc100). */
+const LAYER_TARGET_FIELDS: Array<[string, string]> = [
+  ["opacity", "opacity"],
+  ["fx.zoom", "zoom"],
+  ["fx.panX", "pan x"],
+  ["fx.panY", "pan y"],
+  ["fx.blur", "blur"],
+  ["fx.motionBlur", "trail"],
+  ["fx.brightness", "brightness"],
+  ["fx.contrast", "contrast"],
+  ["fx.saturation", "saturation"],
+  ["fx.tileX", "tile x"],
+  ["fx.tileY", "tile y"],
+  ["fx.edgeBlend.left", "edge left"],
+  ["fx.edgeBlend.right", "edge right"],
+  ["fx.edgeBlend.top", "edge top"],
+  ["fx.edgeBlend.bottom", "edge bottom"],
+  ["fx.edgeBlend.gamma", "edge gamma"],
+  ["mask.cx", "mask center x"],
+  ["mask.cy", "mask center y"],
+  ["mask.rx", "mask size x"],
+  ["mask.ry", "mask size y"],
+  ["mask.feather", "mask feather"],
+];
+
+function buildTargetOptions(state: PanelState): TargetOption[] {
+  const options: TargetOption[] = [{ value: "master", label: "master dim", group: "Global" }];
+  const layers = Object.values(state.layers ?? {}).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+  for (const layer of layers) {
+    const group = layer.name || layer.id;
+    for (const [field, label] of LAYER_TARGET_FIELDS) {
+      options.push({ value: `layers.${layer.id}.${field}`, label, group });
+    }
+  }
+  return options;
+}
 
 export function App() {
   const stateRef = useRef<PanelState>(emptyState());
@@ -30,6 +86,10 @@ export function App() {
     state: "connecting",
     label: "connecting…",
   });
+  // Show drawer (Task 8): which secondary panel is active + whether the bottom sheet
+  // is expanded. Collapsed by default so it doesn't compete with the deck above it.
+  const [showTab, setShowTab] = useState<ShowTab>("presets");
+  const [showDrawerOpen, setShowDrawerOpen] = useState(false);
   // Pre-blackout master level, restored by the blackout toggle.
   const preBlackoutRef = useRef(1);
   // Clip-transport scrub-position telemetry, keyed by layer id. Not `state` — this is
@@ -42,6 +102,19 @@ export function App() {
   const wsUrl = useMemo(
     () => new URLSearchParams(location.search).get("ws") || `ws://${location.hostname}:8080`,
     [],
+  );
+
+  // The media API lives on the same host as the control plane; derive its HTTP origin
+  // from the ws url. Upload + delete are HTTP (not WS); rename is a WS update. Recovered
+  // verbatim from the pre-Task-1 App.tsx (git show 3dcc100).
+  const httpBase = useMemo(() => wsUrl.replace(/^ws/, "http"), [wsUrl]);
+  const removeMedia = useCallback(
+    (id: string) => {
+      fetch(`${httpBase}/api/media/${id}`, { method: "DELETE" }).catch((err) =>
+        console.warn("[media] delete failed:", err.message),
+      );
+    },
+    [httpBase],
   );
 
   // Socket-driven store patches re-render unless a drag is in progress (the isDragging
@@ -105,9 +178,10 @@ export function App() {
   );
   const getState = useCallback(() => stateRef.current, []);
   const actions = useMemo(() => createActions(send, getState), [send, getState]);
-  // MIDI-learn wiring runs entirely on its own effect (WebMIDI listeners -> `send`); the
-  // (future) MIDI map panel reads its learn/available state once it lands in the rail.
-  useMidi(getState, send);
+  // MIDI-learn wiring runs entirely on its own effect (WebMIDI listeners -> `send`);
+  // the returned learn/available state is read by MidiMapPanel in the Show drawer's
+  // "midi" tab (Task 8 — previously discarded here since the panel wasn't mounted).
+  const midi = useMidi(getState, send);
 
   const toggleBlackout = useCallback(() => {
     const current = stateRef.current.master ?? 1;
@@ -121,6 +195,13 @@ export function App() {
 
   const state = stateRef.current;
   const screens = Object.values(state.screens ?? {});
+  // Show drawer (Task 8) derived state — recovered verbatim from the pre-Task-1
+  // App.tsx (git show 3dcc100): presets/automation/media feed the six relocated panels,
+  // targetOptions feeds LfoRack's and MidiMapPanel's target pickers.
+  const presets = Object.values(state.presets ?? {});
+  const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
+  const media = Object.values(state.media ?? {});
+  const targetOptions = buildTargetOptions(state);
 
   const faceplate = (
     <Faceplate
@@ -248,6 +329,93 @@ export function App() {
     if (selectedLayer) actions.resetLayerWarp(selectedLayer.id);
   }, [actions, selectedLayer]);
 
+  // Task 8: the Show drawer's active-tab panel — each case wired with the EXACT
+  // props/callbacks the pre-Task-1 flat layout used (git show 3dcc100), just relocated
+  // from an always-on `.show-control` band into the collapsible bottom drawer. Cues/
+  // Timers/LFO/MIDI already render their own <h3> internally (see their source), so
+  // only Presets — which doesn't — gets an explicit heading here, matching the original.
+  // MediaLibrary also already self-wraps in a `.sc-card` section, so it's rendered bare.
+  let activePanel: ReactNode;
+  switch (showTab) {
+    case "presets":
+      activePanel = (
+        <section className="sc-card">
+          <h3>Presets</h3>
+          <PresetsBar
+            presets={presets}
+            onRecall={actions.recallPreset}
+            onSave={actions.savePreset}
+            onRename={actions.renamePreset}
+            onRemove={actions.removePreset}
+          />
+        </section>
+      );
+      break;
+    case "cues":
+      activePanel = (
+        <section className="sc-card">
+          <CueList
+            cues={automation.cues ?? []}
+            cursor={automation.cursor ?? -1}
+            running={!!automation.running}
+            presets={presets}
+            onGo={actions.cueGo}
+            onStop={actions.cueStop}
+            onJump={actions.cueJump}
+            onSetCues={actions.setCues}
+          />
+        </section>
+      );
+      break;
+    case "timers":
+      activePanel = (
+        <section className="sc-card">
+          <TimerBank
+            timers={Object.values(automation.timers ?? {})}
+            presets={presets}
+            onAdd={actions.addTimer}
+            onUpdate={actions.updateTimer}
+            onRemove={actions.removeTimer}
+          />
+        </section>
+      );
+      break;
+    case "lfo":
+      activePanel = (
+        <section className="sc-card">
+          <LfoRack
+            lfos={Object.values(state.lfos ?? {})}
+            targetOptions={targetOptions}
+            onAdd={actions.addLfo}
+            onUpdate={actions.updateLfo}
+            onRemove={actions.removeLfo}
+          />
+        </section>
+      );
+      break;
+    case "midi":
+      activePanel = (
+        <section className="sc-card">
+          <MidiMapPanel
+            mappings={Object.values(state.midiMap ?? {})}
+            learningId={midi.learningId}
+            midiAvailable={midi.available}
+            targetOptions={targetOptions}
+            onAdd={actions.addMidiMapping}
+            onUpdate={actions.updateMidiMapping}
+            onRemove={actions.removeMidiMapping}
+            onLearn={midi.learn}
+          />
+        </section>
+      );
+      break;
+    case "media":
+      activePanel = (
+        <MediaLibrary media={media} uploadUrl={`${httpBase}/api/media`} onRename={actions.renameMedia} onRemove={removeMedia} />
+      );
+      break;
+  }
+
   return (
     <div className="deck">
       {/* Faceplate already renders its own <header> (wordmark, AudioOwner, MasterControl
@@ -313,6 +481,9 @@ export function App() {
           />
         </aside>
       </div>
+      <ShowDrawer tab={showTab} onTab={setShowTab} open={showDrawerOpen} onToggle={() => setShowDrawerOpen((o) => !o)}>
+        {activePanel}
+      </ShowDrawer>
     </div>
   );
 }

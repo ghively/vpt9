@@ -38,6 +38,8 @@ export { StageSelectionOverlay } from "./deck/StageSelectionOverlay";
 export type { StageSelectionOverlayProps, StageEditMode } from "./deck/StageSelectionOverlay";
 export { Inspector } from "./deck/Inspector";
 export type { InspectorProps, EditMode } from "./deck/Inspector";
+export { ShowDrawer } from "./deck/ShowDrawer";
+export type { ShowDrawerProps, ShowTab } from "./deck/ShowDrawer";
 export { ConfidenceMonitor } from "./ConfidenceMonitor";
 export type { ConfidenceMonitorProps, ConfidenceMonitorHandle } from "./ConfidenceMonitor";
 export { WarpEditor } from "./WarpEditor";

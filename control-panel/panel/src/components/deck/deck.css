@@ -22,8 +22,10 @@
   height: 100vh;
   display: grid;
   /* Row sizes to the Faceplate header's own height (padding lives in panel.css)
-   * rather than a hardcoded 46px, so the bar never clips its content. */
-  grid-template-rows: auto 1fr;
+   * rather than a hardcoded 46px, so the bar never clips its content. Trailing `auto`
+   * is the Show drawer (Task 8): its own height (tab strip collapsed, tab strip + body
+   * expanded) comes straight out of `.body`'s `1fr` share — no JS height math needed. */
+  grid-template-rows: auto 1fr auto;
 }
 
 /* ---------------- command bar ---------------- */
@@ -444,4 +446,83 @@
   transition: color 120ms ease, background 120ms ease;
 }
 .togglepill button[aria-pressed="true"] { color: var(--ink); background: var(--beam); }
+
+/* ---------------- Show drawer (Task 8) ----------------
+ * Collapsible bottom sheet below `.body`, spanning the full deck width, hosting the
+ * secondary show-control panels (Presets/Cues/Timers/LFO/MIDI/Media) one tap away
+ * instead of permanently cluttering the deck. Collapsed = just the tab strip (a thin
+ * bar); expanded = tab strip + a scrollable body holding whichever panel App wires in
+ * as `children` for the active tab. */
+.show-drawer {
+  grid-row: 3;
+  border-top: 1px solid var(--hairline);
+  background: linear-gradient(180deg, var(--panel), #0f1013);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.show-drawer-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  flex: none;
+}
+.show-drawer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  flex: none;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.show-drawer-toggle:hover { color: var(--beam); border-color: var(--beam-line); }
+.show-drawer-chevron {
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid currentColor;
+  transition: transform 120ms ease;
+}
+.show-drawer[data-open="true"] .show-drawer-chevron { transform: rotate(180deg); }
+
+.show-drawer-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.show-drawer-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--panel-sunken);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.show-drawer-tab:hover { color: var(--beam); }
+.show-drawer-tab[data-active="true"] { color: var(--beam); background: var(--deck-selected-surface); border-color: var(--beam-line); }
+
+.show-drawer-body {
+  border-top: 1px solid var(--hairline-soft);
+  padding: 14px 16px;
+  max-height: 38vh;
+  overflow-y: auto;
+}
+/* The hosted panels are the same ones the pre-redesign flat layout rendered inside
+ * `.sc-card` (see panel.css) — reuse that card treatment here so PresetsBar/CueList/
+ * TimerBank/LfoRack/MidiMapPanel/MediaLibrary look unchanged, just relocated. */
+.show-drawer-body .sc-card { border: none; background: none; padding: 0; }
 
