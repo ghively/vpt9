@@ -38,7 +38,10 @@ const CORNER_CLASSES = ["tl", "tr", "br", "bl"]; // e2e targets ".deck-handle.tl
  *  both a real 4-corner warp quad and `layerQuad`'s synthetic mesh/fx bounding quad,
  *  since both use the same [TL,TR,BR,BL] ordering. */
 function labelAnchor(quad: Quad) {
-  return { x: (quad[0].x + quad[1].x) / 2, y: Math.min(quad[0].y, quad[1].y, 0.06) };
+  // y = the top edge (midpoint of TL/TR), so the label floats with the selected layer.
+  // SelLabel's own `Math.max(y, 0.06)` keeps it from clipping off the top of the stage —
+  // don't fold that floor into this min (that would pin every label to a constant y).
+  return { x: (quad[0].x + quad[1].x) / 2, y: Math.min(quad[0].y, quad[1].y) };
 }
 
 function SelLabel({ x, y, text }: { x: number; y: number; text: string }) {
