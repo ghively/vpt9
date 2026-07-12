@@ -92,11 +92,17 @@ export function defaultWarp() {
   };
 }
 
-// Per-layer transport: play/pause + rate/loop/pan/vol for the layer's current source.
-// Defaults are "stopped, neutral" — a freshly created or backfilled layer never
-// starts itself playing or looping on its own.
+// Per-layer / per-slot transport: play/pause + rate/loop/pan/vol + scrub for the current
+// source. Defaults are "stopped, neutral" — a freshly created or backfilled layer/slot
+// never starts itself playing or looping on its own.
+//
+// `loopMode` (task A10, VPT8 parity): "off"/"once" play through and stop (no native
+// loop); "loop"/"palindrome" native-loop. `seek` (task A11) is a scrub request: a 0..1
+// fraction of the clip's duration the render-client seeks to once when it changes, then
+// leaves in place (see render-client/src/transport.js for the "track last-applied"
+// approach). null = no pending seek.
 export function defaultTransport() {
-  return { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1 };
+  return { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1, seek: null };
 }
 
 const DEFAULT_STATE = {
@@ -192,8 +198,10 @@ const DEFAULT_STATE = {
   // { type: "slot", slotId } instead makes it track whichever content this slot holds,
   // live. A slot's content is either a media-library reference or a "mix" — two other
   // sources (each a media/camera ref, or a slot reference — but never another mix-
-  // holding slot, enforced below) crossfaded by a chosen blend mode.
-  sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null })),
+  // holding slot, enforced below) crossfaded by a chosen blend mode. Each slot carries
+  // its OWN `transport` (task A9) — because many layers can share one slot, its
+  // play/rate/loop state lives on the slot, not the consuming layer.
+  sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultTransport() })),
 };
 
 // `applyUpdate` only patches EXISTING leaves, so state loaded from an older
@@ -228,8 +236,16 @@ export function ensureStateDefaults(state) {
     midiMap: {},
     master: 1,
     media: {},
-    sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null })),
+    sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultTransport() })),
   });
+  // Backfill per-slot transport (task A9) onto a sourceBank saved before it existed:
+  // fillMissing never recurses into array elements, so each slot object is patched
+  // explicitly (adds a whole `transport`, or backfills any missing leaf such as `seek`).
+  if (Array.isArray(state.sourceBank)) {
+    for (const slot of state.sourceBank) {
+      if (slot && typeof slot === "object" && !Array.isArray(slot)) fillMissing(slot, { transport: defaultTransport() });
+    }
+  }
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
   for (const preset of Object.values(state.presets ?? {})) {
     for (const layer of Object.values(preset?.snapshot?.layers ?? {})) ensureLayerDefaults(layer);
@@ -318,6 +334,12 @@ function corruptsStructure(keys, last, value) {
     if (KEYED_OBJECT_COLLECTIONS.has(keys[0])) return !isPlainObject(value); // e.g. layers.<id>
     if (keys[0] === "sourceBank") return !isPlainObject(value); // a slot object
   }
+  // A source-bank slot's `transport` container (task A9): sourceBank.<n>.transport is a
+  // structural object the render-client dereferences per frame — pin it to a plain object
+  // so a LAN client can't null/scalar it out and crash the slot transport path. Keyed on
+  // the immediate sourceBank-slot parent (keys = ["sourceBank", "<n>"]), so a layer's own
+  // `transport` object stays freely swappable, same as before.
+  if (last === "transport" && keys.length === 2 && keys[0] === "sourceBank") return !isPlainObject(value);
   // "...mask.source" (last === "source" under a "mask" parent) is the matte ref — pinned
   // to null-or-source-ref. Keyed on the immediate parent, so a layer's OWN top-level
   // `source` (parent = the layer id, not "mask") stays unrestricted and freely swappable.

@@ -22,6 +22,10 @@ export interface SourceBankSlot {
     | null
     | { type: "media"; mediaId: string }
     | { type: "mix"; a: SourceRef | null; b: SourceRef | null; blendMode: string; mix: number };
+  /** Per-slot clip transport (task A9). Because many layers can point at one slot, its
+   *  play/rate/loop/scrub state lives on the slot, not the consuming layer. Optional so
+   *  the panel typechecks against state saved before A9 (the server backfills it). */
+  transport?: Transport;
 }
 
 export type MediaKind = "video" | "gif" | "image";
@@ -139,16 +143,24 @@ export interface Warp {
   mesh: { size: number; points: Point[] };
 }
 
-/** Per-layer clip transport (play/rate/loop/pan/vol) — mirrors
+/** Per-layer / per-slot clip transport (play/rate/loop/pan/vol/scrub) — mirrors
  *  `server/src/state.js`'s `defaultTransport()` shape exactly. */
 export interface Transport {
   playing: boolean;
   rate: number;
   loopIn: number | null;
   loopOut: number | null;
-  loopMode: "off" | "loop" | "palindrome";
+  /** Native-loop policy (VPT8 parity, task A10): "off"/"once" play through once and stop;
+   *  "loop"/"palindrome" native-loop (palindrome ping-pongs within [loopIn, loopOut]). */
+  loopMode: "off" | "loop" | "palindrome" | "once";
   pan: number;
   vol: number;
+  /** Scrub request (task A11): a 0..1 fraction of the clip's duration. Writing a NEW value
+   *  makes the render-client seek to `fraction * duration` once; it isn't cleared back to
+   *  null (each client tracks the last fraction it applied), so re-seeking the exact same
+   *  fraction is a no-op. null = no pending seek. Duration isn't in shared state, so the
+   *  scrub is normalized rather than in seconds. */
+  seek?: number | null;
 }
 
 /** One playlist entry: a source reference (matches `SourceRef`'s media/slot shape) plus

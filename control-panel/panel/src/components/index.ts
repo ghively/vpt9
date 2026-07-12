@@ -50,6 +50,8 @@ export { PresetsBar } from "./PresetsBar";
 export type { PresetsBarProps } from "./PresetsBar";
 export { FxDrawer } from "./FxDrawer";
 export type { FxDrawerProps } from "./FxDrawer";
+export { TransportControls } from "./TransportControls";
+export type { TransportControlsProps } from "./TransportControls";
 export { MediaLibrary } from "./MediaLibrary";
 export type { MediaLibraryProps } from "./MediaLibrary";
 export { SourceBankSlotEditor } from "./SourceBankSlotEditor";

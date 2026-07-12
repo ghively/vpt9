@@ -229,6 +229,14 @@
   background: var(--panel-raised);
 }
 .slot-editor-inline .media-row { flex-wrap: wrap; }
+/* Per-slot clip transport (task A9) — the shared TransportControls cluster, dropped onto
+ * its own full-width row below the slot's content controls. */
+.source-slot-transport {
+  flex: 1 1 100%;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline-soft);
+}
 
 /* ---------------- STAGE (the star) ----------------
  * `.stage-wrap` is the `<main>` zone App.tsx already owns; Stage.tsx renders the rest.

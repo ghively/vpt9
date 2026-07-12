@@ -592,6 +592,7 @@ export function App() {
       media={Object.values(state.media)}
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
+      onSetTransport={actions.setSourceBankSlotTransport}
     />
   );
   const stageEl = selectedScreenId && (
@@ -656,6 +657,7 @@ export function App() {
         onModeChange={selection.setStageEditMode}
         media={Object.values(state.media)}
         sourceBank={state.sourceBank}
+        transportPosition={selectedLayer ? transportPositionsRef.current[selectedLayer.id] : undefined}
         onUpdate={onInspectorUpdate}
         onSetSourceMode={onInspectorSetSourceMode}
         onSetPlaylist={onInspectorSetPlaylist}

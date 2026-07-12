@@ -1,4 +1,11 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
+import { applyVideoTransport, nativeLoop, clearTransportState } from "./transport.js";
+
+// A slot with no transport in state (older state that predates task A9, or an
+// impossible pre-backfill edge) falls back to the pre-A9 behavior — auto-play, whole-clip
+// loop — so a shared slot never silently goes dark. Every server-provided slot carries a
+// real transport (defaulting to paused), which takes precedence over this.
+const FALLBACK_SLOT_TRANSPORT = { playing: true, rate: 1, loopIn: null, loopOut: null, loopMode: "loop", pan: 0, vol: 1, seek: null };
 
 const MIX_VERT = `#version 300 es
 in vec2 a_position;
@@ -120,13 +127,21 @@ export class SourceBank {
   // layer's direct `source` can also be an arbitrary external URL with no media-library
   // entry). Previously this always built a <video>, so a jpg/gif's readyState never
   // reached 2 and the slot rendered black forever.
-  _decodeMediaInto(entryKey, mediaId, media) {
+  _decodeMediaInto(entryKey, mediaId, media, transport) {
     const entry = this._mediaEntry(entryKey);
     const url = mediaUrlFor(mediaId, media, this.mediaOrigin);
     if (!url) return;
+    // The slot owns its own transport (task A9) — because many layers can share this
+    // slot, play/rate/loop/scrub live here, not on any consuming layer.
+    const t = transport ?? FALLBACK_SLOT_TRANSPORT;
     if (entry.currentUrl !== url) {
       entry.currentUrl = url;
-      if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); entry.videoEl = null; }
+      if (entry.videoEl) {
+        entry.videoEl.pause();
+        clearTransportState(entry, entry.videoEl); // detach the old element's loop handler + reset seek bookkeeping
+        entry.videoEl.remove();
+        entry.videoEl = null;
+      }
       if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
       entry.imgKind = null;
       entry.imgUploaded = false;
@@ -135,10 +150,12 @@ export class SourceBank {
         const el = document.createElement("video");
         el.src = url;
         el.crossOrigin = "anonymous";
-        el.loop = true;
+        el.loop = nativeLoop(t); // was hardcoded true; now the slot's loopMode governs (task A9/A10)
         el.muted = true; // shared slots never own audio directly — a layer/mix consuming one does, per the transport work in Task 14
         el.playsInline = true;
-        el.play().catch(() => {});
+        el.preload = "auto"; // decode the first frame even while paused, so a stopped slot shows a frame rather than black
+        // No el.play() here — applyVideoTransport() below starts it only if the slot's
+        // transport says `playing`, so a paused slot's texture never advances.
         entry.videoEl = el;
       } else {
         // Still image (jpg) or animated gif: sample an <img> into the texture. As in
@@ -156,8 +173,17 @@ export class SourceBank {
         entry.imgUploaded = false;
       }
     }
-    if (entry.videoEl) this._uploadVideoFrame(entry);
-    else if (entry.imgEl) this._uploadImageFrame(entry);
+    if (entry.videoEl) {
+      // Keep native loop in sync with the slot's loopMode every frame (the layer path
+      // resyncs this via setLayerSource; the slot path owns it here). Then drive play/pause,
+      // rate, loop-region/palindrome, and scrub seek — a paused slot stops advancing.
+      const wantLoop = nativeLoop(t);
+      if (entry.videoEl.loop !== wantLoop) entry.videoEl.loop = wantLoop;
+      applyVideoTransport(entry.videoEl, t, entry);
+      this._uploadVideoFrame(entry);
+    } else if (entry.imgEl) {
+      this._uploadImageFrame(entry);
+    }
   }
 
   _uploadVideoFrame(entry) {
@@ -188,12 +214,15 @@ export class SourceBank {
   updateAll(slots, media) {
     const activeKeys = new Set();
     for (const slot of slots ?? []) {
+      // One transport per slot (task A9). A mix slot's two media inputs (a/b) both obey the
+      // slot's single transport — play/pause/rate/loop apply to the pair together.
+      const transport = slot.transport;
       if (slot.content?.type === "media") {
         activeKeys.add(slot.id);
-        this._decodeMediaInto(slot.id, slot.content.mediaId, media);
+        this._decodeMediaInto(slot.id, slot.content.mediaId, media, transport);
       } else if (slot.content?.type === "mix") {
-        if (slot.content.a?.type === "media") { activeKeys.add(`${slot.id}:a`); this._decodeMediaInto(`${slot.id}:a`, slot.content.a.mediaId, media); }
-        if (slot.content.b?.type === "media") { activeKeys.add(`${slot.id}:b`); this._decodeMediaInto(`${slot.id}:b`, slot.content.b.mediaId, media); }
+        if (slot.content.a?.type === "media") { activeKeys.add(`${slot.id}:a`); this._decodeMediaInto(`${slot.id}:a`, slot.content.a.mediaId, media, transport); }
+        if (slot.content.b?.type === "media") { activeKeys.add(`${slot.id}:b`); this._decodeMediaInto(`${slot.id}:b`, slot.content.b.mediaId, media, transport); }
       }
     }
     // Release any media entry a slot no longer decodes — content cleared, or the slot

@@ -3,6 +3,7 @@ import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
+import { TransportControls } from "./TransportControls";
 import type { Fx, Mask, MediaItem, Playlist, PlaylistItem, Transport } from "./types";
 
 export interface FxDrawerProps {
@@ -10,9 +11,12 @@ export interface FxDrawerProps {
   /** Mask geometry lives here too (center/size/feather); enable + shape stay on the
    *  strip. Optional so existing fx-only usage keeps working. */
   mask?: Mask;
-  /** Clip transport (play/rate/loop/pan/vol/loop-in/loop-out). Optional so existing
+  /** Clip transport (play/rate/loop/pan/vol/loop-in/loop-out/scrub). Optional so existing
    *  fx-only usage keeps working; the section renders once a caller supplies it. */
   transport?: Transport;
+  /** Live playback position in seconds for the selected layer (transportStatus telemetry),
+   *  shown as the scrub readout. */
+  transportPosition?: number;
   /** "single" | "playlist" — which source-selection mode the layer is in. */
   sourceMode?: "single" | "playlist";
   /** Ordered clip queue for playlist mode. */
@@ -238,6 +242,7 @@ export function FxDrawer({
   fx,
   mask,
   transport,
+  transportPosition,
   sourceMode,
   playlist,
   media,
@@ -357,25 +362,11 @@ export function FxDrawer({
       )}
       {transport && (
         <FxSection caption="Transport">
-          <Button label={transport.playing ? "Pause" : "Play"} onClick={() => onUpdate?.("transport.playing", !transport.playing)} />
-          <FxSlider spec={{ label: "RATE", field: "transport.rate", min: 0.1, max: 4, step: 0.05, neutral: 1 }} root={transport as unknown as Record<string, unknown>} onUpdate={onUpdate} />
-          <FxSlider spec={{ label: "PAN", field: "transport.pan", min: -1, max: 1, step: 0.01, neutral: 0 }} root={transport as unknown as Record<string, unknown>} onUpdate={onUpdate} />
-          <FxSlider spec={{ label: "VOL", field: "transport.vol", min: 0, max: 1, step: 0.01, neutral: 1 }} root={transport as unknown as Record<string, unknown>} onUpdate={onUpdate} />
-          <ToggleSquare
-            label={transport.loopMode === "off" ? "Off" : transport.loopMode === "loop" ? "Loop" : "Pal"}
-            title="Cycle loop mode: off / loop / palindrome"
-            onClick={() =>
-              onUpdate?.("transport.loopMode", transport.loopMode === "off" ? "loop" : transport.loopMode === "loop" ? "palindrome" : "off")
-            }
+          <TransportControls
+            transport={transport}
+            position={transportPosition}
+            onUpdate={(field, value) => onUpdate?.(`transport.${field}`, value)}
           />
-          <label className="fx-control">
-            <span className="fx-label">LOOP IN</span>
-            <NumField className="fx-num" value={transport.loopIn} placeholder="sec" onCommit={(v) => onUpdate?.("transport.loopIn", v)} />
-          </label>
-          <label className="fx-control">
-            <span className="fx-label">LOOP OUT</span>
-            <NumField className="fx-num" value={transport.loopOut} placeholder="sec" onCommit={(v) => onUpdate?.("transport.loopOut", v)} />
-          </label>
         </FxSection>
       )}
       {sourceMode !== undefined && (

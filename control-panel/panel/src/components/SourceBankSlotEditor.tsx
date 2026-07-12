@@ -1,8 +1,23 @@
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { Fader } from "./primitives/Fader";
-import type { SourceBankSlot, MediaItem, SourceRef } from "./types";
+import { TransportControls } from "./TransportControls";
+import type { SourceBankSlot, MediaItem, SourceRef, Transport } from "./types";
 import { BLEND_MODES } from "./types";
+
+/** Mirrors `server/src/state.js`'s `defaultTransport()` — used only as a display fallback
+ *  for a slot whose `transport` hasn't been backfilled yet (the server always sends one).
+ *  Edits still write per-field via `onSetTransport`, patching the real state leaf. */
+const DEFAULT_SLOT_TRANSPORT: Transport = {
+  playing: false,
+  rate: 1,
+  loopIn: null,
+  loopOut: null,
+  loopMode: "off",
+  pan: 0,
+  vol: 1,
+  seek: null,
+};
 
 export interface SourceBankSlotEditorProps {
   slot: SourceBankSlot;
@@ -13,6 +28,9 @@ export interface SourceBankSlotEditorProps {
   otherSlots: { id: string; name: string }[];
   onRename?: (index: number, name: string) => void;
   onSetContent?: (slotId: string, index: number, content: SourceBankSlot["content"]) => void;
+  /** Writes one per-slot transport field (task A9): `sourceBank.<index>.transport.<field>`.
+   *  `field` is relative to the transport object ("playing", "rate", "loopMode", …). */
+  onSetTransport?: (index: number, field: string, value: unknown) => void;
 }
 
 function RefPicker({ value, media, otherSlots, onChange }: { value: SourceRef | null; media: MediaItem[]; otherSlots: { id: string; name: string }[]; onChange: (ref: SourceRef | null) => void }) {
@@ -39,8 +57,9 @@ function RefPicker({ value, media, otherSlots, onChange }: { value: SourceRef | 
  *  type-specific controls. Extracted from `SourceBankPanel` so the compact rail
  *  `SlotGrid` can reveal the exact same controls — same markup, same write paths
  *  (`onRename`/`onSetContent`) — instead of a second, drifting implementation. */
-export function SourceBankSlotEditor({ slot, index, media, otherSlots, onRename, onSetContent }: SourceBankSlotEditorProps) {
+export function SourceBankSlotEditor({ slot, index, media, otherSlots, onRename, onSetContent, onSetTransport }: SourceBankSlotEditorProps) {
   const isMix = slot.content?.type === "mix";
+  const transport = slot.transport ?? DEFAULT_SLOT_TRANSPORT;
   return (
     <div className="media-row source-slot-row">
       <TextField className="media-name" value={slot.name} onCommit={(v) => onRename?.(index, v)} />
@@ -79,6 +98,14 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, onRename,
             <span className="mono source-slot-mix-val">{Math.round(slot.content.mix * 100)}%</span>
           </div>
         </>
+      )}
+      {/* Per-slot clip transport (task A9): shown for any content that has playable video
+          (media or mix). Slots stay muted (audio-owner policy), so pan/vol round-trip but
+          have no audible effect — the render-client applies play/rate/loop/scrub. */}
+      {slot.content && (
+        <div className="fx-row source-slot-transport">
+          <TransportControls transport={transport} onUpdate={(field, value) => onSetTransport?.(index, field, value)} />
+        </div>
       )}
     </div>
   );

@@ -296,6 +296,11 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     renameSourceBankSlot(index: number, name: string) {
       send({ type: "update", path: `sourceBank.${index}.name`, value: name });
     },
+    // Per-slot clip transport (task A9): `field` is relative to the slot's transport
+    // object ("playing", "rate", "loopMode", "loopIn", "seek", …).
+    setSourceBankSlotTransport(index: number, field: string, value: unknown) {
+      send({ type: "update", path: `sourceBank.${index}.transport.${field}`, value });
+    },
 
     // ── Clip transport + playlist ───────────────────────────────────────────
     // `layers.<id>.transport.<field>` is reachable via the existing generic

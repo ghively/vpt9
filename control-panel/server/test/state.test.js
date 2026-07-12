@@ -210,7 +210,7 @@ test("ensureStateDefaults backfills sourceBank as 8 empty slots on an older stat
   assert.equal(state.sourceBank.length, 8);
 });
 
-test("defaultTransport returns a paused, forward, un-looped, centered transport", () => {
+test("defaultTransport returns a paused, forward, un-looped, centered transport with a null scrub seek", () => {
   const t = defaultTransport();
   assert.equal(t.playing, false);
   assert.equal(t.rate, 1);
@@ -219,6 +219,70 @@ test("defaultTransport returns a paused, forward, un-looped, centered transport"
   assert.equal(t.loopMode, "off");
   assert.equal(t.pan, 0);
   assert.equal(t.vol, 1);
+  assert.equal(t.seek, null); // task A11: no pending scrub
+});
+
+test("applyUpdate accepts loopMode 'once' on a layer transport (task A10)", () => {
+  const state = sampleState();
+  ensureLayerDefaults(state.layers["layer-1"]);
+  assert.equal(applyUpdate(state, "layers.layer-1.transport.loopMode", "once"), true);
+  assert.equal(state.layers["layer-1"].transport.loopMode, "once");
+});
+
+test("applyUpdate accepts a scrub seek fraction on a layer transport, and clearing it to null (task A11)", () => {
+  const state = sampleState();
+  ensureLayerDefaults(state.layers["layer-1"]);
+  assert.equal(applyUpdate(state, "layers.layer-1.transport.seek", 0.42), true);
+  assert.equal(state.layers["layer-1"].transport.seek, 0.42);
+  assert.equal(applyUpdate(state, "layers.layer-1.transport.seek", null), true);
+  assert.equal(state.layers["layer-1"].transport.seek, null);
+});
+
+test("DEFAULT_STATE source-bank slots each carry their own defaultTransport (task A9)", () => {
+  const state = structuredClone(loadState("/nonexistent/path/for/test-a9.json"));
+  assert.equal(state.sourceBank.length, 8);
+  for (const slot of state.sourceBank) {
+    assert.deepEqual(slot.transport, defaultTransport());
+  }
+});
+
+test("ensureStateDefaults backfills a per-slot transport onto a sourceBank saved before task A9", () => {
+  const state = { layers: {}, presets: {}, sourceBank: [{ id: "slot-1", name: "Slot 1", content: null }] };
+  ensureStateDefaults(state);
+  assert.deepEqual(state.sourceBank[0].transport, defaultTransport());
+});
+
+test("ensureStateDefaults backfills a missing seek leaf onto a slot transport saved before task A11, without touching existing fields", () => {
+  const state = {
+    layers: {}, presets: {},
+    sourceBank: [{ id: "slot-1", name: "Slot 1", content: null, transport: { playing: true, rate: 2, loopIn: null, loopOut: null, loopMode: "loop", pan: 0, vol: 1 } }],
+  };
+  ensureStateDefaults(state);
+  assert.equal(state.sourceBank[0].transport.seek, null); // backfilled
+  assert.equal(state.sourceBank[0].transport.playing, true); // pre-existing, untouched
+  assert.equal(state.sourceBank[0].transport.rate, 2);
+  assert.equal(state.sourceBank[0].transport.loopMode, "loop");
+});
+
+test("applyUpdate writes per-slot transport fields addressed by index (task A9)", () => {
+  const state = structuredClone(loadState("/nonexistent/path/for/test-a9-write.json"));
+  assert.equal(applyUpdate(state, "sourceBank.0.transport.playing", true), true);
+  assert.equal(applyUpdate(state, "sourceBank.0.transport.loopMode", "palindrome"), true);
+  assert.equal(applyUpdate(state, "sourceBank.0.transport.seek", 0.75), true);
+  assert.equal(state.sourceBank[0].transport.playing, true);
+  assert.equal(state.sourceBank[0].transport.loopMode, "palindrome");
+  assert.equal(state.sourceBank[0].transport.seek, 0.75);
+});
+
+test("applyUpdate refuses to null/scalar a sourceBank slot's transport container, but still allows its leaves (crash-hardening, task A9)", () => {
+  const state = structuredClone(loadState("/nonexistent/path/for/test-a9-guard.json"));
+  assert.equal(applyUpdate(state, "sourceBank.0.transport", null), false);
+  assert.equal(applyUpdate(state, "sourceBank.0.transport", 7), false);
+  assert.equal(applyUpdate(state, "sourceBank.0.transport", []), false);
+  assert.ok(state.sourceBank[0].transport && typeof state.sourceBank[0].transport === "object");
+  // A structural swap to a well-formed object is allowed, and a leaf write is unaffected.
+  assert.equal(applyUpdate(state, "sourceBank.0.transport.rate", 0.5), true);
+  assert.equal(state.sourceBank[0].transport.rate, 0.5);
 });
 
 test("ensureLayerDefaults backfills transport, sourceMode, and playlist on an older layer", () => {

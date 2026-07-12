@@ -13,6 +13,8 @@ export interface SlotGridProps {
    *  editor below. */
   onRename?: (index: number, name: string) => void;
   onSetContent?: (slotId: string, index: number, content: SourceBankSlot["content"]) => void;
+  /** Per-slot transport write (task A9): `sourceBank.<index>.transport.<field>`. */
+  onSetTransport?: (index: number, field: string, value: unknown) => void;
   /** Fired with the clicked slot's index whenever a cell is clicked (open or re-toggle),
    *  so a container can react (e.g. a future show drawer cross-highlighting the slot).
    *  The inline editor below the grid is opened/closed independently, from local state. */
@@ -34,7 +36,7 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
  *  editor inline below the grid — `SourceBankSlotEditor`, extracted from
  *  `SourceBankPanel` — so editing keeps using the existing `onRename`/`onSetContent`
  *  write paths unchanged rather than a second, drifting implementation. */
-export function SlotGrid({ slots, media = [], onRename, onSetContent, onEditSlot }: SlotGridProps) {
+export function SlotGrid({ slots, media = [], onRename, onSetContent, onSetTransport, onEditSlot }: SlotGridProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const editingSlot = editingIndex != null ? slots[editingIndex] : undefined;
 
@@ -77,6 +79,7 @@ export function SlotGrid({ slots, media = [], onRename, onSetContent, onEditSlot
             otherSlots={otherSlotOptions(slots, editingSlot.id)}
             onRename={onRename}
             onSetContent={onSetContent}
+            onSetTransport={onSetTransport}
           />
         </div>
       )}

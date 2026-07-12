@@ -40,6 +40,9 @@ export interface InspectorLayerProps extends InspectorSharedProps {
   /** Library items offered in the source picker when the layer source is a URL/slot. */
   media?: MediaItem[];
   sourceBank?: SourceBankSlot[];
+  /** Live playback position (seconds) for the selected layer — the FX drawer's Transport
+   *  scrub readout (task A11). From the transportStatus telemetry relay. */
+  transportPosition?: number;
   /** Field paths are relative to the layer ("opacity", "blendMode", "source",
    *  "mask.feather", "fx.zoom", ...) — the SAME write path LayerStrip's `onUpdate` and
    *  FxDrawer's `onUpdate` already use. The container wires this to
@@ -527,6 +530,7 @@ export function Inspector(props: InspectorProps) {
     onModeChange,
     media,
     sourceBank,
+    transportPosition,
     onUpdate,
     onSetSourceMode,
     onSetPlaylist,
@@ -599,6 +603,7 @@ export function Inspector(props: InspectorProps) {
               fx={layer.fx}
               mask={layer.mask}
               transport={layer.transport}
+              transportPosition={transportPosition}
               sourceMode={layer.sourceMode}
               playlist={layer.playlist}
               media={media}

@@ -1,6 +1,7 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
 import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
 import { SourceBank } from "./source-bank.js";
+import { applyVideoTransport, clearTransportState } from "./transport.js";
 
 // Order is load-bearing: BLEND_INDEX derives each mode's shader-side integer from
 // array position, and panel/src/components/types.ts's BLEND_MODES must list the exact
@@ -157,13 +158,22 @@ export class LayerStack {
     return null;
   }
 
-  // Whether this layer's <video> should loop. Single-mode and looping-still playlists
-  // loop as before; a playlist VIDEO item with no fixed duration means "play through to
-  // end" — it must NOT loop, or the native `ended` event this relies on never fires.
+  // Whether this layer's <video> should natively loop.
+  //
+  // Playlist mode: a playlist VIDEO item with no fixed duration means "play through to
+  // end" — it must NOT loop, or the native `ended` event the playlist relies on to advance
+  // never fires; a duration'd (still) item loops as before.
+  //
+  // Single mode (task A10 — was the always-loop bug: this used to return `true` for every
+  // non-playlist layer regardless of loopMode): honor transport.loopMode. Only
+  // "loop"/"palindrome" native-loop; "off"/"once" play through once and stop.
   shouldLoop(layer) {
-    if (layer.sourceMode !== "playlist") return true;
-    const item = layer.playlist?.items?.[layer.playlist.cursor];
-    return item?.duration != null;
+    if (layer.sourceMode === "playlist") {
+      const item = layer.playlist?.items?.[layer.playlist.cursor];
+      return item?.duration != null;
+    }
+    const mode = layer.transport?.loopMode;
+    return mode === "loop" || mode === "palindrome";
   }
 
   // Library media is stored as a host-independent "/media/<file>" path so a saved show
@@ -203,14 +213,11 @@ export class LayerStack {
       entry.videoEl.srcObject = null;
       entry.videoEl.removeAttribute("src");
       entry.videoEl.load();
-      // Loop handler (attached by applyTransport) closes over this specific <video>
-      // element — detach it and clear the guard/state so applyTransport re-attaches a
-      // fresh handler to whatever element replaces this one, instead of silently no-op'ing
-      // forever because entry._loopHandler is still (falsely) truthy.
-      if (entry._loopHandler) entry.videoEl.removeEventListener("timeupdate", entry._loopHandler);
-      entry._loopHandler = null;
-      entry._loopDir = 1;
-      entry._latestTransport = null;
+      // Loop handler (attached by applyVideoTransport) closes over this specific <video>
+      // element — detach it and clear all per-element transport bookkeeping so the next
+      // element re-attaches a fresh handler and re-adopts seek cleanly, instead of silently
+      // no-op'ing forever because entry._loopHandler is still (falsely) truthy.
+      clearTransportState(entry, entry.videoEl);
       entry.videoEl = null;
       if (entry._audioNodes) {
         entry._audioNodes.gainNode.disconnect();
@@ -329,41 +336,12 @@ export class LayerStack {
     const t = layer.transport;
     if (!t) return;
 
-    if (t.playing && video.paused) video.play().catch(() => {});
-    if (!t.playing && !video.paused) video.pause();
-    video.playbackRate = Math.max(0.0625, t.rate ?? 1); // browsers reject 0 and clamp very small values inconsistently; floor it
-
-    // Loop / palindrome. The handler reads the current region + mode from _latestTransport
-    // on every `timeupdate`, and _latestTransport is refreshed (or cleared) here on every
-    // call — so turning loop OFF (mode "off", or blanking loopIn/loopOut) actually releases
-    // the clip. Previously the refresh AND the handler-attach both lived inside the
-    // "loop active" guard, so disabling loop skipped the refresh and left the old handler
-    // firing on stale bounds: the operator could not stop a loop once set.
-    const loopActive = t.loopMode !== "off" && t.loopIn != null && t.loopOut != null && t.loopOut > t.loopIn;
-    entry._latestTransport = loopActive ? t : null;
-    if (loopActive && !entry._loopHandler) {
-      entry._loopDir = 1;
-      entry._loopHandler = () => {
-        const layerT = entry._latestTransport;
-        if (!layerT) return;
-        if (layerT.loopMode === "palindrome") {
-          if (entry._loopDir === 1 && video.currentTime >= layerT.loopOut) {
-            entry._loopDir = -1;
-            video.pause();
-            this._startPalindromeReverse(entry, layerT);
-          }
-        } else if (video.currentTime >= layerT.loopOut) {
-          video.currentTime = layerT.loopIn;
-        }
-      };
-      video.addEventListener("timeupdate", entry._loopHandler);
-    } else if (!loopActive && entry._loopHandler) {
-      // Loop disabled: detach the handler and cancel any in-flight palindrome reverse
-      // (its rAF loop bails when _loopDir !== -1).
-      video.removeEventListener("timeupdate", entry._loopHandler);
-      entry._loopHandler = null;
-      entry._loopDir = 1;
-    }
+    // Playback (play/pause, rate, loop-region/palindrome, scrub seek) — shared with the
+    // source-bank slot path via transport.js so a slot's private <video> and a layer's
+    // private <video> obey the identical rules. Native `video.loop` is NOT set here (the
+    // layer path derives it from shouldLoop(), set on the element in setLayerSource — a
+    // playlist video item must not native-loop or its `ended` advance never fires).
+    applyVideoTransport(video, t, entry);
 
     // One shared AudioContext for the whole LayerStack (this.audioCtx, created lazily
     // below), not one per layer — browsers cap the number of live AudioContexts (around
@@ -395,22 +373,6 @@ export class LayerStack {
     } else {
       video.volume = t.vol ?? 1;
     }
-  }
-
-  _startPalindromeReverse(entry, transport) {
-    const video = entry.videoEl;
-    const step = () => {
-      if (entry._loopDir !== -1 || !video) return;
-      const dt = (1 / 60) * Math.abs(transport.rate ?? 1);
-      video.currentTime = Math.max(transport.loopIn, video.currentTime - dt);
-      if (video.currentTime <= transport.loopIn) {
-        entry._loopDir = 1;
-        video.play().catch(() => {});
-        return;
-      }
-      requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
   }
 
   removeLayer(id) {
