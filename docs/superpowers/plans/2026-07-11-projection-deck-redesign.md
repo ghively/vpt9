@@ -409,3 +409,45 @@ Expected: 125/125 (unchanged — no server edits).
 - **Placeholder scan:** CSS is ported from the committed mockup (concrete, referenced file + named rules), not "TBD". Load-bearing logic (geometry, selection, wiring) has full code. e2e harness reuses the existing `transport-and-playlist.spec.js` boot pattern (named).
 - **Type consistency:** `EditMode` defined once (T1) and reused (T5–T9); `Quad`/`Pt`/`layerQuad`/`pointInQuad`/`pickTopLayer` defined in T5 and consumed by T5/T6; `ShowTab` defined in T8. Selection setter name `setSelectedLayerId` consistent T1→T9.
 - **Known adaptation from the skill's default TDD shape:** the panel has no unit-test runner and its established gates are `tsc`/ESLint/Storybook/Playwright; interaction tasks (T5, T6) are genuinely test-first via Playwright, visual tasks verify via Storybook + screenshot. This matches the existing project conventions rather than introducing a new framework (per the spec's "no new test framework").
+
+---
+
+# Follow-up: restore screen-level features (Tasks 11-14)
+
+The whole-branch review found the redesign dropped three pre-existing screen-level capabilities the spec said to keep. These tasks restore them into the new deck. Same Global Constraints as above (panel-only; no server/render-client change; reuse existing actions/paths; decoupling components/⇏app/; tokens; single dark theme; commit trailer). The screen-warp/PiP/screen actions already exist in `panel/src/app/actions.ts` (`setWarpMode`/`resetWarp`/`moveWarpPoint`/`setMeshSize`/`addScreen`/`renameScreen`) and `PipWindows.tsx` still exists — this is re-wiring, not new protocol.
+
+## Task 11: Active-screen selector in the command bar
+
+**Files:** Modify `panel/src/app/App.tsx`, `panel/src/components/Faceplate.tsx` (or add a small `ScreenSelect` in `components/`), `panel/src/components/deck/deck.css`; export any new component from `index.ts`.
+
+**Interfaces/behavior:**
+- Add a screen-selector segment to the command bar (`.cmd`), distinct from `AudioOwner` (which is "AUDIO ON" = audio ownership). It lists `state.screens` and is bound to the EXISTING `selectedScreenId`/`setSelectedScreenId` state in App (currently only auto-set on connect at `App.tsx:150`). Selecting a screen changes which screen the Stage previews (`preview.frameFor(selectedScreenId)`, and the preview bus's `getSelectedScreenId`) and — after Task 12 — which screen's warp you edit. Match the mockup's `SCREEN 1 | SCREEN 2` command-bar segment placement/look (`2026-07-11-projection-deck-mockup.html` `.seg`). Include add-screen (`actions.addScreen`) and rename if trivial; at minimum, screen switching.
+- Decoupled: if you add a `ScreenSelect` component it takes `screens`, `selectedId`, `onSelect`, `onAdd` — no app import.
+
+**Verify:** tsc/eslint clean. (Controller will screenshot switching Screen 1↔2 and confirm the Stage badge + preview follow.) Commit.
+
+## Task 12: Screen / projector warp editing on the stage
+
+**Files:** Create/modify `panel/src/components/deck/StageSelectionOverlay.tsx` (generalize to also render a SCREEN warp target), `panel/src/components/deck/Inspector.tsx` (a Layer/Screen edit-target toggle + screen-warp controls), `panel/src/app/App.tsx`, `panel/src/app/useSelection.ts` (add `editTarget: "layer" | "screen"`), `e2e/deck-panel.spec.js`; `deck.css`.
+
+**Behavior:**
+- Add `editTarget: "layer" | "screen"` to `useSelection` (default "layer"). Surface a **Layer / Screen** toggle at the top of the Inspector (or command bar).
+- When `editTarget === "screen"`: the Stage shows the SELECTED SCREEN's warp handles (reuse `WarpHandle` for corner-pin, mesh handles for mesh mode) wired to `actions.moveWarpPoint(selectedScreenId, i, x, y)` / mesh equivalents; the Inspector shows the screen's warp controls — corner/mesh mode (`setWarpMode(screenId,…)`), mesh size (`setMeshSize(screenId,…)`), reset (`resetWarp(screenId)`), coord readout, and the screen name (rename/add). No layer overlay while in screen mode. Generalize `StageSelectionOverlay` to accept a generic warp target `{ warp, onCorner(i,x,y), onMode, … }` so the same handles serve layer and screen (the layer path is unchanged).
+- When `editTarget === "layer"`: current behavior (unchanged).
+- Reuse the EXIST­ING screen warp actions/paths (`screens.<id>.warp.*`) — no new message types. Handles carry `deck-handle`; drags include `pointercancel` (reused components already do).
+
+**Verify (test-first):** extend `e2e/deck-panel.spec.js` — switch to Screen edit target, drag a screen warp corner on the stage, assert `screens.<id>.warp.corners` changed in `/state`. RED→GREEN. tsc/eslint + full deck-panel e2e pass. Commit.
+
+## Task 13: PiP windows restored
+
+**Files:** Modify `panel/src/components/deck/ShowDrawer.tsx` (add a "PiP" tab) + `panel/src/app/App.tsx` (mount `PipWindows` in the drawer, wired as the pre-Task-1 original did — recover from `git show 3dcc100:control-panel/panel/src/app/App.tsx`), `deck.css`; optionally overlay the PiP boxes on the stage.
+
+**Behavior:** Add `"pip"` to `ShowTab` and a PiP tab to the Show drawer that mounts `PipWindows` with its original props/wiring (from git). Do not change `PipWindows` internals or its write paths. This restores PiP management (add/position/videoId/visible for the selected screen). Optionally also render the PiP boxes over the Stage for the current screen.
+
+**Verify:** tsc/eslint clean; deck-panel e2e still passes. (Controller screenshots the PiP tab.) Commit.
+
+## Task 14: Final cleanup + re-verification
+
+**Files:** remove any code still orphaned after 11-13 (grep-verify `ChannelRack`, `SourceBankPanel` — delete component+story+export if zero live refs; keep `SourceBankSlotEditor`/`otherSlotOptions` which `SlotGrid` uses). 
+
+**Verify (full gate):** `cd panel && npx tsc --noEmit && npx eslint .` clean; `cd e2e && npx playwright test` (whole suite) pass/known-skip only; `cd server && node --test` 125/125. Commit. Then a final whole-branch re-review.
