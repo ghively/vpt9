@@ -218,6 +218,38 @@ test("ensureStateDefaults backfills media as {} on an older state without it", (
   assert.deepEqual(state.media, {});
 });
 
+test("A20: DEFAULT_STATE (via loadState fallback) starts with blind off", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vpt-state-test-"));
+  try {
+    const loaded = loadState(join(dir, "state.json")); // no file -> defaults
+    assert.equal(loaded.blind, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("A20: ensureStateDefaults backfills blind=false onto an older state without it", () => {
+  const state = { layers: {}, presets: {}, automation: { running: false } };
+  ensureStateDefaults(state);
+  assert.equal(state.blind, false);
+});
+
+test("A20: ensureStateDefaults does not clobber an existing blind flag", () => {
+  const state = { layers: {}, presets: {}, automation: { running: false }, blind: true };
+  ensureStateDefaults(state);
+  assert.equal(state.blind, true); // fillMissing only adds absent keys
+});
+
+test("A20: applyUpdate accepts a boolean blind toggle but rejects a non-boolean", () => {
+  const state = structuredClone(loadState("/nonexistent/path/for/blind-test.json"));
+  assert.equal(applyUpdate(state, "blind", true), true);
+  assert.equal(state.blind, true);
+  for (const bad of [1, "on", null, {}, []]) {
+    assert.equal(applyUpdate(state, "blind", bad), false, `accepted ${JSON.stringify(bad)}`);
+  }
+  assert.equal(state.blind, true); // unchanged by the rejected writes
+});
+
 test("DEFAULT_STATE has 8 empty source-bank slots", () => {
   const state = structuredClone(loadState("/nonexistent/path/for/test.json"));
   assert.equal(state.sourceBank.length, 8);

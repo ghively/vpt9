@@ -1,6 +1,7 @@
 import { Compositor } from "./compositor.js";
 import { connectControlPlane } from "./socket.js";
 import { PipOverlay } from "./pip.js";
+import { CameraRecorder } from "./record.js";
 import { applyUpdate, applyCreate, applyDelete, applyBatch } from "./patch.js";
 
 const canvas = document.getElementById("stage");
@@ -21,6 +22,14 @@ compositor.setMediaOrigin(mediaOrigin);
 
 const pipOverlay = new PipOverlay(pipRoot, screenId);
 
+// Camera record-to-disk (task A14b). Records whichever camera stream the compositor's layer
+// stack currently holds and POSTs the clip to the media library. Only the audio-owner screen
+// records, so a camera shown on several screens uploads exactly one clip, not one per screen.
+const recorder = new CameraRecorder(
+  () => mediaOrigin,
+  () => compositor.layerStack.firstCameraStream(),
+);
+
 let state = { layers: {}, screens: {}, pip: {}, audioOwnerScreenId: null };
 
 let isAudioOwner = false;
@@ -30,6 +39,7 @@ function applyDerivedState() {
   compositor.setWarp(state.screens?.[screenId]?.warp);
   compositor.setMuted(!isAudioOwner);
   compositor.setMaster(state.master ?? 1);
+  compositor.setBlind(state.blind ?? false); // task A20: freeze the wall, keep preview live
   pipOverlay.sync(state.pip, isAudioOwner);
 }
 
@@ -52,6 +62,14 @@ const socket = connectControlPlane(wsUrl, {
   },
   onBatch(updates) {
     if (applyBatch(state, updates)) applyDerivedState();
+  },
+  onRecord(action) {
+    // Task A14b: only the audio owner records + uploads, so a camera shown on multiple
+    // screens produces a single clip. The recorder itself no-ops (with a warning) if no
+    // camera stream is active or MediaRecorder is unavailable.
+    if (!isAudioOwner) return;
+    if (action === "start") recorder.start();
+    else if (action === "stop") recorder.stop();
   },
 });
 

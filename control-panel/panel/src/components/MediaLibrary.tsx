@@ -19,12 +19,17 @@ export interface MediaLibraryProps {
   uploadUrl: string;
   onRename?: (id: string, name: string) => void;
   onRemove?: (id: string) => void;
+  /** Camera record-to-disk (task A14b): true while a recording is in progress. When set,
+   *  the record button lights and toggling it stops + saves the clip to this library. */
+  recording?: boolean;
+  onToggleRecord?: () => void;
 }
 
-/** The persistent media-library pane: upload (with progress) + a row per file. Uploads
- *  go over HTTP (not the WS protocol); the server broadcasts a `create` on success, so
- *  the list re-renders from shared state without this component tracking it locally. */
-export function MediaLibrary({ media, uploadUrl, onRename, onRemove }: MediaLibraryProps) {
+/** The persistent media-library pane: upload (with progress) + a record-from-camera toggle
+ *  + a row per file. Uploads go over HTTP (not the WS protocol); the server broadcasts a
+ *  `create` on success (including when a finished recording is uploaded by the render
+ *  client), so the list re-renders from shared state without this component tracking it. */
+export function MediaLibrary({ media, uploadUrl, onRename, onRemove, recording = false, onToggleRecord }: MediaLibraryProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +76,20 @@ export function MediaLibrary({ media, uploadUrl, onRename, onRemove }: MediaLibr
             if (progress === null) fileRef.current?.click();
           }}
         />
+        {onToggleRecord && (
+          <ToggleSquare
+            className="media-record-btn"
+            label={recording ? "■ Stop" : "● Rec"}
+            tone="live"
+            active={recording}
+            title={
+              recording
+                ? "Stop recording and save the clip to the library"
+                : "Record the live camera feed to the library (the render client with the camera captures it)"
+            }
+            onClick={onToggleRecord}
+          />
+        )}
       </div>
       {error && <div className="media-error mono">{error}</div>}
       {media.length === 0 ? (

@@ -47,6 +47,8 @@ async function upload(base, name, bytes) {
 
 for (const [name, kind, contentType] of [
   ["clip.mp4", "video", "video/mp4"],
+  // A14b: MediaRecorder camera captures upload as webm — accepted as an ordinary video.
+  ["camera-2026.webm", "video", "video/webm"],
   ["anim.gif", "gif", "image/gif"],
   ["still.jpg", "image", "image/jpeg"],
   ["photo.jpeg", "image", "image/jpeg"],

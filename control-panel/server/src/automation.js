@@ -279,6 +279,11 @@ export function createAutomationEngine({
       log(`[automation] timer "${timer.id}" fired at ${hhmm}`);
       if (timer.action === "recall") {
         if (!recallPreset(timer.presetId)) log(`[automation] timer "${timer.id}": preset "${timer.presetId}" missing`);
+      } else if (timer.action === "source") {
+        // A21c: recall a source-bank snapshot (VPT8's `pattrstorage sources`) — same call the
+        // `source` cue and the panel's Source snapshots use. Reuses `presetId` as the target id
+        // (a source-bank preset id), mirroring how the `source` CUE stores its target.
+        if (!recallSourceBankPreset(timer.presetId)) log(`[automation] timer "${timer.id}": source preset "${timer.presetId}" missing`);
       } else {
         cueGo();
       }

@@ -135,6 +135,15 @@ export class LayerStack {
     this.sourceBank.setMediaOrigin(origin);
   }
 
+  // First live camera MediaStream currently held by any layer or shared source-bank slot
+  // (task A14b — what the camera recorder captures). Returns null when no camera is active.
+  firstCameraStream() {
+    for (const entry of this.entries.values()) {
+      if (entry.stream && entry.stream.getVideoTracks?.().length) return entry.stream;
+    }
+    return this.sourceBank?.firstCameraStream?.() ?? null;
+  }
+
   setSourceContext(slots, media) {
     this.slots = slots ?? [];
     this.media = media ?? {};

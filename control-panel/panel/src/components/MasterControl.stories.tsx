@@ -11,13 +11,17 @@ export default meta;
 type Story = StoryObj<typeof MasterControl>;
 
 export const Full: Story = {
-  args: { master: 1, onChange: noop, onToggleBlackout: noop },
+  args: { master: 1, onChange: noop, onToggleBlackout: noop, blind: false, onToggleBlind: noop },
 };
 
 export const Dimmed: Story = {
-  args: { master: 0.4, onChange: noop, onToggleBlackout: noop },
+  args: { master: 0.4, onChange: noop, onToggleBlackout: noop, blind: false, onToggleBlind: noop },
 };
 
 export const Blackout: Story = {
-  args: { master: 0, onChange: noop, onToggleBlackout: noop },
+  args: { master: 0, onChange: noop, onToggleBlackout: noop, blind: false, onToggleBlind: noop },
+};
+
+export const Blind: Story = {
+  args: { master: 1, onChange: noop, onToggleBlackout: noop, blind: true, onToggleBlind: noop },
 };

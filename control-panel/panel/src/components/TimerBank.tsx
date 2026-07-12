@@ -7,15 +7,19 @@ import type { Timer, Preset } from "./types";
 export interface TimerBankProps {
   timers: Timer[];
   presets: Preset[];
+  /** Source-bank snapshots (A21c) — the `source` action recalls one of these. */
+  sourcePresets?: Preset[];
   onAdd?: () => void;
   onUpdate?: (id: string, field: string, value: unknown) => void;
   onRemove?: (id: string) => void;
 }
 
-/** Wall-clock triggers (VPT8's alarm-clock bank): at HH:MM, fire the cue list or cut
- *  to a preset. Fires at most once per matching minute while enabled. */
-export function TimerBank({ timers, presets, onAdd, onUpdate, onRemove }: TimerBankProps) {
+/** Wall-clock triggers (VPT8's alarm-clock bank): at HH:MM, fire the cue list, cut to a
+ *  scene preset, or recall a source-bank snapshot. Fires at most once per matching minute
+ *  while enabled. */
+export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate, onRemove }: TimerBankProps) {
   const presetOptions = presets.map((p) => ({ value: p.id, label: p.name }));
+  const sourceOptions = sourcePresets.map((p) => ({ value: p.id, label: p.name }));
 
   return (
     <div id="timer-bank">
@@ -43,6 +47,7 @@ export function TimerBank({ timers, presets, onAdd, onUpdate, onRemove }: TimerB
             options={[
               { value: "cueGo", label: "Cue GO" },
               { value: "recall", label: "Recall preset" },
+              { value: "source", label: "Recall sources" },
             ]}
             onChange={(v) => onUpdate?.(timer.id, "action", v)}
           />
@@ -50,6 +55,13 @@ export function TimerBank({ timers, presets, onAdd, onUpdate, onRemove }: TimerB
             <Select
               value={timer.presetId ?? ""}
               options={presetOptions.length ? presetOptions : [{ value: "", label: "(no presets)" }]}
+              onChange={(v) => onUpdate?.(timer.id, "presetId", v)}
+            />
+          )}
+          {timer.action === "source" && (
+            <Select
+              value={timer.presetId ?? ""}
+              options={sourceOptions.length ? sourceOptions : [{ value: "", label: "(no snapshots)" }]}
               onChange={(v) => onUpdate?.(timer.id, "presetId", v)}
             />
           )}

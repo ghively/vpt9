@@ -3,6 +3,11 @@
 // "the allowlist is a plain array in one place" non-goal note).
 export const MEDIA_TYPES = {
   mp4: { kind: "video", contentType: "video/mp4" },
+  // webm is accepted primarily so the camera recorder (task A14b) can upload what
+  // MediaRecorder produces — Chrome's MediaRecorder defaults to video/webm and only
+  // sometimes supports video/mp4. It's treated as an ordinary "video" everywhere (the
+  // render-client's mediaKindFromUrl already falls unknown extensions through to "video").
+  webm: { kind: "video", contentType: "video/webm" },
   gif: { kind: "gif", contentType: "image/gif" },
   jpg: { kind: "image", contentType: "image/jpeg" },
   jpeg: { kind: "image", contentType: "image/jpeg" },
@@ -11,7 +16,7 @@ export const MEDIA_TYPES = {
 // Filenames are ALWAYS server-generated (media-<token>.<ext>); validate before any fs
 // touch so a hand-crafted GET/DELETE can never walk out of MEDIA_DIR (defense in depth —
 // ids are server-generated, so this should never reject a legitimate request).
-export const SAFE_FILENAME = /^media-[A-Za-z0-9_-]+\.(mp4|gif|jpe?g)$/;
+export const SAFE_FILENAME = /^media-[A-Za-z0-9_-]+\.(mp4|webm|gif|jpe?g)$/;
 
 export function extOf(name) {
   const dot = String(name).lastIndexOf(".");

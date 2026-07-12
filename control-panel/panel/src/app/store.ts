@@ -11,6 +11,10 @@ export interface PanelState {
   audioOwnerScreenId: string | null;
   /** Master output dim (0 = blackout, 1 = full); mirrored by every render client. */
   master: number;
+  /** Blind / preview mode (task A20): when true the projector output freezes on its last
+   *  frame while compositing + the confidence-monitor preview keep running live. Like
+   *  `master`, never captured by preset snapshots. */
+  blind: boolean;
   automation: Automation;
   lfos: Record<string, Lfo>;
   /** Global tempo (BPM) for LFO tempo-sync (A19). */
@@ -39,6 +43,7 @@ export function emptyState(): PanelState {
     presets: {},
     audioOwnerScreenId: null,
     master: 1,
+    blind: false,
     automation: { cues: [], cursor: -1, running: false, timers: {} },
     lfos: {},
     tempoBpm: 120,

@@ -327,6 +327,70 @@ test("A17: an 'osc' cue with a bad address does not send", () => {
   engine.dispose();
 });
 
+// ── A21c: timer "source" action (recall a source-bank snapshot on a wall-clock trigger) ──
+
+const currentHhmm = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+async function pollUntil(pred, timeoutMs = 600) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (pred()) return true;
+    await wait(20);
+  }
+  return pred();
+}
+
+test("A21c: an enabled 'source' timer at the current minute recalls the named source-bank preset", async () => {
+  const { recalledSourceIds, recalledPresetIds, engine } = makeHarness({
+    sourceBankPresets: { "sbp-1": { id: "sbp-1", name: "look", slots: [] } },
+    automation: {
+      cues: [],
+      cursor: -1,
+      running: false,
+      timers: { "t-1": { id: "t-1", enabled: true, time: currentHhmm(), action: "source", presetId: "sbp-1" } },
+    },
+  });
+  // The 30 Hz tick fires the matching-minute timer within a few ticks.
+  assert.ok(await pollUntil(() => recalledSourceIds.length > 0), "source timer never fired");
+  assert.deepEqual(recalledSourceIds, ["sbp-1"]);
+  assert.deepEqual(recalledPresetIds, [], "a 'source' timer must not recall a scene preset");
+  engine.dispose();
+});
+
+test("A21c: a 'source' timer fires at most once per matching minute", async () => {
+  const { recalledSourceIds, engine } = makeHarness({
+    sourceBankPresets: { "sbp-1": { id: "sbp-1", name: "look", slots: [] } },
+    automation: {
+      cues: [],
+      cursor: -1,
+      running: false,
+      timers: { "t-1": { id: "t-1", enabled: true, time: currentHhmm(), action: "source", presetId: "sbp-1" } },
+    },
+  });
+  await pollUntil(() => recalledSourceIds.length > 0);
+  await wait(150); // several more ticks in the same minute
+  assert.deepEqual(recalledSourceIds, ["sbp-1"], "must not re-fire within the same minute");
+  engine.dispose();
+});
+
+test("A21c: a 'recall' timer still cuts to a scene preset (unchanged path)", async () => {
+  const { recalledPresetIds, recalledSourceIds, engine } = makeHarness({
+    presets: { "preset-1": { id: "preset-1", name: "P1", snapshot: { layers: {} } } },
+    automation: {
+      cues: [],
+      cursor: -1,
+      running: false,
+      timers: { "t-1": { id: "t-1", enabled: true, time: currentHhmm(), action: "recall", presetId: "preset-1" } },
+    },
+  });
+  assert.ok(await pollUntil(() => recalledPresetIds.length > 0), "recall timer never fired");
+  assert.deepEqual(recalledPresetIds, ["preset-1"]);
+  assert.deepEqual(recalledSourceIds, []);
+  engine.dispose();
+});
+
 // ── A19: LFO tempo-sync, mixers, phase, waveform invert ───────────────────────────────
 
 test("A19: syncNoteToRate derives Hz from a note division and the tempo", () => {

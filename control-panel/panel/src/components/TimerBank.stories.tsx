@@ -14,6 +14,7 @@ export const Default: Story = {
   args: {
     timers: sampleTimers,
     presets: samplePresets,
+    sourcePresets: samplePresets,
     onAdd: noop,
     onUpdate: noop,
     onRemove: noop,

@@ -237,6 +237,24 @@ export function App() {
     }
   }, [actions]);
 
+  // Task A20: toggle blind (preview) mode — freeze the projector, keep building off-air.
+  const toggleBlind = useCallback(() => {
+    actions.setBlind(!(stateRef.current.blind ?? false));
+  }, [actions]);
+
+  // Task A14b: camera record-to-disk. The render-client owning the camera stream does the
+  // actual MediaRecorder capture + upload; this only fires the relay trigger and tracks the
+  // button's lit state locally (there's no success round-trip — the new library item is the
+  // confirmation). Toggling off requests the stop+upload.
+  const [recording, setRecording] = useState(false);
+  const toggleRecord = useCallback(() => {
+    setRecording((on) => {
+      if (on) actions.recordStop();
+      else actions.recordStart();
+      return !on;
+    });
+  }, [actions]);
+
   // Task A2: copy/paste a layer's look. Recovered verbatim from the pre-deck-redesign
   // App.tsx (git show 2cd91e7) — copyLayer snapshots the four LOOK fields off the
   // source layer, pasteLayer writes each of them onto the target layer through the
@@ -298,7 +316,13 @@ export function App() {
       center={
         <div className="faceplate-center">
           <AudioOwner screens={screens} ownerId={state.audioOwnerScreenId} onSelect={actions.setAudioOwner} />
-          <MasterControl master={state.master ?? 1} onChange={actions.setMaster} onToggleBlackout={toggleBlackout} />
+          <MasterControl
+            master={state.master ?? 1}
+            onChange={actions.setMaster}
+            onToggleBlackout={toggleBlackout}
+            blind={state.blind ?? false}
+            onToggleBlind={toggleBlind}
+          />
         </div>
       }
       right={<StatusLamp state={status.state} label={status.label} />}
@@ -535,6 +559,7 @@ export function App() {
           <TimerBank
             timers={Object.values(automation.timers ?? {})}
             presets={presets}
+            sourcePresets={sourceBankPresets}
             onAdd={actions.addTimer}
             onUpdate={actions.updateTimer}
             onRemove={actions.removeTimer}
@@ -581,7 +606,14 @@ export function App() {
       break;
     case "media":
       activePanel = (
-        <MediaLibrary media={media} uploadUrl={`${httpBase}/api/media`} onRename={actions.renameMedia} onRemove={removeMedia} />
+        <MediaLibrary
+          media={media}
+          uploadUrl={`${httpBase}/api/media`}
+          onRename={actions.renameMedia}
+          onRemove={removeMedia}
+          recording={recording}
+          onToggleRecord={toggleRecord}
+        />
       );
       break;
     case "pip":

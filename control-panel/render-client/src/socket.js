@@ -2,7 +2,7 @@
 // control-plane restart without anyone walking over to reload the browser. The server
 // re-sends the full state snapshot on every (re)connect, so recovery needs no extra
 // sync protocol. Returns a handle whose send() silently drops while disconnected.
-export function connectControlPlane(url, { onState, onUpdate, onCreate, onDelete, onBatch, onStatus }) {
+export function connectControlPlane(url, { onState, onUpdate, onCreate, onDelete, onBatch, onStatus, onRecord }) {
   let socket = null;
   let attempts = 0;
 
@@ -34,6 +34,7 @@ export function connectControlPlane(url, { onState, onUpdate, onCreate, onDelete
       else if (message.type === "create") onCreate?.(message.path, message.key, message.value);
       else if (message.type === "delete") onDelete?.(message.path);
       else if (message.type === "batch") onBatch?.(message.updates);
+      else if (message.type === "record") onRecord?.(message.action);
     });
   }
 

@@ -278,7 +278,12 @@ export interface Timer {
   id: string;
   enabled: boolean;
   time: string;
-  action: "cueGo" | "recall";
+  /** cueGo = fire the cue list; recall = cut to a scene preset; source = recall a
+   *  source-bank snapshot (A21c). */
+  action: "cueGo" | "recall" | "source";
+  /** Target id: a scene preset id when action === "recall", or a source-bank preset id
+   *  when action === "source" (reused for both, mirroring how the `source` cue stores its
+   *  target — see Cue.presetId). Unused for "cueGo". */
   presetId?: string;
 }
 

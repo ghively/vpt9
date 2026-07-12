@@ -315,6 +315,15 @@ wss.on("connection", (socket) => {
       case "clipEnded":
         if (typeof message.layerId === "string") engine.clipEnded(message.layerId);
         return;
+      case "record":
+        // Camera record-to-disk trigger (task A14b): relay-only, never persisted — the
+        // render-client (audio owner) that actually holds the camera MediaStream records it
+        // and POSTs the finished clip to /api/media, exactly like the preview/transportStatus
+        // relays. Excludes the panel sender; every render client sees it and self-selects.
+        if (message.action === "start" || message.action === "stop") {
+          broadcast({ type: "record", action: message.action }, socket);
+        }
+        return;
       default:
         return;
     }

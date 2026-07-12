@@ -105,6 +105,15 @@ export class SourceBank {
     this.mediaOrigin = origin || "";
   }
 
+  // First live camera MediaStream held by any slot/mix input (task A14b — the camera
+  // recorder captures this when no layer directly sources a camera). Null if none active.
+  firstCameraStream() {
+    for (const entry of this.entries.values()) {
+      if (entry.stream && entry.stream.getVideoTracks?.().length) return entry.stream;
+    }
+    return null;
+  }
+
   _mediaEntry(slotId) {
     if (!this.entries.has(slotId)) {
       this.entries.set(slotId, {

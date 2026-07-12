@@ -181,6 +181,22 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     setMaster(value: number) {
       send({ type: "update", path: "master", value: Math.min(1, Math.max(0, value)) });
     },
+    // Blind / preview mode (task A20): freezes the projector on its last frame while
+    // compositing + the confidence preview keep running. A plain top-level leaf write.
+    setBlind(value: boolean) {
+      send({ type: "update", path: "blind", value: !!value });
+    },
+
+    // ── Camera record-to-disk (task A14b) ────────────────────────────────────
+    // Relay-only trigger (mirrors preview/transportStatus): the render-client that owns the
+    // camera stream records it and POSTs the clip to /api/media, where it appears as a new
+    // media-library item. Nothing here is persisted in state.
+    recordStart() {
+      send({ type: "record", action: "start" });
+    },
+    recordStop() {
+      send({ type: "record", action: "stop" });
+    },
 
     // ── Screens ──────────────────────────────────────────────────────────────
     addScreen() {

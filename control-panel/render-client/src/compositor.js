@@ -1,5 +1,6 @@
 import { LayerStack } from "./layers.js";
 import { ScreenWarp } from "./warp.js";
+import { createFramebuffer } from "./gl-utils.js";
 
 const INTERNAL_WIDTH = 1280;
 const INTERNAL_HEIGHT = 720;
@@ -24,6 +25,20 @@ export class Compositor {
     this.master = 1; // final-output dim; 0 = blackout
     this._mediaOrigin = "";
     this._contextLost = false;
+
+    // Blind / preview mode (task A20). When blind is ON the visible canvas FREEZES on the
+    // last committed frame while compositing keeps running (so capturePreview can still show
+    // the live off-air look). The freeze is implemented by snapshotting the composited scene
+    // + the warp/master in effect at the freeze instant into a held FBO, then re-warping THAT
+    // held scene to the canvas every frame — which reuses the exact live display path and so
+    // survives canvas resizes. `_liveScene` is the most-recent composited scene texture,
+    // needed by capturePreview because it runs on its own interval, outside the rAF loop.
+    this.blind = false;
+    this._heldFbo = null; // { framebuffer, texture, width, height } — the frozen scene copy
+    this._heldWarp = null; // warp cloned at freeze time (frozen projector never re-warps live)
+    this._heldMaster = 1; // master dim cloned at freeze time
+    this._blindNeedsSnapshot = false; // capture the held frame on the next rendered frame
+    this._liveScene = null; // latest composited scene texture (for the blind live preview)
     this.onContextRestored = null; // main.js wires this to replay the scene after a GPU reset
 
     // A GPU reset (driver hiccup, tab backgrounding, or the headless-Chromium GPU death
@@ -56,6 +71,12 @@ export class Compositor {
     this.layerStack.resize(INTERNAL_WIDTH, INTERNAL_HEIGHT);
     this.layerStack.setMediaOrigin(this._mediaOrigin);
     this.screenWarp = new ScreenWarp(this.gl);
+    // The held-frame FBO's GL handle died with the lost context. Drop it and, if we're still
+    // blind, re-snapshot from the freshly-composited scene on the next frame so the frozen
+    // projector recovers a valid frame instead of blitting a dead texture.
+    this._heldFbo = null;
+    this._liveScene = null;
+    this._blindNeedsSnapshot = this.blind;
   }
 
   _resize() {
@@ -101,6 +122,30 @@ export class Compositor {
     this.master = typeof master === "number" ? master : 1;
   }
 
+  // Task A20: enter/leave blind (preview) mode. On the false→true edge, arm a one-shot
+  // snapshot so the NEXT rendered frame freezes into the held FBO; while blind the canvas
+  // keeps showing that frozen frame. Leaving blind just resumes live drawing.
+  setBlind(blind) {
+    const next = !!blind;
+    if (next && !this.blind) this._blindNeedsSnapshot = true;
+    this.blind = next;
+  }
+
+  // Copies the just-composited `scene` (plus the warp/master in effect right now) into the
+  // held FBO — the frozen frame the projector holds while blind. Reuses ScreenWarp with an
+  // identity warp to blit scene→FBO so the held texture is uv-identical to a scene texture,
+  // meaning it re-displays through the normal warp path exactly like the live scene would.
+  _snapshotHeldFrame(scene) {
+    if (!this._heldFbo) this._heldFbo = createFramebuffer(this.gl, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    this.screenWarp.render(scene, null, INTERNAL_WIDTH, INTERNAL_HEIGHT, 1, {
+      framebuffer: this._heldFbo.framebuffer,
+      width: INTERNAL_WIDTH,
+      height: INTERNAL_HEIGHT,
+    });
+    this._heldWarp = this.warp ? structuredClone(this.warp) : null;
+    this._heldMaster = this.master;
+  }
+
   setMediaOrigin(origin) {
     this._mediaOrigin = origin;
     this.layerStack.setMediaOrigin(origin);
@@ -118,8 +163,23 @@ export class Compositor {
       // Contain per-frame errors: log at most once per ~2s and keep the loop alive.
       if (!this._contextLost) {
         try {
+          // Composite EVERY frame regardless of blind — the wall may be frozen, but the
+          // off-air look must keep evolving for the confidence-monitor preview.
           const scene = this.layerStack.render(this.layers);
-          this.screenWarp.render(scene, this.warp, this.canvas.width, this.canvas.height, this.master);
+          this._liveScene = scene;
+          if (this.blind) {
+            // Freeze the wall: snapshot on the freeze edge, then re-warp the held (frozen)
+            // scene to the canvas so it stays put and survives resize.
+            if (this._blindNeedsSnapshot) {
+              this._snapshotHeldFrame(scene);
+              this._blindNeedsSnapshot = false;
+            }
+            if (this._heldFbo) {
+              this.screenWarp.render(this._heldFbo.texture, this._heldWarp, this.canvas.width, this.canvas.height, this._heldMaster);
+            }
+          } else {
+            this.screenWarp.render(scene, this.warp, this.canvas.width, this.canvas.height, this.master);
+          }
         } catch (err) {
           const now = performance.now();
           if (!this._lastRenderErrAt || now - this._lastRenderErrAt > 2000) {
@@ -135,7 +195,26 @@ export class Compositor {
 
   // Downsamples the current canvas to a small JPEG data URL for the warp-editor's live
   // preview loop in the control panel — never the full-res output, see README.
+  //
+  // Blind mode (task A20): the visible canvas is FROZEN, but the confidence monitor must
+  // show the LIVE off-air look. So momentarily draw the live warped scene to the canvas,
+  // capture that, then restore the frozen frame — all synchronously within this call, so
+  // the browser can never paint the live frame to the display (it only composites at frame
+  // boundaries, and we've already redrawn the frozen frame before yielding). This reuses the
+  // proven, correctly-oriented drawImage path instead of a separate GL readback.
   capturePreview(maxWidth = 320) {
+    if (this.blind && this._liveScene) {
+      this.screenWarp.render(this._liveScene, this.warp, this.canvas.width, this.canvas.height, this.master);
+      const url = this._downsampleCanvas(maxWidth);
+      if (this._heldFbo) {
+        this.screenWarp.render(this._heldFbo.texture, this._heldWarp, this.canvas.width, this.canvas.height, this._heldMaster);
+      }
+      return url;
+    }
+    return this._downsampleCanvas(maxWidth);
+  }
+
+  _downsampleCanvas(maxWidth) {
     const scale = maxWidth / this.canvas.width;
     const width = Math.max(1, Math.round(this.canvas.width * scale));
     const height = Math.max(1, Math.round(this.canvas.height * scale));

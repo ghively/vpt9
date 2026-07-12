@@ -185,6 +185,14 @@ const DEFAULT_STATE = {
   // the house blackout around; only the operator (or an explicit LFO/OSC target) moves it.
   master: 1,
 
+  // Blind / preview mode (VPT8's master "blind", task A20): FREEZE the projector output on
+  // its last committed frame while compositing continues and the confidence-monitor preview
+  // keeps updating live — so the operator can build the NEXT look off-air. Distinct from
+  // `master`/blackout (which blacks the live output); this holds the wall on its last frame
+  // instead. Like `master`, deliberately NOT in PRESET_FIELDS — a preset recall or cue fade
+  // must never toggle blind. A plain boolean leaf, guarded in corruptsStructure.
+  blind: false,
+
   presets: {},
 
   // Uploaded media (mp4/gif/jpg), keyed by id like every other collection. Files live
@@ -277,6 +285,9 @@ export function ensureStateDefaults(state) {
     lfos: {},
     midiMap: {},
     master: 1,
+    // A20: backfill blind=false onto a state.json saved before blind existed, so the
+    // top-level leaf exists for applyUpdate to patch (it only ever writes an EXISTING leaf).
+    blind: false,
     media: {},
     tempoBpm: 120,
     oscOut: { enabled: false, host: "127.0.0.1", port: 9001 },
@@ -382,6 +393,10 @@ function corruptsStructure(keys, last, value) {
     // Global LFO tempo (task A19): the two-pass LFO tick divides by it — a null/scalar/NaN
     // would NaN every tempo-synced slot. Pin it to a finite positive number.
     if (last === "tempoBpm") return !(typeof value === "number" && Number.isFinite(value) && value > 0);
+    // Blind / preview mode (task A20): every render client reads it as a boolean each frame
+    // to decide whether to freeze the projector. Pin it to a boolean so a LAN client can't
+    // wedge a scalar/object into it (the render-client coerces, but keep the leaf honest).
+    if (last === "blind") return typeof value !== "boolean";
     return false;
   }
   if (keys.length === 1) {

@@ -43,12 +43,19 @@ html, body { height: 100%; }
   #master-control { display: flex; align-items: center; gap: var(--space-2); }
   #master-control input[type="range"] { width: 120px; }
   #master-control .master-val { font-size: 10px; width: 36px; text-align: right; color: var(--muted); }
-  #master-control .blackout-btn {
+  #master-control .blackout-btn,
+  #master-control .blind-btn {
     width: auto; padding: 0 10px; height: 24px;
     font-size: 9px; letter-spacing: 0.12em;
   }
   #master-control[data-blackout="true"] .label,
   #master-control[data-blackout="true"] .master-val { color: var(--live); }
+  /* BLIND (preview) is amber, distinct from BLACKOUT's live-red — it holds the wall, it
+     doesn't kill it. Active state floods the toggle with the caution tone. */
+  #master-control .blind-btn[data-active="true"] {
+    border-color: var(--warn); color: var(--warn); background: rgba(232, 178, 61, 0.16);
+  }
+  #master-control[data-blind="true"] .label { color: var(--warn); }
 
   /* Status readout — mono, with a lamp that tells the truth about the socket. */
   #status {
@@ -85,6 +92,9 @@ html, body { height: 100%; }
   #media-library h3::before { content: ""; width: 6px; height: 6px; background: var(--beam); flex-shrink: 0; }
   .media-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
   .media-head h3 { margin: 0; flex: 1; }
+  /* Record-from-camera toggle (task A14b): auto-width like the other faceplate buttons so
+     the "● Rec"/"■ Stop" label fits; its live-red active state comes from ToggleSquare. */
+  .media-record-btn { width: auto; padding: 0 10px; height: 24px; font-size: 9px; letter-spacing: 0.1em; }
   .media-file-input { display: none; }
   .media-error { font-size: 10px; color: var(--live); padding: 2px 0 6px; }
   .media-row { display: flex; align-items: center; gap: var(--space-2); padding: 4px 0; }
