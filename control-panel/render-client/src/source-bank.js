@@ -99,7 +99,10 @@ export class SourceBank {
 
   _mediaEntry(slotId) {
     if (!this.entries.has(slotId)) {
-      this.entries.set(slotId, { texture: createTexture(this.gl), videoEl: null, imgEl: null, currentUrl: null });
+      this.entries.set(slotId, {
+        texture: createTexture(this.gl), videoEl: null, imgEl: null, imgKind: null, imgUploaded: false,
+        currentUrl: null,
+      });
     }
     return this.entries.get(slotId);
   }
@@ -109,6 +112,14 @@ export class SourceBank {
   // media a/b inputs (keyed by `${slot.id}:a`/`${slot.id}:b`) — factored out so both
   // paths actually decode, fixing an earlier draft where only direct slot media was
   // wired and a mix's own media inputs sampled a never-uploaded (black) texture.
+  //
+  // Mirrors layers.js's setLayerSource()/_uploadSourceFrame() kind-branching: an
+  // <img> (gif/image) or a <video> element, picked by the media library item's own
+  // `kind` (a slot always references a mediaId, so the item's server-recorded kind is
+  // available directly here — layers.js instead sniffs mediaKindFromUrl(url) because a
+  // layer's direct `source` can also be an arbitrary external URL with no media-library
+  // entry). Previously this always built a <video>, so a jpg/gif's readyState never
+  // reached 2 and the slot rendered black forever.
   _decodeMediaInto(entryKey, mediaId, media) {
     const entry = this._mediaEntry(entryKey);
     const url = mediaUrlFor(mediaId, media, this.mediaOrigin);
@@ -116,22 +127,59 @@ export class SourceBank {
     if (entry.currentUrl !== url) {
       entry.currentUrl = url;
       if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); entry.videoEl = null; }
-      const el = document.createElement("video");
-      el.src = url;
-      el.crossOrigin = "anonymous";
-      el.loop = true;
-      el.muted = true; // shared slots never own audio directly — a layer/mix consuming one does, per the transport work in Task 14
-      el.playsInline = true;
-      el.play().catch(() => {});
-      entry.videoEl = el;
+      if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
+      entry.imgKind = null;
+      entry.imgUploaded = false;
+      const kind = media?.[mediaId]?.kind ?? "video";
+      if (kind === "video") {
+        const el = document.createElement("video");
+        el.src = url;
+        el.crossOrigin = "anonymous";
+        el.loop = true;
+        el.muted = true; // shared slots never own audio directly — a layer/mix consuming one does, per the transport work in Task 14
+        el.playsInline = true;
+        el.play().catch(() => {});
+        entry.videoEl = el;
+      } else {
+        // Still image (jpg) or animated gif: sample an <img> into the texture. As in
+        // layers.js's setLayerSource, the element is attached to the document
+        // (off-screen, invisible) rather than left detached — gif frame-advancement is
+        // tied to the element being part of the active render tree in some browser
+        // engines, unlike <video>, whose playback is well-defined even while detached.
+        const img = document.createElement("img");
+        img.crossOrigin = "anonymous";
+        img.style.cssText = "position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none;";
+        img.src = url;
+        document.body.appendChild(img);
+        entry.imgEl = img;
+        entry.imgKind = kind; // "gif" | "image"
+        entry.imgUploaded = false;
+      }
     }
-    if (entry.videoEl && entry.videoEl.readyState >= 2) {
-      const gl = this.gl;
-      gl.bindTexture(gl.TEXTURE_2D, entry.texture);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, entry.videoEl);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
+    if (entry.videoEl) this._uploadVideoFrame(entry);
+    else if (entry.imgEl) this._uploadImageFrame(entry);
+  }
+
+  _uploadVideoFrame(entry) {
+    if (entry.videoEl.readyState < 2) return;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, entry.videoEl);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  }
+
+  _uploadImageFrame(entry) {
+    const img = entry.imgEl;
+    if (!img.complete || img.naturalWidth === 0) return;
+    // Static image uploads once; gif re-uploads every frame to catch the current frame.
+    if (entry.imgKind === "image" && entry.imgUploaded) return;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    entry.imgUploaded = true;
   }
 
   // Decodes/uploads the current frame for every media-type slot AND every mix slot's
