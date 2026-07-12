@@ -1,5 +1,13 @@
 # VPT Modernization Roadmap
 
+> **⚠️ PARTIALLY SUPERSEDED (2026-07-12).** Two things below are now known to be inaccurate and are
+> pending a rewrite (Phase B task B3): (1) the panel UI has been rebuilt into a **"projection deck"**
+> (see `CLAUDE.md`'s Current State section) — this doc still describes the old two-column console;
+> (2) the **"full VPT8 parity reached" claim was overstated** — a 2026-07-12 adversarial audit
+> (`docs/VPT8-PARITY-GAPS.md`) found ~15 real gaps + a bug + a regression. **For the current live
+> status of what's done and what remains, read `docs/REMAINING-WORK.md`.** The historical record below
+> is kept for context.
+
 This is the current source of truth for what's built, what direction was chosen, and what work
 remains. It supersedes the earlier `docs/ROADMAP.md` (written 2026-07-04, first pass).
 `docs/TECH_DEBT.md` and `docs/CONTROL_PANEL_SPEC_AUDIT.md` remain as closed historical audit

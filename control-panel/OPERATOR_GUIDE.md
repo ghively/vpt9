@@ -1,5 +1,12 @@
 # Operator guide — running a show from the control panel
 
+> **⚠️ STALE — pending Phase B rewrite (task B2).** This guide describes the old two-column console.
+> The panel is now a **"projection deck"** (select a layer by clicking it on the live stage; drag its
+> warp corners / mask shape on the stage; edit it in the right-hand Warp·Mask·FX inspector; Presets/
+> Cues/Timers/LFO/MIDI/Media/PiP live in the bottom Show drawer; a screen selector + screen warp sit
+> in the command bar). Workflows below are conceptually right but the UI locations differ. See the
+> repo root's `docs/REMAINING-WORK.md`.
+
 This is for the person driving the show, not the person building the software. It
 assumes someone has already got the server, render client(s), and panel running (see
 [`README.md`](README.md) → "Running it") and you have the panel open in a browser

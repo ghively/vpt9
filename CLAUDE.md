@@ -2,6 +2,36 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⭐ CURRENT STATE — read this first (updated 2026-07-12)
+
+**The active project is `control-panel/`** — the browser-based Node/React/WebGL replacement for
+VPT8. The original **VPT8 Max/MSP source lives under `vpt8 source code/` and is now reference-only**
+(no code depends on it; it will be archived — see `docs/REMAINING-WORK.md` Phase C). Sections below
+about opening/editing Max patchers apply only to that archived source, not to day-to-day work.
+
+Recent milestones (all on `master`, pushed to origin):
+- **The panel UI was redesigned into a "projection deck"** — a dominant live-preview Stage where you
+  click a layer/object on the preview to select it, drag its warp corners / mask shape directly on
+  the stage, and edit it in a contextual `Warp·Mask·FX` inspector; compact LayerStack + SlotGrid
+  rails; a Show drawer (Presets/Cues/Timers/LFO/MIDI/Media/PiP); a screen selector; screen/projector
+  warp; and a mobile layout. (Design: `docs/superpowers/specs/2026-07-11-projection-deck-redesign-design.md`
+  + the interactive mockup `docs/superpowers/specs/2026-07-11-projection-deck-mockup.html`.)
+- **Server hardening / render-client & panel bug-fixes** from an earlier audit are in too.
+- **A rigorous VPT8→control-panel parity audit** (`docs/VPT8-PARITY-GAPS.md`) found the earlier
+  "full parity" claim was overstated: ~15 real gaps + minors + 1 bug + 1 regression. The user chose
+  to close **all** gaps.
+
+**To continue the work, read `docs/REMAINING-WORK.md`** — the live status. 4 tasks done (A1 slot-media
+bug, A2 copy/paste regression, A3 rotation, A4a polygon-mask shader); **24 tasks + 1 diagnostic
+remain** across Phase A (parity), B (docs), C (VPT8 divorce), D (real-world verification). The
+task-by-task specs are in `docs/superpowers/plans/2026-07-12-full-parity-finish-plan.md`; execute
+them with the `superpowers:subagent-driven-development` flow (fresh implementer + review per task).
+**Resume at A4-DIAG → A4b.** Progress ledger: `.superpowers/sdd/progress.md`.
+
+⚠️ `docs/ROADMAP.md`, `control-panel/README.md`, and `control-panel/OPERATOR_GUIDE.md` still describe
+the pre-redesign two-column UI and claim "full parity" — those rewrites are the pending Phase B tasks
+(B1–B3); trust `docs/REMAINING-WORK.md` + the plan over them until then.
+
 ## What this is
 
 This is the source code for **VPT (VideoProjectionTool) 8**, a free live video-projection/VJ

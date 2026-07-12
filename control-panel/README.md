@@ -1,5 +1,12 @@
 # VPT control panel — modernization scaffold
 
+> **⚠️ The panel UI description below is STALE (pending Phase B rewrite, task B1).** The panel was
+> rebuilt into a **"projection deck"** (dominant live stage, click-to-select on the preview, on-stage
+> warp/mask handles, a contextual Warp·Mask·FX inspector, LayerStack/SlotGrid rails, a Show drawer
+> incl. PiP, a screen selector, screen/projector warp, mobile layout). The two-column-console
+> description here predates that. For current status + what's left, see the repo root's
+> `docs/REMAINING-WORK.md`. The server/protocol/state-shape/build-run sections remain accurate.
+
 A browser-based, Docker-deployable replacement for the Max/MSP VPT8 application: it
 runs headless, projector outputs are fullscreen browsers, and warping/layer control
 happens from a separate control panel — including warping a screen you're not standing
