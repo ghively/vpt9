@@ -18,6 +18,7 @@ import {
   MasterControl,
   MediaLibrary,
   MidiMapPanel,
+  MobileTabBar,
   PresetsBar,
   ShowDrawer,
   SlotGrid,
@@ -26,6 +27,7 @@ import {
   StatusLamp,
   TimerBank,
   type ConnectionState,
+  type MobileTab,
   type ShowTab,
   type TargetOption,
 } from "../components";
@@ -34,6 +36,7 @@ import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type Pan
 import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
 import { useMidi } from "./useMidi";
+import { useIsMobile } from "./useIsMobile";
 import { createActions } from "./actions";
 import { useSelection } from "./useSelection";
 
@@ -90,6 +93,22 @@ export function App() {
   // is expanded. Collapsed by default so it doesn't compete with the deck above it.
   const [showTab, setShowTab] = useState<ShowTab>("presets");
   const [showDrawerOpen, setShowDrawerOpen] = useState(false);
+  // Mobile pass (Task 9): below the useIsMobile() breakpoint the 3-zone `.body` grid
+  // collapses to a single column with the Stage dominant at top; the left rail
+  // (Layers/Slots), Inspector, and Show drawer become bottom-sheet tabs picked by
+  // MobileTabBar instead of all being visible at once. `isMobile` also gates the DOM
+  // structure `.body` renders (see the return statement below) — deck.css's mobile
+  // overrides key off the `data-mobile` attribute that mirrors this same boolean, so the
+  // CSS and the actual rendered tree can never disagree about which layout is showing.
+  const isMobile = useIsMobile();
+  const [mobileTab, setMobileTab] = useState<MobileTab>("layers");
+  // Selecting the "Show" bottom tab also expands the Show drawer itself (it's collapsed
+  // by default — see above) so the operator sees its content immediately instead of just
+  // its collapsed tab strip on first tap.
+  const selectMobileTab = useCallback((tab: MobileTab) => {
+    setMobileTab(tab);
+    if (tab === "show") setShowDrawerOpen(true);
+  }, []);
   // Pre-blackout master level, restored by the blackout toggle.
   const preBlackoutRef = useRef(1);
   // Clip-transport scrub-position telemetry, keyed by layer id. Not `state` — this is
@@ -416,74 +435,113 @@ export function App() {
       break;
   }
 
+  // Task 9: the deck's four collapsible surfaces, hoisted into element variables so
+  // desktop and mobile can arrange the SAME components differently below — desktop packs
+  // layerStackEl/slotGridEl into one rail-l aside and shows all four at once; mobile
+  // renders exactly one of them at a time (picked by mobileTab) inside the bottom sheet,
+  // below the always-visible Stage. No component internals change between the two.
+  const layerStackEl = (
+    <LayerStack
+      layers={layersTopFirst}
+      selectedId={selection.selectedLayerId}
+      onSelect={selection.setSelectedLayerId}
+      onAddLayer={actions.addLayer}
+      onMoveLayer={actions.moveLayer}
+      onRemoveLayer={actions.removeLayer}
+    />
+  );
+  const slotGridEl = (
+    <SlotGrid
+      slots={state.sourceBank}
+      media={Object.values(state.media)}
+      onRename={actions.renameSourceBankSlot}
+      onSetContent={actions.setSourceBankSlotContent}
+    />
+  );
+  const stageEl = selectedScreenId && (
+    <Stage
+      ref={preview.warpMonitor}
+      screenId={selectedScreenId}
+      frame={preview.frameFor(selectedScreenId) ?? null}
+      width={1280}
+      height={720}
+      overlay={
+        selectedLayer ? (
+          <StageSelectionOverlay
+            layer={selectedLayer}
+            mode={selection.stageEditMode}
+            onWarpCorner={onWarpCorner}
+            onMask={onMask}
+            onDragStart={beginDrag}
+            onDragEnd={endDrag}
+          />
+        ) : null
+      }
+      hitLayers={hitLayers}
+      onBackgroundPointerDown={onBackgroundPointerDown}
+    />
+  );
+  const inspectorEl = (
+    <Inspector
+      layer={selectedLayer}
+      mode={selection.stageEditMode}
+      onModeChange={selection.setStageEditMode}
+      media={Object.values(state.media)}
+      sourceBank={state.sourceBank}
+      onUpdate={onInspectorUpdate}
+      onSetSourceMode={onInspectorSetSourceMode}
+      onSetPlaylist={onInspectorSetPlaylist}
+      onApplyCornerPreset={onInspectorApplyCornerPreset}
+      onSetWarpMode={onInspectorSetWarpMode}
+      onSetMeshSize={onInspectorSetMeshSize}
+      onResetWarp={onInspectorResetWarp}
+    />
+  );
+  const showDrawerEl = (
+    <ShowDrawer tab={showTab} onTab={setShowTab} open={showDrawerOpen} onToggle={() => setShowDrawerOpen((o) => !o)}>
+      {activePanel}
+    </ShowDrawer>
+  );
+
   return (
-    <div className="deck">
+    <div className="deck" data-mobile={isMobile}>
       {/* Faceplate already renders its own <header> (wordmark, AudioOwner, MasterControl
           w/ blackout, StatusLamp); a plain div carries the .cmd shell/grid-row styling so
           we don't nest <header> inside <header>. */}
       <div className="cmd">{faceplate}</div>
-      <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
-        <aside className="rail rail-l">
-          <LayerStack
-            layers={layersTopFirst}
-            selectedId={selection.selectedLayerId}
-            onSelect={selection.setSelectedLayerId}
-            onAddLayer={actions.addLayer}
-            onMoveLayer={actions.moveLayer}
-            onRemoveLayer={actions.removeLayer}
-          />
-          <SlotGrid
-            slots={state.sourceBank}
-            media={Object.values(state.media)}
-            onRename={actions.renameSourceBankSlot}
-            onSetContent={actions.setSourceBankSlotContent}
-          />
-        </aside>
-        <main className="stage-wrap">
-          {selectedScreenId && (
-            <Stage
-              ref={preview.warpMonitor}
-              screenId={selectedScreenId}
-              frame={preview.frameFor(selectedScreenId) ?? null}
-              width={1280}
-              height={720}
-              overlay={
-                selectedLayer ? (
-                  <StageSelectionOverlay
-                    layer={selectedLayer}
-                    mode={selection.stageEditMode}
-                    onWarpCorner={onWarpCorner}
-                    onMask={onMask}
-                    onDragStart={beginDrag}
-                    onDragEnd={endDrag}
-                  />
-                ) : null
-              }
-              hitLayers={hitLayers}
-              onBackgroundPointerDown={onBackgroundPointerDown}
-            />
-          )}
-        </main>
-        <aside className="rail rail-r insp">
-          <Inspector
-            layer={selectedLayer}
-            mode={selection.stageEditMode}
-            onModeChange={selection.setStageEditMode}
-            media={Object.values(state.media)}
-            sourceBank={state.sourceBank}
-            onUpdate={onInspectorUpdate}
-            onSetSourceMode={onInspectorSetSourceMode}
-            onSetPlaylist={onInspectorSetPlaylist}
-            onApplyCornerPreset={onInspectorApplyCornerPreset}
-            onSetWarpMode={onInspectorSetWarpMode}
-            onSetMeshSize={onInspectorSetMeshSize}
-            onResetWarp={onInspectorResetWarp}
-          />
-        </aside>
-      </div>
-      <ShowDrawer tab={showTab} onTab={setShowTab} open={showDrawerOpen} onToggle={() => setShowDrawerOpen((o) => !o)}>
-        {activePanel}
-      </ShowDrawer>
+      {isMobile ? (
+        <>
+          {/* Mobile: single column, Stage dominant at top (always visible regardless of
+              which bottom tab is active), the active tab's panel in a scrollable sheet
+              below it. `data-selected-layer` stays on `.body` (not just the desktop
+              variant) so deck-panel.spec.js's selection assertions keep working
+              unchanged if it's ever run at a narrow viewport. */}
+          <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
+            <main className="stage-wrap">{stageEl}</main>
+            <div className="sheet">
+              {mobileTab === "layers" && <aside className="rail rail-l">{layerStackEl}</aside>}
+              {mobileTab === "slots" && <aside className="rail rail-l">{slotGridEl}</aside>}
+              {mobileTab === "inspector" && <aside className="rail rail-r insp">{inspectorEl}</aside>}
+              {mobileTab === "show" && showDrawerEl}
+            </div>
+          </div>
+          <MobileTabBar active={mobileTab} onSelect={selectMobileTab} />
+        </>
+      ) : (
+        <>
+          {/* Desktop: UNCHANGED 3-zone body (left rail / stage / right inspector) + the
+              always-mounted Show drawer below it. */}
+          <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
+            <aside className="rail rail-l">
+              {layerStackEl}
+              {slotGridEl}
+            </aside>
+            <main className="stage-wrap">{stageEl}</main>
+            <aside className="rail rail-r insp">{inspectorEl}</aside>
+          </div>
+          {showDrawerEl}
+        </>
+      )}
     </div>
   );
 }

@@ -526,3 +526,84 @@
  * TimerBank/LfoRack/MidiMapPanel/MediaLibrary look unchanged, just relocated. */
 .show-drawer-body .sc-card { border: none; background: none; padding: 0; }
 
+/* ---------------- Mobile (Task 9) ----------------
+ * Below the useIsMobile() breakpoint (719px, see src/app/useIsMobile.ts) App.tsx renders
+ * a different `.body` composition: the Stage alone (always visible, dominant) plus a
+ * single active tab's panel in a `.sheet` below it, picked by MobileTabBar. These rules
+ * are gated on the `.deck[data-mobile="true"]` attribute App.tsx sets from the SAME
+ * `isMobile` boolean that drives that DOM choice — not a parallel width media query — so
+ * the CSS and the actual rendered tree can never disagree about which layout is active.
+ * The desktop 3-column `.body`/`.rail`/`.show-drawer` rules above are untouched; nothing
+ * here is reachable unless `data-mobile="true"`. */
+.deck[data-mobile="true"] .body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Stage: sized by `.deck-stage`'s own 16/9 aspect-ratio box, not stretched to fill the
+ * column — that's what keeps it a fixed, dominant, always-visible header rather than
+ * fighting the sheet below it for space. */
+.deck[data-mobile="true"] .stage-wrap {
+  flex: none;
+  padding: 10px 10px 6px;
+}
+/* The active tab's panel — LayerStack+SlotGrid's rail, the Inspector, or the Show
+ * drawer — takes the rest of the column and scrolls as one unit under the Stage. */
+.deck[data-mobile="true"] .sheet {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--hairline);
+  background: var(--panel);
+}
+/* The rail-l/rail-r seam borders exist to separate adjacent desktop columns; there's
+ * only ever one surface in the mobile sheet, so drop them. */
+.deck[data-mobile="true"] .sheet .rail-l,
+.deck[data-mobile="true"] .sheet .rail-r {
+  border: none;
+}
+/* The Show drawer's own top border/collapsed-height cap (`.show-drawer-body`'s 38vh)
+ * exist for its desktop placement as a bottom sheet BELOW the already-scrollable body —
+ * here it IS the sheet, so let it fill/scroll with the rest of `.sheet` instead of
+ * doubling the border or capping short of the available height. */
+.deck[data-mobile="true"] .sheet .show-drawer {
+  border-top: none;
+}
+.deck[data-mobile="true"] .sheet .show-drawer-body {
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Command bar: let the nameplate / audio-owner+master / status readout wrap onto extra
+ * lines instead of overflowing on narrow phone widths (desktop keeps the single-line
+ * flex row unchanged — `header`'s base rule in panel.css has no wrap). */
+.deck[data-mobile="true"] .cmd {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding: 8px 10px;
+}
+.deck[data-mobile="true"] .cmd > header {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+/* Drop the wordmark's " control" suffix first — cheapest width to reclaim before
+ * anything has to wrap. */
+.deck[data-mobile="true"] .wordmark .desc { display: none; }
+
+/* ── Touch: enlarge the deck's own interactive controls (not already covered by
+ * panel.css's `.toggle-sq`/`.handle`/`.mask-shape__edge`/`.pip-box__resize` rules, which
+ * WarpHandle/MaskShapeOverlay/ToggleSquare already inherit unchanged) to the --tap-min
+ * target under coarse pointers, regardless of viewport width — mouse users on a touch-
+ * capable device other than a phone still keep the compact desktop sizing. ── */
+@media (any-pointer: coarse) {
+  .layer-hit { min-height: var(--tap-min); }
+  .slot { min-height: var(--tap-min); }
+  .addbtn { min-height: var(--tap-min); }
+  .modes button,
+  .togglepill button { min-height: var(--tap-min); }
+  .show-drawer-tab,
+  .show-drawer-toggle { min-height: var(--tap-min); }
+  .subhead .rst { min-height: var(--tap-min); padding-left: 12px; padding-right: 12px; }
+}
+
