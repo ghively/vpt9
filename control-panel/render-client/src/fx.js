@@ -94,22 +94,81 @@ void main() {
 
 // Mask bake: same formula as layers.js's former maskAlpha(), moved here so masking
 // deforms along with per-layer warp (matching VPT8's vlayer order: mask, then mesh).
+//
+// Polygon shape (task A4a — VPT8 parity: code/pointmask01.js's free-form draggable
+// mask): points are normalized 0..1 content-UV vertices, uploaded as a fixed-size
+// uniform array with a separate live count (MASK_MAX_POINTS is a generous cap — the
+// on-canvas editor, task A4b, is expected to work with far fewer). Containment is a
+// standard even-odd ray-cast; the feather band reuses the SAME u_maskFeather knob as
+// rect/ellipse, measured as an actual distance (in uv units) to the nearest polygon
+// edge rather than a normalized 0..1 shape-space radius (there's no natural "radius"
+// for an arbitrary polygon) — a signed distance (negative inside) run through the
+// same smoothstep shape gives an equivalent soft edge.
+const MASK_MAX_POINTS = 32;
 const MASK_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_src;
 uniform bool u_maskEnabled;
-uniform int u_maskShape; // 0 = rect, 1 = ellipse
+uniform int u_maskShape; // 0 = rect, 1 = ellipse, 2 = polygon
 uniform vec2 u_maskCenter;
 uniform vec2 u_maskRadius;
 uniform float u_maskFeather;
+uniform vec2 u_maskPoints[${MASK_MAX_POINTS}];
+uniform int u_maskCount;
+uniform float u_maskInvert; // 0 = normal, 1 = inverted (mixed in below for every shape)
 out vec4 outColor;
+
+// Even-odd ray-cast point-in-polygon test over the first u_maskCount points (winding
+// order doesn't matter). A fixed-size loop with an early break at the live count —
+// standard practice for a small, dynamically-sized point set in GLSL ES 300.
+bool maskPolygonContains(vec2 p) {
+  bool inside = false;
+  for (int i = 0; i < ${MASK_MAX_POINTS}; i++) {
+    if (i >= u_maskCount) break;
+    int j = (i == 0) ? (u_maskCount - 1) : (i - 1);
+    vec2 pi = u_maskPoints[i];
+    vec2 pj = u_maskPoints[j];
+    if (((pi.y > p.y) != (pj.y > p.y)) &&
+        (p.x < (pj.x - pi.x) * (p.y - pi.y) / (pj.y - pi.y) + pi.x)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// Shortest distance from p to any polygon edge segment — the feather band's basis.
+float maskPolygonEdgeDist(vec2 p) {
+  float minDist = 1.0e6;
+  for (int i = 0; i < ${MASK_MAX_POINTS}; i++) {
+    if (i >= u_maskCount) break;
+    int j = (i == 0) ? (u_maskCount - 1) : (i - 1);
+    vec2 a = u_maskPoints[i];
+    vec2 b = u_maskPoints[j];
+    vec2 ab = b - a;
+    vec2 ap = p - a;
+    float t = clamp(dot(ap, ab) / max(dot(ab, ab), 1.0e-6), 0.0, 1.0);
+    minDist = min(minDist, length(ap - ab * t));
+  }
+  return minDist;
+}
+
 void main() {
   vec4 c = texture(u_src, v_uv);
   if (!u_maskEnabled) { outColor = c; return; }
-  vec2 d = (v_uv - u_maskCenter) / max(u_maskRadius, vec2(0.0001));
-  float dist = (u_maskShape == 1) ? length(d) : max(abs(d.x), abs(d.y));
-  float a = 1.0 - smoothstep(1.0 - u_maskFeather, 1.0, dist);
+  float a;
+  if (u_maskShape == 2) {
+    bool inside = maskPolygonContains(v_uv);
+    float edgeDist = maskPolygonEdgeDist(v_uv);
+    float signedDist = inside ? -edgeDist : edgeDist;
+    a = 1.0 - smoothstep(0.0, u_maskFeather, signedDist);
+  } else {
+    vec2 d = (v_uv - u_maskCenter) / max(u_maskRadius, vec2(0.0001));
+    float dist = (u_maskShape == 1) ? length(d) : max(abs(d.x), abs(d.y));
+    a = 1.0 - smoothstep(1.0 - u_maskFeather, 1.0, dist);
+  }
+  // invert: flips which side is visible, for every shape (VPT8's layermask.maxpat pattr inv).
+  a = mix(a, 1.0 - a, u_maskInvert);
   outColor = vec4(c.rgb, c.a * a);
 }`;
 
@@ -186,10 +245,16 @@ export class FxPasses {
       feedback: Object.fromEntries(
         ["u_src", "u_prev", "u_amount"].map((name) => [name, gl.getUniformLocation(this.feedback, name)])
       ),
-      mask: Object.fromEntries(
-        ["u_src", "u_maskEnabled", "u_maskShape", "u_maskCenter", "u_maskRadius", "u_maskFeather"]
-          .map((name) => [name, gl.getUniformLocation(this.mask, name)])
-      ),
+      mask: {
+        ...Object.fromEntries(
+          ["u_src", "u_maskEnabled", "u_maskShape", "u_maskCenter", "u_maskRadius", "u_maskFeather", "u_maskCount", "u_maskInvert"]
+            .map((name) => [name, gl.getUniformLocation(this.mask, name)])
+        ),
+        // Array uniforms: query the first element explicitly ("name[0]") — the portable
+        // form across WebGL implementations, vs. relying on the bare array name resolving
+        // to index 0. gl.uniform2fv from this location fills consecutive array slots.
+        u_maskPoints: gl.getUniformLocation(this.mask, "u_maskPoints[0]"),
+      },
     };
   }
 }
@@ -301,10 +366,22 @@ export class FxChain {
     gl.bindTexture(gl.TEXTURE_2D, srcTexture);
     gl.uniform1i(u.u_src, 0);
     gl.uniform1i(u.u_maskEnabled, mask?.enabled ? 1 : 0);
-    gl.uniform1i(u.u_maskShape, mask?.shape === "rect" ? 0 : 1);
+    gl.uniform1i(u.u_maskShape, mask?.shape === "rect" ? 0 : mask?.shape === "polygon" ? 2 : 1);
     gl.uniform2f(u.u_maskCenter, mask?.cx ?? 0.5, mask?.cy ?? 0.5);
     gl.uniform2f(u.u_maskRadius, mask?.rx ?? 0.5, mask?.ry ?? 0.5);
     gl.uniform1f(u.u_maskFeather, mask?.feather ?? 0.05);
+    gl.uniform1f(u.u_maskInvert, mask?.invert ? 1 : 0);
+    const points = Array.isArray(mask?.points) ? mask.points : [];
+    const count = Math.min(points.length, MASK_MAX_POINTS);
+    gl.uniform1i(u.u_maskCount, count);
+    if (count > 0) {
+      const flat = new Float32Array(count * 2);
+      for (let i = 0; i < count; i++) {
+        flat[i * 2] = points[i].x;
+        flat[i * 2 + 1] = points[i].y;
+      }
+      gl.uniform2fv(u.u_maskPoints, flat);
+    }
     if (!this.maskFbo) this.maskFbo = createFramebuffer(gl, this.width, this.height);
     this._draw(this.passes.mask, this.maskFbo);
     return this.maskFbo.texture;

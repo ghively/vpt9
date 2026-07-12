@@ -14,6 +14,7 @@ import {
   defaultFx,
   defaultWarp,
   defaultTransport,
+  defaultMask,
   loadState,
   saveState,
 } from "../src/state.js";
@@ -259,4 +260,45 @@ test("ensureLayerDefaults backfills rotation/anchor/non-uniform-zoom onto an fx 
   assert.equal(layer.fx.zoomY, 1);
   // The old value on the pre-existing field must survive the backfill untouched.
   assert.equal(layer.fx.zoom, 1.5);
+});
+
+test("defaultMask is a rect/ellipse-shaped mask with empty points and invert off", () => {
+  const mask = defaultMask();
+  assert.equal(mask.shape, "ellipse");
+  assert.deepEqual(mask.points, []);
+  assert.equal(mask.invert, false);
+});
+
+test("ensureLayerDefaults backfills mask on a layer missing it entirely", () => {
+  const layer = { id: "layer-1", order: 1, fx: defaultFx(), warp: defaultWarp() };
+  ensureLayerDefaults(layer);
+  assert.deepEqual(layer.mask, defaultMask());
+});
+
+test("ensureLayerDefaults backfills points/invert onto a mask saved before polygon-mask support existed, without touching its existing fields", () => {
+  const layer = {
+    id: "layer-1", order: 1, fx: defaultFx(), warp: defaultWarp(),
+    mask: { enabled: true, shape: "rect", cx: 0.5, cy: 0.5, rx: 0.3, ry: 0.3, feather: 0.1 },
+  };
+  ensureLayerDefaults(layer);
+  assert.deepEqual(layer.mask.points, []);
+  assert.equal(layer.mask.invert, false);
+  // Pre-existing fields must survive the backfill untouched.
+  assert.equal(layer.mask.enabled, true);
+  assert.equal(layer.mask.shape, "rect");
+  assert.equal(layer.mask.cx, 0.5);
+  assert.equal(layer.mask.rx, 0.3);
+  assert.equal(layer.mask.feather, 0.1);
+});
+
+test("applyUpdate accepts a polygon mask.shape and mask.points on a freshly created layer", () => {
+  const state = sampleState();
+  ensureLayerDefaults(state.layers["layer-1"]);
+  const points = [{ x: 0.3, y: 0.3 }, { x: 0.7, y: 0.3 }, { x: 0.5, y: 0.7 }];
+  assert.equal(applyUpdate(state, "layers.layer-1.mask.shape", "polygon"), true);
+  assert.equal(applyUpdate(state, "layers.layer-1.mask.points", points), true);
+  assert.equal(applyUpdate(state, "layers.layer-1.mask.invert", true), true);
+  assert.equal(state.layers["layer-1"].mask.shape, "polygon");
+  assert.deepEqual(state.layers["layer-1"].mask.points, points);
+  assert.equal(state.layers["layer-1"].mask.invert, true);
 });

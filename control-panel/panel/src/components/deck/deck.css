@@ -483,6 +483,10 @@
 .mini .label { color: var(--muted); font-size: 9px; }
 .mini .val { font-family: var(--font-mono); font-size: 10px; color: var(--text); }
 
+/* Inline note in a contextual body (e.g. mask -> polygon shape: no center/radius,
+ * vertices are edited on the stage instead — task A4b). */
+.mask-note { margin: 0; color: var(--muted-dim); font-size: 10px; line-height: 1.4; }
+
 /* Small pill segmented toggle (mask enable, mask shape, warp corner/mesh mode). */
 .togglepill { display: inline-flex; border: 1px solid var(--hairline); border-radius: 20px; overflow: hidden; }
 .togglepill button {

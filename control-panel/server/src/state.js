@@ -58,6 +58,18 @@ export function defaultFx() {
   };
 }
 
+// Per-layer mask defaults — rect/ellipse cover VPT8's `layermask.maxpat` shape/inv
+// vocabulary; `polygon` (task A4a) adds the free-form-vertex shape from
+// `code/pointmask01.js`. `points` is only meaningful when shape === "polygon" (an
+// empty array for rect/ellipse — populated by the on-canvas polygon editor, task
+// A4b); `invert` mirrors `layermask.maxpat`'s `pattr inv` and applies to every shape.
+// Both are included here (not left `undefined`) so a freshly-created layer's mask
+// object already OWNS these keys — applyUpdate only ever patches an existing leaf,
+// so a later "mask.points"/"mask.invert" WS update would silently no-op otherwise.
+export function defaultMask() {
+  return { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08, points: [], invert: false };
+}
+
 export function defaultWarp() {
   return {
     mode: "corner",
@@ -82,7 +94,7 @@ const DEFAULT_STATE = {
       source: { type: "video", url: "/media/sample.mp4" },
       opacity: 0.82,
       blendMode: "screen",
-      mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
+      mask: defaultMask(),
       fx: defaultFx(),
       warp: defaultWarp(),
       transport: defaultTransport(),
@@ -96,7 +108,7 @@ const DEFAULT_STATE = {
       source: { type: "color", color: [0.35, 0.16, 0.55] },
       opacity: 0.46,
       blendMode: "multiply",
-      mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
+      mask: defaultMask(),
       fx: defaultFx(),
       warp: defaultWarp(),
       transport: defaultTransport(),
@@ -186,6 +198,7 @@ function fillMissing(target, defaults) {
 
 export function ensureLayerDefaults(layer) {
   fillMissing(layer, {
+    mask: defaultMask(),
     fx: defaultFx(),
     warp: defaultWarp(),
     transport: defaultTransport(),

@@ -39,12 +39,22 @@ export interface MediaItem {
 
 export interface Mask {
   enabled: boolean;
-  shape: "rect" | "ellipse";
+  shape: "rect" | "ellipse" | "polygon";
   cx: number;
   cy: number;
   rx: number;
   ry: number;
   feather: number;
+  /** Polygon vertices, normalized 0..1 in content-UV space. Only meaningful when
+   *  `shape === "polygon"` — vertex order/winding doesn't matter (the render-client
+   *  does a standard even-odd ray-cast point-in-polygon test). Absent/empty for
+   *  rect/ellipse masks. Edited on the stage by the polygon vertex editor (task A4b);
+   *  this task (A4a) only wires the shape + shader + inspector invert control. */
+  points?: Point[];
+  /** Flips which side of the mask shape is visible for ALL shapes: false (default) =
+   *  inside visible, true = outside visible. Mirrors VPT8's `layermask.maxpat`
+   *  `pattr inv`. */
+  invert?: boolean;
 }
 
 /** Per-layer effects chain — mirrors vlayer.maxpat's stage order (flip → tile → zoom/pan

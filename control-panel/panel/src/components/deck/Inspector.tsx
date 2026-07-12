@@ -296,12 +296,19 @@ function WarpBody({
   );
 }
 
-/** Mask contextual body: enable toggle, shape toggle, feather fader, and a live
- *  read-only center/radius readout (dragged on the stage, same rationale as WarpBody).
- *  Enable/shape/feather write via `updateLayer(id, "mask.<k>", v)` — the same path
- *  FxDrawer's own MASK_SLIDERS and LayerStrip's mask ToggleSquares already use. */
+/** Mask contextual body: enable toggle, shape toggle (rect/ellipse/polygon), invert
+ *  toggle, feather fader, and — for rect/ellipse only — a live read-only center/radius
+ *  readout (dragged on the stage, same rationale as WarpBody). Enable/shape/feather/
+ *  invert write via `updateLayer(id, "mask.<k>", v)` — the same path FxDrawer's own
+ *  MASK_SLIDERS and LayerStrip's mask ToggleSquares already use.
+ *
+ *  Polygon (task A4a — VPT8 parity: code/pointmask01.js's free-form draggable mask +
+ *  layermask.maxpat's `pattr inv`) has no cx/cy/rx/ry: its vertices (`mask.points`)
+ *  are set programmatically here and will get an on-canvas drag editor in task A4b —
+ *  this body only shows a note in their place, no point-editor. */
 function MaskBody({ layer, onUpdate }: { layer: Layer; onUpdate?: (field: string, value: unknown) => void }) {
   const mask = layer.mask;
+  const isPolygon = mask.shape === "polygon";
   return (
     <>
       <div className="subhead">Mask shape</div>
@@ -322,9 +329,21 @@ function MaskBody({ layer, onUpdate }: { layer: Layer; onUpdate?: (field: string
           options={[
             { value: "ellipse", label: "Ellipse" },
             { value: "rect", label: "Rect" },
+            { value: "polygon", label: "Polygon" },
           ]}
           value={mask.shape}
           onChange={(v) => onUpdate?.("mask.shape", v)}
+        />
+      </div>
+      <div className="mini">
+        <span className="label">Invert</span>
+        <TogglePill
+          options={[
+            { value: "on", label: "On" },
+            { value: "off", label: "Off" },
+          ]}
+          value={mask.invert ? "on" : "off"}
+          onChange={(v) => onUpdate?.("mask.invert", v === "on")}
         />
       </div>
       <div className="field">
@@ -334,20 +353,24 @@ function MaskBody({ layer, onUpdate }: { layer: Layer; onUpdate?: (field: string
           <span className="mono">{mask.feather.toFixed(2)}</span>
         </div>
       </div>
-      <div className="coords">
-        <div className="coord">
-          <span className="t">CENTER</span>
-          <span className="v mono">
-            {mask.cx.toFixed(2)} · {mask.cy.toFixed(2)}
-          </span>
+      {isPolygon ? (
+        <p className="mask-note">Polygon vertices are edited on the stage (coming soon) — center/radius don&apos;t apply to this shape.</p>
+      ) : (
+        <div className="coords">
+          <div className="coord">
+            <span className="t">CENTER</span>
+            <span className="v mono">
+              {mask.cx.toFixed(2)} · {mask.cy.toFixed(2)}
+            </span>
+          </div>
+          <div className="coord">
+            <span className="t">RADIUS</span>
+            <span className="v mono">
+              {mask.rx.toFixed(2)} · {mask.ry.toFixed(2)}
+            </span>
+          </div>
         </div>
-        <div className="coord">
-          <span className="t">RADIUS</span>
-          <span className="v mono">
-            {mask.rx.toFixed(2)} · {mask.ry.toFixed(2)}
-          </span>
-        </div>
-      </div>
+      )}
     </>
   );
 }
