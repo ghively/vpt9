@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 
-/** The six secondary show-control panels, unmounted from the flat layout (Task 1) and
- *  relocated here (Task 8). Order matches the tab strip left-to-right. */
-export type ShowTab = "presets" | "cues" | "timers" | "lfo" | "midi" | "media";
+/** The secondary show-control panels, unmounted from the flat layout (Task 1) and
+ *  relocated here (Task 8). Order matches the tab strip left-to-right. "pip" (Task 13)
+ *  restores the PiP (picture-in-picture) window manager that Task 1 dropped entirely. */
+export type ShowTab = "presets" | "cues" | "timers" | "lfo" | "midi" | "media" | "pip";
 
 const SHOW_DRAWER_TABS: Array<[ShowTab, string]> = [
   ["presets", "Presets"],
@@ -11,6 +12,7 @@ const SHOW_DRAWER_TABS: Array<[ShowTab, string]> = [
   ["lfo", "LFO"],
   ["midi", "MIDI"],
   ["media", "Media"],
+  ["pip", "PiP"],
 ];
 
 export interface ShowDrawerProps {
@@ -26,8 +28,9 @@ export interface ShowDrawerProps {
 }
 
 /** Collapsible bottom sheet spanning the deck body's width: a tab strip
- *  (Presets · Cues · Timers · LFO · MIDI · Media) that's one tap away, not permanently
- *  cluttering the 3-zone deck (LayerStack/SlotGrid rails, Stage, Inspector) above it.
+ *  (Presets · Cues · Timers · LFO · MIDI · Media · PiP) that's one tap away, not
+ *  permanently cluttering the 3-zone deck (LayerStack/SlotGrid rails, Stage, Inspector)
+ *  above it.
  *  Picking a tab while collapsed opens the drawer to that tab; the toggle button
  *  collapses/expands independently of which tab is selected. */
 export function ShowDrawer({ tab, onTab, open, onToggle, children }: ShowDrawerProps) {

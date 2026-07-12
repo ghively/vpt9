@@ -19,6 +19,7 @@ import {
   MediaLibrary,
   MidiMapPanel,
   MobileTabBar,
+  PipWindows,
   PresetsBar,
   ScreenSelect,
   ShowDrawer,
@@ -222,6 +223,12 @@ export function App() {
   const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
   const media = Object.values(state.media ?? {});
   const targetOptions = buildTargetOptions(state);
+  // Task 13: PiP (picture-in-picture cast) windows for the currently selected screen —
+  // recovered verbatim from the pre-Task-1 App.tsx (git show 3dcc100), where these fed a
+  // permanently-mounted <PipWindows> next to WarpEditor in the screen aside. `sid` mirrors
+  // that original's `selectedScreenId ?? ""` fallback so screenId/onAddPip never see null.
+  const pips = Object.values(state.pip ?? {}).filter((p) => p.screenId === selectedScreenId);
+  const sid = selectedScreenId ?? "";
 
   const faceplate = (
     <Faceplate
@@ -487,6 +494,30 @@ export function App() {
     case "media":
       activePanel = (
         <MediaLibrary media={media} uploadUrl={`${httpBase}/api/media`} onRename={actions.renameMedia} onRemove={removeMedia} />
+      );
+      break;
+    case "pip":
+      // Task 13: PiP windows, dropped entirely by Task 1 and restored here. Same
+      // component, same props/callbacks as the pre-Task-1 App.tsx (git show 3dcc100) —
+      // only its home changed, from a permanently-mounted <aside> next to WarpEditor to
+      // this Show-drawer tab. `preview.pipMonitor` (usePreviewBus) is still the ref that
+      // receives pushed frames for the confidence monitor, same as before.
+      activePanel = (
+        <section className="sc-card">
+          <PipWindows
+            ref={preview.pipMonitor}
+            screenId={sid}
+            pips={pips}
+            previewFrame={preview.frameFor(selectedScreenId)}
+            onDragStart={beginDrag}
+            onDragEnd={endDrag}
+            onUpdatePip={actions.updatePip}
+            onMovePip={actions.movePip}
+            onResizePip={actions.resizePip}
+            onRemovePip={actions.removePip}
+            onAddPip={() => actions.addPip(sid)}
+          />
+        </section>
       );
       break;
   }

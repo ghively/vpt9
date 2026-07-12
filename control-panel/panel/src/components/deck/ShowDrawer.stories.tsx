@@ -5,6 +5,7 @@ import { CueList } from "../CueList";
 import { LfoRack } from "../LfoRack";
 import { MediaLibrary } from "../MediaLibrary";
 import { MidiMapPanel } from "../MidiMapPanel";
+import { PipWindows } from "../PipWindows";
 import { PresetsBar } from "../PresetsBar";
 import { TimerBank } from "../TimerBank";
 import {
@@ -13,6 +14,7 @@ import {
   sampleLfos,
   sampleMedia,
   sampleMidiMappings,
+  samplePips,
   samplePresets,
   sampleTargetOptions,
   sampleTimers,
@@ -66,6 +68,21 @@ const PANEL_BY_TAB: Record<ShowTab, ReactNode> = {
     </section>
   ),
   media: <MediaLibrary media={sampleMedia} uploadUrl="http://localhost:8080/api/media" onRename={noop} onRemove={noop} />,
+  pip: (
+    <section className="sc-card">
+      <PipWindows
+        screenId="screen-1"
+        pips={samplePips}
+        onUpdatePip={noop}
+        onMovePip={noop}
+        onResizePip={noop}
+        onRemovePip={noop}
+        onAddPip={noop}
+        onDragStart={noop}
+        onDragEnd={noop}
+      />
+    </section>
+  ),
 };
 
 export const Collapsed: Story = {
@@ -94,6 +111,10 @@ export const MidiTab: Story = {
 
 export const MediaTab: Story = {
   args: { tab: "media", open: true, onTab: noop, onToggle: noop, children: PANEL_BY_TAB.media },
+};
+
+export const PipTab: Story = {
+  args: { tab: "pip", open: true, onTab: noop, onToggle: noop, children: PANEL_BY_TAB.pip },
 };
 
 /** Fully interactive: click a tab (opens the drawer to it if collapsed) or the Show
