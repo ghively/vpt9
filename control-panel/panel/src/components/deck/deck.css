@@ -291,3 +291,32 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* Task 6: StageSelectionOverlay — the currently selected layer's warp/mask/fx editing
+ * chrome, drawn directly on the stage (ported from the mockup's #overlay .sel-label /
+ * fx bounding box; the warp corner/mesh handles and mask shape themselves reuse
+ * WarpHandle/MaskShapeOverlay's own styling, so only the label and fx box need rules
+ * here). Positioned in the same normalized 0..1 basis as .deck-hover-outline. */
+.sel-label {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  z-index: 6;
+  padding: 3px 8px;
+  background: rgba(20, 16, 10, .9);
+  border: 1px solid var(--beam-line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  color: var(--beam);
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.fx-bbox {
+  position: absolute;
+  z-index: 4;
+  border: 1px solid var(--beam-line);
+  border-radius: 2px;
+  pointer-events: none;
+}
+

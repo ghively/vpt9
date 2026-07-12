@@ -11,6 +11,10 @@ export interface WarpHandleProps {
   cornerTag?: string;
   /** Revealed on hover/drag (mesh mode: R2·C3). */
   coordTag?: string;
+  /** Extra class(es) appended after the always-present "handle deck-handle" pair — e.g.
+   *  the deck's StageSelectionOverlay (Task 6) adds a per-corner "tl"/"tr"/"br"/"bl" tag
+   *  so the e2e drag test can target a specific corner. */
+  className?: string;
   /** Fired on pointer-down so a tap can select the point for exact entry. */
   onSelect?: () => void;
   onDragStart?: () => void;
@@ -19,8 +23,13 @@ export interface WarpHandleProps {
 }
 
 /** A tungsten registration reticle. Positions itself imperatively during a drag so the
- *  container can suppress re-renders mid-gesture without the handle appearing to freeze. */
-export function WarpHandle({ x, y, active = false, selected = false, cornerTag, coordTag, onSelect, onDragStart, onDragTo, onDragEnd }: WarpHandleProps) {
+ *  container can suppress re-renders mid-gesture without the handle appearing to freeze.
+ *
+ *  Always carries "deck-handle" (in addition to "handle") — the deck Stage (Task 6) uses
+ *  that marker to make background clicks/hover-outline ignore drag handles; carrying it
+ *  unconditionally is a no-op everywhere else (WarpEditor's rail-side monitor doesn't
+ *  look for it). */
+export function WarpHandle({ x, y, active = false, selected = false, cornerTag, coordTag, className, onSelect, onDragStart, onDragTo, onDragEnd }: WarpHandleProps) {
   const ref = useRef<HTMLDivElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +71,7 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
   return (
     <div
       ref={ref}
-      className="handle"
+      className={["handle", "deck-handle", className].filter(Boolean).join(" ")}
       data-active={active}
       data-selected={selected}
       style={{ left: `${x * 100}%`, top: `${y * 100}%` }}

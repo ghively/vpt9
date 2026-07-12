@@ -123,3 +123,75 @@ test("clicking a layer's region on the stage selects it", async ({ page }) => {
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await expect(selectedLayer()).not.toHaveAttribute("data-selected-layer");
 });
+
+test("dragging a corner handle on the stage sends the layer's own warp update", async ({ page }) => {
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+
+  // A fresh, full-frame layer on top of the two demo layers (order: 100 — same
+  // "outrank the seed layers" pattern layer-warp.spec.js uses) so a click anywhere on
+  // the stage unambiguously selects it, with an identity corner-pin warp so the TL
+  // handle starts at a known {x:0,y:0}.
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      id: "layer-drag",
+      name: "drag test",
+      order: 100,
+      source: { type: "color", color: [0.2, 0.2, 0.2] },
+      opacity: 1,
+      blendMode: "normal",
+      mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
+      fx: null,
+      warp: {
+        mode: "corner",
+        corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+        mesh: { size: 4, points: [] },
+      },
+    },
+  });
+  socket.close();
+
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+
+  const stage = page.locator(".deck-stage");
+  await expect(stage).toBeVisible();
+  const box = await stage.boundingBox();
+
+  // Select the new layer by clicking its (full-frame) region on the stage. Warp is the
+  // default stageEditMode (see src/app/useSelection.ts), so selecting it should render
+  // its corner-pin handles directly on the stage — including ".deck-handle.tl", the
+  // handle for corners[0] (TL), sitting right at the stage's top-left corner since
+  // corners[0] = {x:0,y:0}.
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-drag");
+  await expect(page.locator(".deck-handle.tl")).toBeVisible();
+
+  const readCorners = async () => {
+    const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+    return state.layers["layer-drag"].warp.corners;
+  };
+  const before = await readCorners();
+  expect(before[0]).toEqual({ x: 0, y: 0 });
+
+  // Drag the TL handle a few pixels — a real pointerdown/move/up sequence so
+  // WarpHandle's setPointerCapture-based drag (the same machinery WarpEditor's rail-
+  // side corner drag uses) actually engages. Grab a few px in from the handle's own
+  // center: the handle is centered exactly ON corners[0] = {x:0,y:0} (the stage's own
+  // top-left pixel), so its dead-center sits right on `.deck-stage`'s `overflow:
+  // hidden` clip edge, where hit-testing the exact boundary pixel is unreliable —
+  // (box.x+3, box.y+3) is still well inside the handle's 16px circle but unambiguously
+  // inside the clipped/visible region. Once captured, WarpHandle drives the corner
+  // straight off the absolute cursor position (not the grab offset), so this doesn't
+  // change where the drag ends up.
+  await page.mouse.move(box.x + 3, box.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 20, { steps: 5 });
+  await page.mouse.up();
+
+  // Poll (rather than a fixed sleep) until the server-side state reflects the drag —
+  // proves the drag emitted a real "layers.layer-drag.warp.corners.0" update over the
+  // socket and the server applied it, not just a local-only DOM change.
+  await expect.poll(async () => (await readCorners())[0]).not.toEqual({ x: 0, y: 0 });
+});

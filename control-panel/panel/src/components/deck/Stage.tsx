@@ -77,8 +77,13 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
 
   // Faint hover outline so objects on the stage read as clickable before the operator
   // commits to a click — hit-tests the same normalized 0..1 point (against this same
-  // box) that App's click handler uses, just locally and read-only.
+  // box) that App's click handler uses, just locally and read-only. Mirrors
+  // handlePointerDown's `.deck-handle` guard: without it, hovering a Task 6 drag handle
+  // would paint a hover outline underneath it (the handle sits above whatever layer's
+  // quad it belongs to, so that outline would be redundant at best, confusing at worst).
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest(".deck-handle")) { setHoverQuad(null); return; }
     if (!hitLayers?.length) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const p = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };

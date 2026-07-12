@@ -68,12 +68,15 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     <>
       <div ref={featherRef} className="mask-shape__feather" style={style(mask.feather)} aria-hidden="true" />
       <div ref={shapeRef} className="mask-shape" style={style(0)}>
+        {/* "deck-handle" (alongside each element's own class) is a no-op outside the deck
+         *  Stage (Task 6) — that's the only place a background-click/hover-outline handler
+         *  looks for it, to keep it from firing underneath a drag handle. */}
         <div
-          className="mask-shape__body"
+          className="mask-shape__body deck-handle"
           onPointerDown={(e) => startDrag(e, (nx, ny) => { geom.current.cx = nx; geom.current.cy = ny; onChange?.({ cx: nx, cy: ny }); })}
         />
         <div
-          className="mask-shape__edge mask-shape__edge--right"
+          className="mask-shape__edge mask-shape__edge--right deck-handle"
           // Signed delta (not Math.abs): once the pointer crosses back over cx, this clamps
           // at clampR's 0.02 floor instead of growing again — Math.abs would make the two
           // sides of center symmetric, so dragging the right handle past cx would mirror
@@ -81,7 +84,7 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
           onPointerDown={(e) => startDrag(e, (nx) => { const rx = clampR(nx - geom.current.cx); geom.current.rx = rx; onChange?.({ rx }); })}
         />
         <div
-          className="mask-shape__edge mask-shape__edge--bottom"
+          className="mask-shape__edge mask-shape__edge--bottom deck-handle"
           onPointerDown={(e) => startDrag(e, (_nx, ny) => { const ry = clampR(ny - geom.current.cy); geom.current.ry = ry; onChange?.({ ry }); })}
         />
       </div>

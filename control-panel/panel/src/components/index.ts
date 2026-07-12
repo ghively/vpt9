@@ -34,6 +34,8 @@ export { SlotGrid } from "./deck/SlotGrid";
 export type { SlotGridProps } from "./deck/SlotGrid";
 export { Stage } from "./deck/Stage";
 export type { StageProps } from "./deck/Stage";
+export { StageSelectionOverlay } from "./deck/StageSelectionOverlay";
+export type { StageSelectionOverlayProps, StageEditMode } from "./deck/StageSelectionOverlay";
 export { ConfidenceMonitor } from "./ConfidenceMonitor";
 export type { ConfidenceMonitorProps, ConfidenceMonitorHandle } from "./ConfidenceMonitor";
 export { WarpEditor } from "./WarpEditor";

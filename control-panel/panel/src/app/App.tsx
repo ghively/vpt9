@@ -6,6 +6,7 @@ import {
   MasterControl,
   SlotGrid,
   Stage,
+  StageSelectionOverlay,
   StatusLamp,
   type ConnectionState,
 } from "../components";
@@ -155,6 +156,33 @@ export function App() {
   // there'd be nothing stable to key a memo off; this is a cheap map over a handful of
   // layers, not worth the added complexity.
   const hitLayers = layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }));
+  const selectedLayer = layersTopFirst.find((l) => l.id === selection.selectedLayerId) ?? null;
+
+  // Task 6: on-stage warp/mask handles (StageSelectionOverlay) drag imperatively via
+  // WarpHandle/MaskShapeOverlay's own pointer machinery, the same way the rail-side
+  // WarpEditor's handles do — suppress store-driven re-renders for the gesture's
+  // duration (the isDraggingRef guard `rerender` already checks above) so a
+  // server-echoed update never yanks a handle out from under an in-flight drag, then
+  // force one on drag-end to reconcile with whatever the server actually applied.
+  const beginDrag = useCallback(() => { isDraggingRef.current = true; }, []);
+  const endDrag = useCallback(() => { isDraggingRef.current = false; forceRender(); }, []);
+
+  // Maps StageSelectionOverlay's narrow callbacks onto the SAME layer-warp/mask
+  // actions WarpEditor already uses (`moveLayerWarpPoint` / `updateLayer("mask.*")`) —
+  // no new update paths, just a new UI surface (the stage) driving the existing ones.
+  const onWarpCorner = useCallback(
+    (index: number, x: number, y: number) => {
+      if (selectedLayer) actions.moveLayerWarpPoint(selectedLayer.id, index, x, y);
+    },
+    [actions, selectedLayer],
+  );
+  const onMask = useCallback(
+    (patch: Partial<{ cx: number; cy: number; rx: number; ry: number }>) => {
+      if (!selectedLayer) return;
+      for (const [k, v] of Object.entries(patch)) actions.updateLayer(selectedLayer.id, `mask.${k}`, v);
+    },
+    [actions, selectedLayer],
+  );
 
   return (
     <div className="deck">
@@ -187,7 +215,18 @@ export function App() {
               frame={preview.frameFor(selectedScreenId) ?? null}
               width={1280}
               height={720}
-              overlay={null /* Task 6 fills this with warp/mask handles */}
+              overlay={
+                selectedLayer ? (
+                  <StageSelectionOverlay
+                    layer={selectedLayer}
+                    mode={selection.stageEditMode}
+                    onWarpCorner={onWarpCorner}
+                    onMask={onMask}
+                    onDragStart={beginDrag}
+                    onDragEnd={endDrag}
+                  />
+                ) : null
+              }
               hitLayers={hitLayers}
               onBackgroundPointerDown={onBackgroundPointerDown}
             />
