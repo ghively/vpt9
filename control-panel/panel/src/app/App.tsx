@@ -4,6 +4,7 @@ import {
   Faceplate,
   LayerStack,
   MasterControl,
+  SlotGrid,
   StatusLamp,
   type ConnectionState,
 } from "../components";
@@ -150,8 +151,12 @@ export function App() {
             onMoveLayer={actions.moveLayer}
             onRemoveLayer={actions.removeLayer}
           />
-          {/* <SlotGrid/> lands here in Task 3 */}
-          <div className="sec-head label">Source bank</div>
+          <SlotGrid
+            slots={state.sourceBank}
+            media={Object.values(state.media)}
+            onRename={actions.renameSourceBankSlot}
+            onSetContent={actions.setSourceBankSlotContent}
+          />
         </aside>
         <main className="stage-wrap">{/* <Stage/> lands here in Task 4 */}</main>
         <aside className="rail rail-r insp">{/* <Inspector/> lands here in Task 7 */}</aside>

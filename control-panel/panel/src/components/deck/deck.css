@@ -145,3 +145,40 @@
   transition: border-color .12s, color .12s;
 }
 .addbtn:hover { border-color: var(--beam-line); color: var(--beam); }
+
+/* ---------------- slot grid ---------------- */
+/* Follows the layer stack's addbtn without an explicit spacer element (mirrors the
+ * mockup's inline margin-top on the second .sec-head). */
+.addbtn + .sec-head { margin-top: 6px; }
+
+.slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 0 10px 12px; }
+.slot {
+  aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: flex-end;
+  padding: 6px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel-sunken);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .12s;
+}
+.slot:hover { border-color: var(--muted-dim); }
+.slot .n { font-family: var(--font-mono); font-size: 9px; color: var(--muted-dim); letter-spacing: .1em; }
+.slot[data-filled="true"] { border-color: var(--cool-line); }
+.slot[data-filled="true"] .n { color: var(--cool); }
+.slot[data-editing="true"] { border-color: var(--beam-line); background: #22201c; }
+
+/* Inline per-slot editor (SourceBankSlotEditor, shared with the full-width
+ * SourceBankPanel) revealed below the grid when a cell is clicked. Its `.media-row`
+ * controls are laid out for SourceBankPanel's much wider card, so wrap them here rather
+ * than letting them overflow the 232px rail — layout-only, no write-path change. */
+.slot-editor-inline {
+  margin: 0 10px 10px;
+  padding: 8px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+}
+.slot-editor-inline .media-row { flex-wrap: wrap; }
