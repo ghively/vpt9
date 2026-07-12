@@ -12,6 +12,11 @@
  *   --ink, --panel, --beam, --beam-line, --cool  -> unchanged (already real tokens)
  */
 
+:root {
+  /* warm tungsten-tinted selected/editing surface */
+  --deck-selected-surface: #22201c;
+}
+
 /* ---------------- shell ---------------- */
 .deck {
   height: 100vh;
@@ -90,7 +95,7 @@
   transition: border-color .12s, background .12s;
 }
 .layer-hit:hover { border-color: var(--muted-dim); }
-.layer-hit[aria-selected="true"] { border-color: var(--beam-line); background: #22201c; }
+.layer-hit[aria-selected="true"] { border-color: var(--beam-line); background: var(--deck-selected-surface); }
 .layer-hit[aria-selected="true"]::before {
   content: "";
   position: absolute;
@@ -149,7 +154,7 @@
 /* ---------------- slot grid ---------------- */
 /* Follows the layer stack's addbtn without an explicit spacer element (mirrors the
  * mockup's inline margin-top on the second .sec-head). */
-.addbtn + .sec-head { margin-top: 6px; }
+.rail-l .addbtn + .sec-head { margin-top: 6px; }
 
 .slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 0 10px 12px; }
 .slot {
@@ -168,7 +173,7 @@
 .slot .n { font-family: var(--font-mono); font-size: 9px; color: var(--muted-dim); letter-spacing: .1em; }
 .slot[data-filled="true"] { border-color: var(--cool-line); }
 .slot[data-filled="true"] .n { color: var(--cool); }
-.slot[data-editing="true"] { border-color: var(--beam-line); background: #22201c; }
+.slot[data-editing="true"] { border-color: var(--beam-line); background: var(--deck-selected-surface); }
 
 /* Inline per-slot editor (SourceBankSlotEditor, shared with the full-width
  * SourceBankPanel) revealed below the grid when a cell is clicked. Its `.media-row`

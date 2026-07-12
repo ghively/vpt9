@@ -22,7 +22,10 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
   const content = slot.content;
   if (!content) return null;
   if (content.type === "mix") return "MIX";
-  return media.find((m) => m.id === content.mediaId)?.name ?? "Media";
+  // A media slot only counts as filled once its mediaId resolves to a real library
+  // item — an empty mediaId, or one pointing at deleted/not-yet-loaded media, must
+  // render as an empty slot rather than a fake "Media" label (see Fix 1).
+  return media.find((m) => m.id === content.mediaId)?.name ?? null;
 }
 
 /** Compact left-rail source-bank grid: the 8 slots as a tight 2-col grid (vs.
@@ -56,7 +59,7 @@ export function SlotGrid({ slots, media = [], onRename, onSetContent, onEditSlot
               className="slot"
               data-filled={summary != null}
               data-editing={isEditing}
-              aria-pressed={isEditing}
+              aria-expanded={isEditing}
               onClick={() => handleClick(i)}
             >
               <span className="n">{summary ?? `SLOT ${i + 1}`}</span>
