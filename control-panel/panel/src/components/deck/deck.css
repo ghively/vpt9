@@ -366,6 +366,15 @@
  * The mockup's own `.select`/`.fader` div mockups are NOT ported — the real Select/Fader
  * primitives (native <select>/<input type=range>) are already themed globally in
  * tokens/base.css, so Inspector.tsx uses those directly instead of redrawing them. */
+/* Layer/Screen edit-target toggle (Task 12) — always the first thing in the Inspector,
+ * above .insp-head, regardless of which target is active. Same .togglepill shape the
+ * warp corner/mesh toggle uses. */
+.insp-target {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline-soft);
+  flex: none;
+}
+
 .insp-head {
   padding: 14px 14px 10px;
   border-bottom: 1px solid var(--hairline-soft);
@@ -375,6 +384,9 @@
 .insp-swatch { flex: none; width: 20px; height: 20px; border-radius: 2px; border: 1px solid var(--hairline); }
 .insp-title .nm { flex: 1; min-width: 0; font-size: 15px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .insp-title .ix { flex: none; font-family: var(--font-mono); font-size: 10px; color: var(--beam); }
+/* Screen name field (Task 12) — same slot .nm occupies for a layer's name, but
+ * editable (renameScreen), so it's an input rather than a static span. */
+.insp-title .screen-name-input { flex: 1; min-width: 0; font-size: 13px; }
 .insp-sub {
   margin-top: 5px;
   font-family: var(--font-mono);

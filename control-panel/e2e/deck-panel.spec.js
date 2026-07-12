@@ -197,3 +197,50 @@ test("dragging a corner handle on the stage sends the layer's own warp update", 
   // socket and the server applied it, not just a local-only DOM change.
   await expect.poll(async () => (await readCorners())[0]).not.toEqual({ x: 0, y: 0 });
 });
+
+test("switching to Screen edit target and dragging a corner handle sends the SCREEN's own warp update", async ({ page }) => {
+  // Task 12: screen-level (projector) warp editing on the stage. server/src/state.js
+  // seeds "screen-1" with an identity corner-pin warp, and App's onState handler
+  // auto-selects the first screen id as soon as the snapshot arrives — so screen-1 is
+  // the active screen here with no setup needed, same as the layer-warp test's reliance
+  // on the seeded demo layers above.
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+
+  const stage = page.locator(".deck-stage");
+  await expect(stage).toBeVisible();
+  const box = await stage.boundingBox();
+
+  // useSelection.ts defaults editTarget to "layer" — flip the Inspector's Layer/Screen
+  // toggle (scoped to ".insp-target" so this can't collide with any other togglepill,
+  // e.g. the warp corner/mesh toggle which also renders a pill in the same panel).
+  const targetToggle = page.locator(".insp-target");
+  await expect(targetToggle).toBeVisible();
+  await targetToggle.getByRole("button", { name: "Screen", exact: true }).click();
+
+  // Selecting screen mode should render the ACTIVE SCREEN's corner-pin handles
+  // directly on the stage — no layer overlay — including ".deck-handle.tl", the handle
+  // for corners[0] (TL), sitting right at the stage's top-left corner since screen-1's
+  // corners[0] = {x:0,y:0} (its identity default, untouched by the earlier tests in
+  // this file — they only ever write layers.*.warp, never screens.*.warp).
+  await expect(page.locator(".deck-handle.tl")).toBeVisible();
+
+  const readScreenCorners = async () => {
+    const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+    return state.screens["screen-1"].warp.corners;
+  };
+  const before = await readScreenCorners();
+  expect(before[0]).toEqual({ x: 0, y: 0 });
+
+  // Same real pointerdown/move/up drag as the layer-warp test — same WarpHandle
+  // machinery, just now wired (via StageSelectionOverlay's screen-mode path) to
+  // actions.moveWarpPoint(screenId, ...) instead of moveLayerWarpPoint.
+  await page.mouse.move(box.x + 3, box.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 20, { steps: 5 });
+  await page.mouse.up();
+
+  // Poll until the server-side state reflects the drag — proves the drag emitted a real
+  // "screens.screen-1.warp.corners.0" update over the socket (the EXISTING screen warp
+  // action/path — no new WS message type), not just a local-only DOM change.
+  await expect.poll(async () => (await readScreenCorners())[0]).not.toEqual({ x: 0, y: 0 });
+});

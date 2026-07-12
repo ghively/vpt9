@@ -4,7 +4,7 @@ import { Fader } from "../primitives/Fader";
 import { TextField } from "../primitives/TextField";
 import { FxDrawer } from "../FxDrawer";
 import { rgbToHex } from "../color";
-import { BLEND_MODES, type Layer, type MediaItem, type PlaylistItem, type SourceBankSlot } from "../types";
+import { BLEND_MODES, type Layer, type MediaItem, type PlaylistItem, type Screen, type SourceBankSlot, type Warp } from "../types";
 
 /** Which stage-editing mode the segment (and, via `onModeChange`, the Stage's
  *  StageSelectionOverlay — Task 6) is showing for the selected layer. Mirrors
@@ -14,9 +14,26 @@ import { BLEND_MODES, type Layer, type MediaItem, type PlaylistItem, type Source
  *  a 3-string union). The three must be kept in sync by hand. */
 export type EditMode = "warp" | "mask" | "fx";
 
+/** Which object the Inspector is editing (Task 12): the selected LAYER (unchanged) or
+ *  the active SCREEN's projector warp. Mirrors `src/app/useSelection.ts`'s
+ *  `EditTarget` / `StageSelectionOverlay`'s `StageEditTarget` — redeclared here for the
+ *  same decoupling reason as `EditMode` above. */
+export type EditTarget = "layer" | "screen";
+
 export interface InspectorProps {
-  /** The selected layer, or `null` when nothing is selected (empty state). */
+  /** "layer" (default, pre-Task-12 behavior below) or "screen" (Task 12: show the
+   *  active screen's warp controls instead). */
+  editTarget: EditTarget;
+  /** Fired when the Layer/Screen toggle at the top is clicked. The container binds
+   *  this to the SAME `selection.editTarget` setter that drives StageSelectionOverlay,
+   *  so one click swaps both the inspector body and which handles show on the stage. */
+  onSetEditTarget: (target: EditTarget) => void;
+  /** The selected layer, or `null` when nothing is selected (empty state). Read when
+   *  editTarget === "layer". */
   layer: Layer | null;
+  /** The active screen, or `null`/undefined before the first screen snapshot arrives.
+   *  Read when editTarget === "screen" (Task 12). */
+  screen?: Screen | null;
   mode: EditMode;
   /** Fired when the Warp/Mask/FX segment is clicked. The container binds this to the
    *  SAME `selection.stageEditMode` setter that drives StageSelectionOverlay, so one
@@ -45,6 +62,15 @@ export interface InspectorProps {
   onSetWarpMode?: (mode: "corner" | "mesh") => void;
   onSetMeshSize?: (size: number) => void;
   onResetWarp?: () => void;
+  /** Screen warp controls (Task 12) — the EXISTING screen warp actions
+   *  (`setWarpMode`/`setMeshSize`/`resetWarp`/`renameScreen`) WarpEditor used to call
+   *  for its default (non-layer) target, now driven from here instead. Same shape as
+   *  the layer-warp callbacks above, just scoped to the active screen; per-corner drag
+   *  itself happens on the stage (StageSelectionOverlay's screen-warp handles). */
+  onRenameScreen?: (name: string) => void;
+  onSetScreenWarpMode?: (mode: "corner" | "mesh") => void;
+  onSetScreenMeshSize?: (size: number) => void;
+  onResetScreenWarp?: () => void;
 }
 
 function sourceSummary(source: Layer["source"]): string {
@@ -205,19 +231,21 @@ const MESH_SIZES = [3, 4, 6, 8].map((n) => ({ value: String(n), label: `${n}×${
 /** Warp contextual body: corner/mesh mode toggle, mesh size, reset, and a live
  *  READ-ONLY coordinate readout (the actual drag interaction lives on the stage —
  *  Task 6's StageSelectionOverlay — so this panel only mirrors the resulting numbers,
- *  the same way the mockup's `.coords` grid does). */
+ *  the same way the mockup's `.coords` grid does). Takes a bare `Warp` (Task 12)
+ *  rather than a `Layer` so the exact same body serves both a layer's own warp and the
+ *  active screen's projector warp — the caller supplies whichever `warp` + action
+ *  callbacks belong to its target. */
 function WarpBody({
-  layer,
+  warp,
   onSetWarpMode,
   onSetMeshSize,
   onResetWarp,
 }: {
-  layer: Layer;
+  warp: Warp | undefined;
   onSetWarpMode?: (mode: "corner" | "mesh") => void;
   onSetMeshSize?: (size: number) => void;
   onResetWarp?: () => void;
 }) {
-  const warp = layer.warp;
   const isMesh = warp?.mode === "mesh";
   const size = warp?.mesh?.size ?? 4;
   const points = isMesh ? (warp?.mesh?.points ?? []) : (warp?.corners ?? []);
@@ -311,19 +339,44 @@ function MaskBody({ layer, onUpdate }: { layer: Layer; onUpdate?: (field: string
   );
 }
 
-/** The contextual right-rail Inspector (Task 7): shows ONLY the selected layer's
- *  controls — header (swatch/name/index/source line), the common Source/Opacity/Blend
- *  fields every layer has, the Warp · Mask · FX segment, and a body that swaps with the
- *  segment. The segment's `onModeChange` is bound (by the container) to the SAME
- *  `selection.stageEditMode` state that drives StageSelectionOverlay, so switching it
- *  swaps both the inspector body and which handles show on the stage at once.
+/** The Layer/Screen toggle (Task 12) shown at the top of the Inspector regardless of
+ *  which target is active — lets the operator switch between editing the selected
+ *  layer's own warp/mask/fx and the active screen's projector warp. */
+function TargetSegment({ target, onChange }: { target: EditTarget; onChange: (target: EditTarget) => void }) {
+  return (
+    <div className="insp-target">
+      <TogglePill
+        options={[
+          { value: "layer", label: "Layer" },
+          { value: "screen", label: "Screen" },
+        ]}
+        value={target}
+        onChange={(v) => onChange(v as EditTarget)}
+      />
+    </div>
+  );
+}
+
+/** The contextual right-rail Inspector (Task 7; Task 12 adds the screen-warp target):
+ *  shows the selected LAYER's controls — header (swatch/name/index/source line), the
+ *  common Source/Opacity/Blend fields every layer has, the Warp · Mask · FX segment,
+ *  and a body that swaps with the segment — OR, when `editTarget === "screen"`, the
+ *  active SCREEN's warp controls (name, corner/mesh mode, mesh size, reset, coord
+ *  readout). The layer segment's `onModeChange` is bound (by the container) to the
+ *  SAME `selection.stageEditMode` state that drives StageSelectionOverlay, so
+ *  switching it swaps both the inspector body and which handles show on the stage at
+ *  once; `onSetEditTarget` does the analogous thing for `selection.editTarget`.
  *
  *  Presentational/decoupled: no `src/app/` import. Every write goes out through a narrow
  *  callback prop, the same "container maps callback -> real action" pattern
  *  StageSelectionOverlay and ChannelRack/LayerStrip already use — App.tsx wires these to
- *  `actions.updateLayer` / the layer-warp actions unchanged, no new WS message types. */
+ *  `actions.updateLayer` / the layer-warp actions / the SCREEN warp actions unchanged,
+ *  no new WS message types. */
 export function Inspector({
+  editTarget,
+  onSetEditTarget,
   layer,
+  screen,
   mode,
   onModeChange,
   media,
@@ -335,12 +388,56 @@ export function Inspector({
   onSetWarpMode,
   onSetMeshSize,
   onResetWarp,
+  onRenameScreen,
+  onSetScreenWarpMode,
+  onSetScreenMeshSize,
+  onResetScreenWarp,
 }: InspectorProps) {
+  const targetSegment = <TargetSegment target={editTarget} onChange={onSetEditTarget} />;
+
+  if (editTarget === "screen") {
+    if (!screen) {
+      return (
+        <>
+          {targetSegment}
+          <div className="insp-empty">
+            <span className="mono">Select a screen</span>
+          </div>
+        </>
+      );
+    }
+    return (
+      <>
+        {targetSegment}
+        <div className="insp-head">
+          <div className="insp-title">
+            <TextField
+              className="screen-name-input"
+              value={screen.name ?? ""}
+              placeholder="Screen name"
+              onCommit={(v) => onRenameScreen?.(v)}
+            />
+            <span className="ix mono">{screen.id}</span>
+          </div>
+          <div className="insp-sub mono">Projector warp · composited output</div>
+        </div>
+        <div className="insp-body">
+          <div className="ctx">
+            <WarpBody warp={screen.warp} onSetWarpMode={onSetScreenWarpMode} onSetMeshSize={onSetScreenMeshSize} onResetWarp={onResetScreenWarp} />
+          </div>
+        </div>
+      </>
+    );
+  }
+
   if (!layer) {
     return (
-      <div className="insp-empty">
-        <span className="mono">Select a layer</span>
-      </div>
+      <>
+        {targetSegment}
+        <div className="insp-empty">
+          <span className="mono">Select a layer</span>
+        </div>
+      </>
     );
   }
 
@@ -350,6 +447,7 @@ export function Inspector({
 
   return (
     <>
+      {targetSegment}
       <div className="insp-head">
         <div className="insp-title">
           <span className="insp-swatch" style={{ background: swatchBg }} />
@@ -387,7 +485,7 @@ export function Inspector({
 
         <div className="ctx">
           {mode === "warp" && (
-            <WarpBody layer={layer} onSetWarpMode={onSetWarpMode} onSetMeshSize={onSetMeshSize} onResetWarp={onResetWarp} />
+            <WarpBody warp={layer.warp} onSetWarpMode={onSetWarpMode} onSetMeshSize={onSetMeshSize} onResetWarp={onResetWarp} />
           )}
           {mode === "mask" && <MaskBody layer={layer} onUpdate={onUpdate} />}
           {mode === "fx" && (

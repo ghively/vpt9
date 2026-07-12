@@ -272,8 +272,17 @@ export function App() {
   // against the stage's own box so it lines up with the same 0..1 space the overlay
   // (Task 6) and Stage's hover outline use. Clicking empty space (no quad contains the
   // point) deselects.
+  //
+  // Task 12: while editTarget === "screen" the stage is showing the ACTIVE SCREEN's
+  // warp handles, not any layer's — a background click (i.e. one that misses every
+  // .deck-handle, see Stage's own handlePointerDown guard) must not silently reassign
+  // the hidden layer selection underneath the operator while they're lining up a
+  // projector corner. Documented choice: ignore background clicks entirely in screen
+  // mode, rather than switching back to layer mode on a layer hit — a stray click
+  // switching targets mid-drag would be more surprising than a no-op.
   const onBackgroundPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (selection.editTarget === "screen") return;
       const rect = e.currentTarget.getBoundingClientRect();
       const p = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
       const topFirst = Object.values(stateRef.current.layers).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
@@ -283,9 +292,12 @@ export function App() {
   );
   // Not memoized: layersTopFirst is itself a fresh array every render (see above), so
   // there'd be nothing stable to key a memo off; this is a cheap map over a handful of
-  // layers, not worth the added complexity.
-  const hitLayers = layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }));
+  // layers, not worth the added complexity. Suppressed in screen mode (Task 12) — the
+  // per-layer hover outline would be misleading when hovering/clicking a layer's region
+  // doesn't do anything (see onBackgroundPointerDown above).
+  const hitLayers = selection.editTarget === "screen" ? [] : layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }));
   const selectedLayer = layersTopFirst.find((l) => l.id === selection.selectedLayerId) ?? null;
+  const selectedScreen = (selectedScreenId && state.screens?.[selectedScreenId]) || null;
 
   // Task 6: on-stage warp/mask handles (StageSelectionOverlay) drag imperatively via
   // WarpHandle/MaskShapeOverlay's own pointer machinery, the same way the rail-side
@@ -311,6 +323,16 @@ export function App() {
       for (const [k, v] of Object.entries(patch)) actions.updateLayer(selectedLayer.id, `mask.${k}`, v);
     },
     [actions, selectedLayer],
+  );
+  // Task 12: the SCREEN-warp equivalent of onWarpCorner above — maps
+  // StageSelectionOverlay's screen-mode drag callback onto `actions.moveWarpPoint`, the
+  // EXISTING screen warp action (unchanged since before this redesign; previously only
+  // called from the now-deleted rail-side WarpEditor).
+  const onScreenWarpCorner = useCallback(
+    (index: number, x: number, y: number) => {
+      if (selectedScreenId) actions.moveWarpPoint(selectedScreenId, index, x, y);
+    },
+    [actions, selectedScreenId],
   );
 
   // Task 7: the Inspector's write callbacks — every one maps onto the SAME actions the
@@ -356,6 +378,31 @@ export function App() {
   const onInspectorResetWarp = useCallback(() => {
     if (selectedLayer) actions.resetLayerWarp(selectedLayer.id);
   }, [actions, selectedLayer]);
+
+  // Task 12: the SCREEN-warp equivalents of the four Inspector callbacks above — same
+  // shape, scoped to the active screen, wired to the EXISTING screen warp actions
+  // (renameScreen/setWarpMode/setMeshSize/resetWarp) rather than the layer-warp ones.
+  const onInspectorRenameScreen = useCallback(
+    (name: string) => {
+      if (selectedScreenId) actions.renameScreen(selectedScreenId, name);
+    },
+    [actions, selectedScreenId],
+  );
+  const onInspectorSetScreenWarpMode = useCallback(
+    (mode: "corner" | "mesh") => {
+      if (selectedScreenId) actions.setWarpMode(selectedScreenId, mode);
+    },
+    [actions, selectedScreenId],
+  );
+  const onInspectorSetScreenMeshSize = useCallback(
+    (size: number) => {
+      if (selectedScreenId) actions.setMeshSize(selectedScreenId, size);
+    },
+    [actions, selectedScreenId],
+  );
+  const onInspectorResetScreenWarp = useCallback(() => {
+    if (selectedScreenId) actions.resetWarp(selectedScreenId);
+  }, [actions, selectedScreenId]);
 
   // Task 8: the Show drawer's active-tab panel — each case wired with the EXACT
   // props/callbacks the pre-Task-1 flat layout used (git show 3dcc100), just relocated
@@ -475,8 +522,22 @@ export function App() {
       width={1280}
       height={720}
       overlay={
-        selectedLayer ? (
+        // Task 12: screen edit target shows ONLY the active screen's warp handles — no
+        // layer overlay renders alongside it, even if a layer is also selected.
+        selection.editTarget === "screen" ? (
+          selectedScreen ? (
+            <StageSelectionOverlay
+              editTarget="screen"
+              screen={selectedScreen}
+              mode={selection.stageEditMode}
+              onScreenWarpCorner={onScreenWarpCorner}
+              onDragStart={beginDrag}
+              onDragEnd={endDrag}
+            />
+          ) : null
+        ) : selectedLayer ? (
           <StageSelectionOverlay
+            editTarget="layer"
             layer={selectedLayer}
             mode={selection.stageEditMode}
             onWarpCorner={onWarpCorner}
@@ -492,7 +553,10 @@ export function App() {
   );
   const inspectorEl = (
     <Inspector
+      editTarget={selection.editTarget}
+      onSetEditTarget={selection.setEditTarget}
       layer={selectedLayer}
+      screen={selectedScreen}
       mode={selection.stageEditMode}
       onModeChange={selection.setStageEditMode}
       media={Object.values(state.media)}
@@ -504,6 +568,10 @@ export function App() {
       onSetWarpMode={onInspectorSetWarpMode}
       onSetMeshSize={onInspectorSetMeshSize}
       onResetWarp={onInspectorResetWarp}
+      onRenameScreen={onInspectorRenameScreen}
+      onSetScreenWarpMode={onInspectorSetScreenWarpMode}
+      onSetScreenMeshSize={onInspectorSetScreenMeshSize}
+      onResetScreenWarp={onInspectorResetScreenWarp}
     />
   );
   const showDrawerEl = (

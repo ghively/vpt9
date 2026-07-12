@@ -1,21 +1,34 @@
 import { WarpHandle } from "../WarpHandle";
 import { MaskShapeOverlay } from "../MaskShapeOverlay";
-import { layerQuad, type Quad } from "./layerGeometry";
-import type { Layer, Mask } from "../types";
+import { layerQuad, warpQuad, type Quad } from "./layerGeometry";
+import type { Layer, Mask, Screen, Warp } from "../types";
 
 /** Which stage-editing mode the Inspector (Task 7) has selected for the currently
  *  selected layer. Mirrors `src/app/useSelection.ts`'s `EditMode` — redeclared here
  *  (rather than imported) because components/ never imports from src/app/ (see the
- *  module doc below); the two must be kept in sync by hand. */
+ *  module doc below); the two must be kept in sync by hand. Only meaningful when
+ *  `editTarget === "layer"` — a screen only ever shows its warp (see below). */
 export type StageEditMode = "warp" | "mask" | "fx";
 
+/** Which object the overlay is currently drawing handles for (Task 12): the selected
+ *  LAYER (warp/mask/fx, unchanged from pre-Task-12) or the active SCREEN's projector
+ *  warp (corner-pin/mesh over the composited output — warp-only, screens have no
+ *  mask/fx). Mirrors `src/app/useSelection.ts`'s `EditTarget` — redeclared here for the
+ *  same decoupling reason as `StageEditMode` above. */
+export type StageEditTarget = "layer" | "screen";
+
 export interface StageSelectionOverlayProps {
-  /** The layer currently selected in the rail/on the stage. */
-  layer: Layer;
+  /** "layer" (default-shaped, pre-Task-12 behavior) or "screen" (Task 12: renders ONLY
+   *  the active screen's warp handles — no mask/fx, and no layer overlay at the same
+   *  time). */
+  editTarget: StageEditTarget;
+  /** The layer currently selected in the rail/on the stage. Required when
+   *  editTarget === "layer" (ignored otherwise). */
+  layer?: Layer | null;
   mode: StageEditMode;
-  /** Fired when a warp handle (corner or mesh point) is dragged to a new normalized
-   *  0..1 position — `index` is the point's index into `layer.warp.corners` (corner
-   *  mode) or `layer.warp.mesh.points` (mesh mode), exactly like `WarpEditor`'s
+  /** Fired when a LAYER warp handle (corner or mesh point) is dragged to a new
+   *  normalized 0..1 position — `index` is the point's index into `layer.warp.corners`
+   *  (corner mode) or `layer.warp.mesh.points` (mesh mode), exactly like `WarpEditor`'s
    *  `onLayerMovePoint`. The container maps this straight onto
    *  `actions.moveLayerWarpPoint(layer.id, index, x, y)` — the SAME action `WarpEditor`
    *  uses for a layer warp target, so this emits the identical
@@ -26,6 +39,15 @@ export interface StageSelectionOverlayProps {
    *  `actions.updateLayer(layer.id, \`mask.${k}\`, v)` per key, mirroring
    *  `WarpEditor`'s existing `onMaskChange` wiring for `maskEditLayer`. */
   onMask?: (patch: Partial<Pick<Mask, "cx" | "cy" | "rx" | "ry">>) => void;
+  /** The screen currently selected (Task 12). Required when editTarget === "screen"
+   *  (ignored otherwise). */
+  screen?: Screen | null;
+  /** Fired when a SCREEN warp handle is dragged — SAME index convention as
+   *  `onWarpCorner` above (into `screen.warp.corners` or `.mesh.points`). The container
+   *  maps this onto `actions.moveWarpPoint(screen.id, index, x, y)` — the EXISTING
+   *  screen warp action `WarpEditor` used to call, unchanged, just triggered from the
+   *  stage instead of the (now-deleted) rail-side warp editor. */
+  onScreenWarpCorner?: (index: number, x: number, y: number) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }
@@ -52,15 +74,81 @@ function SelLabel({ x, y, text }: { x: number; y: number; text: string }) {
   );
 }
 
-/** Selection overlay (Task 6): draws the currently selected layer's warp handles, mask
- *  shape, or FX bounding box directly on the stage, in the same normalized 0..1 space
- *  Task 5's hover outline uses. Reuses `WarpHandle` and `MaskShapeOverlay` verbatim —
- *  the exact same handle components (and their pointerdown/move/up/cancel drag
- *  machinery) `WarpEditor` already uses for a layer's own warp/mask — so a drag here
- *  goes out over the identical update path, just triggered from the stage instead of
- *  the rail. Presentational only: no `src/app/` import, no direct `send`/`actions` — the
+/** Renders one warp target's drag handles — corner-pin's 4 fixed handles (tagged
+ *  TL/TR/BR/BL) or an NxN mesh grid (tagged with row/column, like WarpEditor's
+ *  coordTag). This is the generic bit a LAYER's own warp and the active SCREEN's
+ *  projector warp share (Task 12): both are the exact same `Warp` shape, so one
+ *  component, parameterized by `warp` + a single `onPoint(index, x, y)` callback,
+ *  serves either — the caller decides which real action `onPoint` maps onto. Reuses
+ *  `WarpHandle` verbatim (same pointerdown/move/up/cancel drag machinery WarpEditor's
+ *  rail-side corner drag already used), so a drag here goes out over the identical
+ *  update path, just triggered from the stage instead of the rail. */
+function WarpHandles({
+  warp,
+  onPoint,
+  onDragStart,
+  onDragEnd,
+}: {
+  warp: Warp;
+  onPoint?: (index: number, x: number, y: number) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+}) {
+  const isMesh = warp.mode === "mesh";
+  const points = isMesh ? warp.mesh.points : warp.corners;
+  const size = warp.mesh?.size ?? 4;
+  return (
+    <>
+      {points.map((p, i) => (
+        <WarpHandle
+          key={i}
+          x={p.x}
+          y={p.y}
+          className={isMesh ? undefined : CORNER_CLASSES[i]}
+          cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
+          coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
+          onDragStart={onDragStart}
+          onDragTo={(x, y) => onPoint?.(i, x, y)}
+          onDragEnd={onDragEnd}
+        />
+      ))}
+    </>
+  );
+}
+
+/** Selection overlay (Task 6; generalized for screen warp in Task 12): draws the
+ *  currently selected object's warp handles, mask shape, or FX bounding box directly
+ *  on the stage, in the same normalized 0..1 space Task 5's hover outline uses.
+ *  Presentational only: no `src/app/` import, no direct `send`/`actions` — the
  *  container (App) supplies narrow callbacks and maps them onto the real actions. */
-export function StageSelectionOverlay({ layer, mode, onWarpCorner, onMask, onDragStart, onDragEnd }: StageSelectionOverlayProps) {
+export function StageSelectionOverlay({
+  editTarget,
+  layer,
+  mode,
+  onWarpCorner,
+  onMask,
+  screen,
+  onScreenWarpCorner,
+  onDragStart,
+  onDragEnd,
+}: StageSelectionOverlayProps) {
+  // Screen warp (Task 12): the active screen's projector corner-pin/mesh over the
+  // composited output. Screens carry no mask/fx, so this is the ONLY body screen mode
+  // ever renders — App only mounts this component with editTarget === "screen" when
+  // there's a screen to show, and never mounts a layer overlay alongside it.
+  if (editTarget === "screen") {
+    if (!screen) return null;
+    const anchor = labelAnchor(warpQuad(screen.warp));
+    return (
+      <>
+        <SelLabel x={anchor.x} y={anchor.y} text={`${screen.name || screen.id} · screen warp`} />
+        <WarpHandles warp={screen.warp} onPoint={onScreenWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+      </>
+    );
+  }
+
+  if (!layer) return null;
+
   if (mode === "mask") {
     const { mask } = layer;
     const anchor = { x: mask.cx, y: mask.cy - mask.ry };
@@ -91,27 +179,11 @@ export function StageSelectionOverlay({ layer, mode, onWarpCorner, onMask, onDra
 
   // mode === "warp" — corner-pin (4 fixed handles, tagged TL/TR/BR/BL) or mesh (an
   // NxN grid of handles, tagged with their row/column like WarpEditor's coordTag).
-  const isMesh = layer.warp.mode === "mesh";
-  const points = isMesh ? layer.warp.mesh.points : layer.warp.corners;
-  const size = layer.warp.mesh?.size ?? 4;
   const anchor = labelAnchor(layerQuad(layer));
-
   return (
     <>
       <SelLabel x={anchor.x} y={anchor.y} text={`${layer.name || layer.id} · warp`} />
-      {points.map((p, i) => (
-        <WarpHandle
-          key={i}
-          x={p.x}
-          y={p.y}
-          className={isMesh ? undefined : CORNER_CLASSES[i]}
-          cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
-          coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
-          onDragStart={onDragStart}
-          onDragTo={(x, y) => onWarpCorner?.(i, x, y)}
-          onDragEnd={onDragEnd}
-        />
-      ))}
+      <WarpHandles warp={layer.warp} onPoint={onWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
     </>
   );
 }

@@ -1,19 +1,20 @@
 // Pure geometry for the Stage's click-to-select interaction (Task 5): resolves a
 // layer's on-screen quad from its warp state and hit-tests a normalized 0..1 point
 // against it. No React, no app/ import — decoupled like the rest of components/.
-import type { Layer } from "../types";
+import type { Layer, Warp } from "../types";
 
 export type Pt = { x: number; y: number };
 export type Quad = [Pt, Pt, Pt, Pt];
 
 const UNIT: Quad = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
 
-/** The layer's on-screen quad (TL, TR, BR, BL), normalized 0..1 against the stage.
- *  Mesh-mode warps don't have 4 fixed corners, so this uses the bounding hull of the
- *  mesh points instead; a layer with no corner-pin/mesh state at all (or an empty
- *  mesh) falls back to the full-frame unit quad. */
-export function layerQuad(layer: Layer): Quad {
-  const w = layer.warp;
+/** The on-screen quad (TL, TR, BR, BL) a warp state resolves to, normalized 0..1
+ *  against the stage. Mesh-mode warps don't have 4 fixed corners, so this uses the
+ *  bounding hull of the mesh points instead; a missing/empty warp falls back to the
+ *  full-frame unit quad. Factored out of `layerQuad` (Task 12) so a SCREEN's warp —
+ *  same `Warp` shape as a layer's, just not attached to a `Layer` — can resolve a quad
+ *  too (StageSelectionOverlay's screen-warp label anchor uses this directly). */
+export function warpQuad(w: Warp | undefined): Quad {
   if (w?.mode === "mesh" && w.mesh?.points?.length) {
     const xs = w.mesh.points.map((p) => p.x), ys = w.mesh.points.map((p) => p.y);
     const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
@@ -22,6 +23,11 @@ export function layerQuad(layer: Layer): Quad {
   const c = w?.corners;
   if (Array.isArray(c) && c.length === 4) return [c[0], c[1], c[2], c[3]] as Quad;
   return UNIT;
+}
+
+/** The layer's on-screen quad — see `warpQuad` above, which does the actual work. */
+export function layerQuad(layer: Layer): Quad {
+  return warpQuad(layer.warp);
 }
 
 /** Even-odd ray-cast point-in-polygon test over the quad's 4 edges. */
