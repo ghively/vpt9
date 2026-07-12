@@ -52,8 +52,10 @@
  * Stage previews/edits; deliberately separate from `#audio-owner` (which screen plays
  * audio) even though both render as chip/segment rows in the command bar. */
 .screen-select { display: flex; align-items: center; gap: 8px; }
-.seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
-.seg button {
+/* Scoped to .screen-select (its only consumer) so `.seg` can't leak to a future
+ * unrelated segmented control elsewhere in the deck. */
+.screen-select .seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+.screen-select .seg button {
   padding: 6px 12px;
   border: none;
   border-right: 1px solid var(--hairline);
@@ -66,9 +68,9 @@
   cursor: pointer;
   transition: color 120ms ease, background 120ms ease;
 }
-.seg button:last-child { border-right: none; }
-.seg button:hover { color: var(--text); }
-.seg button[aria-pressed="true"] { color: var(--beam); background: var(--beam-soft); }
+.screen-select .seg button:last-child { border-right: none; }
+.screen-select .seg button:hover { color: var(--text); }
+.screen-select .seg button[aria-pressed="true"] { color: var(--beam); background: var(--beam-soft); }
 .screen-select-add {
   padding: 6px 9px;
   border: 1px dashed var(--hairline);
@@ -656,7 +658,7 @@
   .addbtn { min-height: var(--tap-min); }
   .modes button,
   .togglepill button { min-height: var(--tap-min); }
-  .seg button,
+  .screen-select .seg button,
   .screen-select-add { min-height: var(--tap-min); }
   .show-drawer-tab,
   .show-drawer-toggle { min-height: var(--tap-min); }

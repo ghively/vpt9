@@ -17,14 +17,17 @@ export type StageEditMode = "warp" | "mask" | "fx";
  *  same decoupling reason as `StageEditMode` above. */
 export type StageEditTarget = "layer" | "screen";
 
-export interface StageSelectionOverlayProps {
-  /** "layer" (default-shaped, pre-Task-12 behavior) or "screen" (Task 12: renders ONLY
-   *  the active screen's warp handles — no mask/fx, and no layer overlay at the same
-   *  time). */
-  editTarget: StageEditTarget;
-  /** The layer currently selected in the rail/on the stage. Required when
-   *  editTarget === "layer" (ignored otherwise). */
-  layer?: Layer | null;
+interface StageSelectionOverlaySharedProps {
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+}
+
+export interface StageSelectionOverlayLayerProps extends StageSelectionOverlaySharedProps {
+  /** Renders the selected layer's warp/mask/fx (default-shaped, pre-Task-12 behavior)
+   *  — no screen overlay renders at the same time. */
+  editTarget: "layer";
+  /** The layer currently selected in the rail/on the stage. */
+  layer: Layer | null;
   mode: StageEditMode;
   /** Fired when a LAYER warp handle (corner or mesh point) is dragged to a new
    *  normalized 0..1 position — `index` is the point's index into `layer.warp.corners`
@@ -39,18 +42,29 @@ export interface StageSelectionOverlayProps {
    *  `actions.updateLayer(layer.id, \`mask.${k}\`, v)` per key, mirroring
    *  `WarpEditor`'s existing `onMaskChange` wiring for `maskEditLayer`. */
   onMask?: (patch: Partial<Pick<Mask, "cx" | "cy" | "rx" | "ry">>) => void;
-  /** The screen currently selected (Task 12). Required when editTarget === "screen"
-   *  (ignored otherwise). */
-  screen?: Screen | null;
+}
+
+export interface StageSelectionOverlayScreenProps extends StageSelectionOverlaySharedProps {
+  /** Renders ONLY the active screen's warp handles (Task 12) — no mask/fx, and no
+   *  layer overlay at the same time. */
+  editTarget: "screen";
+  /** The screen currently selected (Task 12). */
+  screen: Screen | null;
   /** Fired when a SCREEN warp handle is dragged — SAME index convention as
    *  `onWarpCorner` above (into `screen.warp.corners` or `.mesh.points`). The container
    *  maps this onto `actions.moveWarpPoint(screen.id, index, x, y)` — the EXISTING
    *  screen warp action `WarpEditor` used to call, unchanged, just triggered from the
    *  stage instead of the (now-deleted) rail-side warp editor. */
   onScreenWarpCorner?: (index: number, x: number, y: number) => void;
-  onDragStart?: () => void;
-  onDragEnd?: () => void;
 }
+
+/** Discriminated union keyed on `editTarget` (type-tighten cleanup): a "layer" props
+ *  object requires `layer` and forbids the screen-only fields (`screen`,
+ *  `onScreenWarpCorner`); a "screen" props object requires `screen` and forbids the
+ *  layer-only fields (`mode`, `onWarpCorner`, `onMask`). Makes the invalid combos the
+ *  old optional-everything shape allowed (e.g. `editTarget: "screen"` with no `screen`)
+ *  a compile error instead of a silent no-op. */
+export type StageSelectionOverlayProps = StageSelectionOverlayLayerProps | StageSelectionOverlayScreenProps;
 
 const CORNER_TAGS = ["TL", "TR", "BR", "BL"]; // index order matches Warp.corners (see WarpEditor)
 const CORNER_CLASSES = ["tl", "tr", "br", "bl"]; // e2e targets ".deck-handle.tl" etc.
@@ -121,22 +135,18 @@ function WarpHandles({
  *  on the stage, in the same normalized 0..1 space Task 5's hover outline uses.
  *  Presentational only: no `src/app/` import, no direct `send`/`actions` — the
  *  container (App) supplies narrow callbacks and maps them onto the real actions. */
-export function StageSelectionOverlay({
-  editTarget,
-  layer,
-  mode,
-  onWarpCorner,
-  onMask,
-  screen,
-  onScreenWarpCorner,
-  onDragStart,
-  onDragEnd,
-}: StageSelectionOverlayProps) {
+export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
+  // Common to both union members — safe to pull out before narrowing.
+  const { onDragStart, onDragEnd } = props;
+
   // Screen warp (Task 12): the active screen's projector corner-pin/mesh over the
   // composited output. Screens carry no mask/fx, so this is the ONLY body screen mode
   // ever renders — App only mounts this component with editTarget === "screen" when
   // there's a screen to show, and never mounts a layer overlay alongside it.
-  if (editTarget === "screen") {
+  // Narrow on `props.editTarget` directly (not a destructured copy) so TS actually
+  // narrows the union.
+  if (props.editTarget === "screen") {
+    const { screen, onScreenWarpCorner } = props;
     if (!screen) return null;
     const anchor = labelAnchor(warpQuad(screen.warp));
     return (
@@ -147,6 +157,7 @@ export function StageSelectionOverlay({
     );
   }
 
+  const { layer, mode, onWarpCorner, onMask } = props;
   if (!layer) return null;
 
   if (mode === "mask") {

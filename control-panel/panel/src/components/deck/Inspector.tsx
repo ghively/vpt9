@@ -20,20 +20,18 @@ export type EditMode = "warp" | "mask" | "fx";
  *  same decoupling reason as `EditMode` above. */
 export type EditTarget = "layer" | "screen";
 
-export interface InspectorProps {
-  /** "layer" (default, pre-Task-12 behavior below) or "screen" (Task 12: show the
-   *  active screen's warp controls instead). */
-  editTarget: EditTarget;
+interface InspectorSharedProps {
   /** Fired when the Layer/Screen toggle at the top is clicked. The container binds
    *  this to the SAME `selection.editTarget` setter that drives StageSelectionOverlay,
    *  so one click swaps both the inspector body and which handles show on the stage. */
   onSetEditTarget: (target: EditTarget) => void;
-  /** The selected layer, or `null` when nothing is selected (empty state). Read when
-   *  editTarget === "layer". */
+}
+
+export interface InspectorLayerProps extends InspectorSharedProps {
+  /** Shows the selected LAYER's controls (default, pre-Task-12 behavior below). */
+  editTarget: "layer";
+  /** The selected layer, or `null` when nothing is selected (empty state). */
   layer: Layer | null;
-  /** The active screen, or `null`/undefined before the first screen snapshot arrives.
-   *  Read when editTarget === "screen" (Task 12). */
-  screen?: Screen | null;
   mode: EditMode;
   /** Fired when the Warp/Mask/FX segment is clicked. The container binds this to the
    *  SAME `selection.stageEditMode` setter that drives StageSelectionOverlay, so one
@@ -62,6 +60,13 @@ export interface InspectorProps {
   onSetWarpMode?: (mode: "corner" | "mesh") => void;
   onSetMeshSize?: (size: number) => void;
   onResetWarp?: () => void;
+}
+
+export interface InspectorScreenProps extends InspectorSharedProps {
+  /** Shows the active SCREEN's warp controls instead (Task 12). */
+  editTarget: "screen";
+  /** The active screen, or `null`/undefined before the first screen snapshot arrives. */
+  screen?: Screen | null;
   /** Screen warp controls (Task 12) — the EXISTING screen warp actions
    *  (`setWarpMode`/`setMeshSize`/`resetWarp`/`renameScreen`) WarpEditor used to call
    *  for its default (non-layer) target, now driven from here instead. Same shape as
@@ -72,6 +77,14 @@ export interface InspectorProps {
   onSetScreenMeshSize?: (size: number) => void;
   onResetScreenWarp?: () => void;
 }
+
+/** Discriminated union keyed on `editTarget` (type-tighten cleanup): a "layer" props
+ *  object requires `layer` and the layer callbacks (`mode`, `onModeChange`, `onUpdate`,
+ *  etc.) and forbids the screen-only fields; a "screen" props object requires `screen`
+ *  and forbids the layer-only fields. Makes the invalid combos the old optional-
+ *  everything shape allowed (e.g. `editTarget: "screen"` with layer-only `mode`) a
+ *  compile error instead of a silent no-op. */
+export type InspectorProps = InspectorLayerProps | InspectorScreenProps;
 
 function sourceSummary(source: Layer["source"]): string {
   if (!source) return "";
@@ -372,30 +385,15 @@ function TargetSegment({ target, onChange }: { target: EditTarget; onChange: (ta
  *  StageSelectionOverlay and ChannelRack/LayerStrip already use — App.tsx wires these to
  *  `actions.updateLayer` / the layer-warp actions / the SCREEN warp actions unchanged,
  *  no new WS message types. */
-export function Inspector({
-  editTarget,
-  onSetEditTarget,
-  layer,
-  screen,
-  mode,
-  onModeChange,
-  media,
-  sourceBank,
-  onUpdate,
-  onSetSourceMode,
-  onSetPlaylist,
-  onApplyCornerPreset,
-  onSetWarpMode,
-  onSetMeshSize,
-  onResetWarp,
-  onRenameScreen,
-  onSetScreenWarpMode,
-  onSetScreenMeshSize,
-  onResetScreenWarp,
-}: InspectorProps) {
+export function Inspector(props: InspectorProps) {
+  // Common to both union members — safe to pull out before narrowing.
+  const { editTarget, onSetEditTarget } = props;
   const targetSegment = <TargetSegment target={editTarget} onChange={onSetEditTarget} />;
 
-  if (editTarget === "screen") {
+  // Narrow on `props.editTarget` directly (not a destructured copy) so TS actually
+  // narrows the union.
+  if (props.editTarget === "screen") {
+    const { screen, onRenameScreen, onSetScreenWarpMode, onSetScreenMeshSize, onResetScreenWarp } = props;
     if (!screen) {
       return (
         <>
@@ -429,6 +427,21 @@ export function Inspector({
       </>
     );
   }
+
+  const {
+    layer,
+    mode,
+    onModeChange,
+    media,
+    sourceBank,
+    onUpdate,
+    onSetSourceMode,
+    onSetPlaylist,
+    onApplyCornerPreset,
+    onSetWarpMode,
+    onSetMeshSize,
+    onResetWarp,
+  } = props;
 
   if (!layer) {
     return (

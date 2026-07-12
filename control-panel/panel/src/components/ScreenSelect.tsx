@@ -28,7 +28,7 @@ export function ScreenSelect({ screens, selectedId, onSelect, onAdd }: ScreenSel
           </button>
         ))}
       </div>
-      <button type="button" className="screen-select-add" onClick={onAdd} title="Add screen">
+      <button type="button" className="screen-select-add" onClick={() => onAdd()} title="Add screen">
         +
       </button>
     </div>

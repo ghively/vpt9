@@ -560,7 +560,6 @@ export function App() {
             <StageSelectionOverlay
               editTarget="screen"
               screen={selectedScreen}
-              mode={selection.stageEditMode}
               onScreenWarpCorner={onScreenWarpCorner}
               onDragStart={beginDrag}
               onDragEnd={endDrag}
@@ -582,29 +581,41 @@ export function App() {
       onBackgroundPointerDown={onBackgroundPointerDown}
     />
   );
-  const inspectorEl = (
-    <Inspector
-      editTarget={selection.editTarget}
-      onSetEditTarget={selection.setEditTarget}
-      layer={selectedLayer}
-      screen={selectedScreen}
-      mode={selection.stageEditMode}
-      onModeChange={selection.setStageEditMode}
-      media={Object.values(state.media)}
-      sourceBank={state.sourceBank}
-      onUpdate={onInspectorUpdate}
-      onSetSourceMode={onInspectorSetSourceMode}
-      onSetPlaylist={onInspectorSetPlaylist}
-      onApplyCornerPreset={onInspectorApplyCornerPreset}
-      onSetWarpMode={onInspectorSetWarpMode}
-      onSetMeshSize={onInspectorSetMeshSize}
-      onResetWarp={onInspectorResetWarp}
-      onRenameScreen={onInspectorRenameScreen}
-      onSetScreenWarpMode={onInspectorSetScreenWarpMode}
-      onSetScreenMeshSize={onInspectorSetScreenMeshSize}
-      onResetScreenWarp={onInspectorResetScreenWarp}
-    />
-  );
+  // Task-12-final type-tighten: Inspector's props are now a discriminated union keyed
+  // on editTarget (see Inspector.tsx), so — unlike before — the layer- and screen-only
+  // props can't both be passed in one call. Split into the same
+  // `editTarget === "screen" ? ... : ...` shape the Stage's overlay prop above already
+  // uses; each branch passes exactly the props that editTarget's union member declares,
+  // so this renders identically to the single always-both-props call it replaces.
+  const inspectorEl =
+    selection.editTarget === "screen" ? (
+      <Inspector
+        editTarget="screen"
+        onSetEditTarget={selection.setEditTarget}
+        screen={selectedScreen}
+        onRenameScreen={onInspectorRenameScreen}
+        onSetScreenWarpMode={onInspectorSetScreenWarpMode}
+        onSetScreenMeshSize={onInspectorSetScreenMeshSize}
+        onResetScreenWarp={onInspectorResetScreenWarp}
+      />
+    ) : (
+      <Inspector
+        editTarget="layer"
+        onSetEditTarget={selection.setEditTarget}
+        layer={selectedLayer}
+        mode={selection.stageEditMode}
+        onModeChange={selection.setStageEditMode}
+        media={Object.values(state.media)}
+        sourceBank={state.sourceBank}
+        onUpdate={onInspectorUpdate}
+        onSetSourceMode={onInspectorSetSourceMode}
+        onSetPlaylist={onInspectorSetPlaylist}
+        onApplyCornerPreset={onInspectorApplyCornerPreset}
+        onSetWarpMode={onInspectorSetWarpMode}
+        onSetMeshSize={onInspectorSetMeshSize}
+        onResetWarp={onInspectorResetWarp}
+      />
+    );
   const showDrawerEl = (
     <ShowDrawer tab={showTab} onTab={setShowTab} open={showDrawerOpen} onToggle={() => setShowDrawerOpen((o) => !o)}>
       {activePanel}
