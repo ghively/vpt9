@@ -34,6 +34,7 @@ import {
   type TargetOption,
 } from "../components";
 import { layerQuad, pickTopLayer } from "../components/deck/layerGeometry";
+import type { Layer } from "../components/types";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
@@ -41,6 +42,10 @@ import { useMidi } from "./useMidi";
 import { useIsMobile } from "./useIsMobile";
 import { createActions } from "./actions";
 import { useSelection } from "./useSelection";
+
+/** The layer-look fields copy/paste moves between layers (not source/name/order).
+ *  Recovered verbatim from the pre-deck-redesign App.tsx (see git show 2cd91e7). */
+type LayerLook = Pick<Layer, "opacity" | "blendMode" | "mask" | "fx">;
 
 /** Numeric per-layer paths offered by the LFO/MIDI target pickers. Recovered verbatim
  *  from the pre-Task-1 flat-layout App.tsx (see git show 3dcc100). */
@@ -117,6 +122,13 @@ export function App() {
   // high-frequency, non-persisted display telemetry (Task 14's transportStatus relay),
   // so it lives outside the store/rerender path rather than as a reducer-driven field.
   const transportPositionsRef = useRef<Record<string, number>>({});
+  // Task A2: per-layer copy/paste clipboard (VPT8's copypaste.maxpat parity — see
+  // docs/VPT8-PARITY-GAPS.md §3). Holds a structuredClone of one layer's LOOK fields
+  // (opacity/blendMode/mask/fx — not source/name/order/id) so it can be stamped onto
+  // other layers. A ref (not state) since the clipboard contents themselves never drive
+  // a render; `hasClipboard` is the bit of that which does (gates the paste button).
+  const clipboardRef = useRef<LayerLook | null>(null);
+  const [hasClipboard, setHasClipboard] = useState(false);
 
   const preview = usePreviewBus(() => selectedRef.current);
 
@@ -213,6 +225,35 @@ export function App() {
       actions.setMaster(preBlackoutRef.current || 1);
     }
   }, [actions]);
+
+  // Task A2: copy/paste a layer's look. Recovered verbatim from the pre-deck-redesign
+  // App.tsx (git show 2cd91e7) — copyLayer snapshots the four LOOK fields off the
+  // source layer, pasteLayer writes each of them onto the target layer through the
+  // SAME per-field update path (`actions.updateLayer(id, field, value)`) every other
+  // control in the deck already uses, so no new WS message type is needed. The
+  // optimistic-echo `send` wrapper (see above) applies each write to the local mirror
+  // immediately, same as any other Inspector/LayerStack edit.
+  const copyLayer = useCallback((id: string) => {
+    const layer = stateRef.current.layers[id];
+    if (!layer) return;
+    clipboardRef.current = structuredClone({
+      opacity: layer.opacity,
+      blendMode: layer.blendMode,
+      mask: layer.mask,
+      fx: layer.fx,
+    });
+    setHasClipboard(true);
+  }, []);
+  const pasteLayer = useCallback(
+    (id: string) => {
+      const look = clipboardRef.current;
+      if (!look) return;
+      for (const [field, value] of Object.entries(look)) {
+        if (value !== undefined) actions.updateLayer(id, field, structuredClone(value));
+      }
+    },
+    [actions],
+  );
 
   const state = stateRef.current;
   const screens = Object.values(state.screens ?? {});
@@ -535,6 +576,9 @@ export function App() {
       onAddLayer={actions.addLayer}
       onMoveLayer={actions.moveLayer}
       onRemoveLayer={actions.removeLayer}
+      onCopyLayer={copyLayer}
+      onPasteLayer={pasteLayer}
+      hasClipboard={hasClipboard}
     />
   );
   const slotGridEl = (

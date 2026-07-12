@@ -10,13 +10,29 @@ export interface LayerStackProps {
   onAddLayer: () => void;
   onMoveLayer: (id: string, dir: "up" | "down") => void;
   onRemoveLayer: (id: string) => void;
+  /** Copy this layer's look (opacity/blendMode/mask/fx) to the app-level clipboard. */
+  onCopyLayer: (id: string) => void;
+  /** Paste the app-level clipboard's look onto this layer. */
+  onPasteLayer: (id: string) => void;
+  /** Whether the clipboard currently holds a copied look — gates the paste button. */
+  hasClipboard: boolean;
 }
 
 /** Compact left-rail layer list: a color swatch (or gradient placeholder) thumbnail,
  *  name, blend/index meta, and an opacity bar per layer. Rows are selectable (driving
- *  the stage handles + inspector in later tasks) and carry reorder/remove affordances
- *  that call straight into the existing write path — no new message types. */
-export function LayerStack({ layers, selectedId, onSelect, onAddLayer, onMoveLayer, onRemoveLayer }: LayerStackProps) {
+ *  the stage handles + inspector in later tasks) and carry reorder/remove/copy/paste
+ *  affordances that call straight into the existing write path — no new message types. */
+export function LayerStack({
+  layers,
+  selectedId,
+  onSelect,
+  onAddLayer,
+  onMoveLayer,
+  onRemoveLayer,
+  onCopyLayer,
+  onPasteLayer,
+  hasClipboard,
+}: LayerStackProps) {
   return (
     <>
       <div className="sec-head label">
@@ -69,6 +85,17 @@ export function LayerStack({ layers, selectedId, onSelect, onAddLayer, onMoveLay
                   title="Move toward back"
                   disabled={i === layers.length - 1}
                   onClick={() => onMoveLayer(layer.id, "down")}
+                />
+                <ToggleSquare
+                  label="⧉"
+                  title="Copy layer look"
+                  onClick={() => onCopyLayer(layer.id)}
+                />
+                <ToggleSquare
+                  label="⇩"
+                  title="Paste layer look"
+                  disabled={!hasClipboard}
+                  onClick={() => onPasteLayer(layer.id)}
                 />
                 <ToggleSquare
                   className="remove-btn"
