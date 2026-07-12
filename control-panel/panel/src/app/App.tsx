@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   AudioOwner,
   Faceplate,
+  Inspector,
   LayerStack,
   MasterControl,
   SlotGrid,
@@ -138,6 +139,25 @@ export function App() {
   );
   const selection = useSelection(layersTopFirst[0]?.id ?? null);
 
+  // Task 7 carry-forward: `useSelection`'s initial state is seeded from
+  // `layersTopFirst[0]?.id` above, but that's a useState initializer — it only runs on
+  // the very first render, when the WS state hasn't arrived yet and layersTopFirst is
+  // still empty. Once the snapshot lands and layers appear, seed the selection exactly
+  // once so the Inspector isn't empty on load. The ref guard makes this fire-once: it
+  // must NOT re-select after the operator later deselects (clicking empty stage space)
+  // or picks a different layer — only the first non-empty arrival seeds anything.
+  const seededSelectionRef = useRef(false);
+  useEffect(() => {
+    if (seededSelectionRef.current) return;
+    if (selection.selectedLayerId) {
+      seededSelectionRef.current = true;
+      return;
+    }
+    if (layersTopFirst.length === 0) return;
+    seededSelectionRef.current = true;
+    selection.setSelectedLayerId(layersTopFirst[0].id);
+  }, [layersTopFirst, selection]);
+
   // Task 5: clicking an object on the stage selects its layer — hit-test every
   // layer's warp quad (topmost first) against the normalized click position, mapped
   // against the stage's own box so it lines up with the same 0..1 space the overlay
@@ -183,6 +203,50 @@ export function App() {
     },
     [actions, selectedLayer],
   );
+
+  // Task 7: the Inspector's write callbacks — every one maps onto the SAME actions the
+  // rail/stage already use for the selected layer (updateLayer / the layer-warp
+  // actions), just scoped to whichever layer is currently selected. No new WS message
+  // types or update paths.
+  const onInspectorUpdate = useCallback(
+    (field: string, value: unknown) => {
+      if (selectedLayer) actions.updateLayer(selectedLayer.id, field, value);
+    },
+    [actions, selectedLayer],
+  );
+  const onInspectorSetSourceMode = useCallback(
+    (mode: "single" | "playlist") => {
+      if (selectedLayer) actions.setSourceMode(selectedLayer.id, mode);
+    },
+    [actions, selectedLayer],
+  );
+  const onInspectorSetPlaylist = useCallback(
+    (items: Parameters<typeof actions.setPlaylist>[1]) => {
+      if (selectedLayer) actions.setPlaylist(selectedLayer.id, items);
+    },
+    [actions, selectedLayer],
+  );
+  const onInspectorApplyCornerPreset = useCallback(
+    (preset: string) => {
+      if (selectedLayer) actions.applyLayerCornerPreset(selectedLayer.id, preset as Parameters<typeof actions.applyLayerCornerPreset>[1]);
+    },
+    [actions, selectedLayer],
+  );
+  const onInspectorSetWarpMode = useCallback(
+    (mode: "corner" | "mesh") => {
+      if (selectedLayer) actions.setLayerWarpMode(selectedLayer.id, mode);
+    },
+    [actions, selectedLayer],
+  );
+  const onInspectorSetMeshSize = useCallback(
+    (size: number) => {
+      if (selectedLayer) actions.setLayerMeshSize(selectedLayer.id, size);
+    },
+    [actions, selectedLayer],
+  );
+  const onInspectorResetWarp = useCallback(() => {
+    if (selectedLayer) actions.resetLayerWarp(selectedLayer.id);
+  }, [actions, selectedLayer]);
 
   return (
     <div className="deck">
@@ -232,7 +296,22 @@ export function App() {
             />
           )}
         </main>
-        <aside className="rail rail-r insp">{/* <Inspector/> lands here in Task 7 */}</aside>
+        <aside className="rail rail-r insp">
+          <Inspector
+            layer={selectedLayer}
+            mode={selection.stageEditMode}
+            onModeChange={selection.setStageEditMode}
+            media={Object.values(state.media)}
+            sourceBank={state.sourceBank}
+            onUpdate={onInspectorUpdate}
+            onSetSourceMode={onInspectorSetSourceMode}
+            onSetPlaylist={onInspectorSetPlaylist}
+            onApplyCornerPreset={onInspectorApplyCornerPreset}
+            onSetWarpMode={onInspectorSetWarpMode}
+            onSetMeshSize={onInspectorSetMeshSize}
+            onResetWarp={onInspectorResetWarp}
+          />
+        </aside>
       </div>
     </div>
   );

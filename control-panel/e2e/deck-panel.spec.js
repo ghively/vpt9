@@ -108,8 +108,10 @@ test("clicking a layer's region on the stage selects it", async ({ page }) => {
   const box = await stage.boundingBox();
   const selectedLayer = () => page.locator(".body");
 
-  // Nothing selected yet (no click has happened).
-  await expect(selectedLayer()).not.toHaveAttribute("data-selected-layer");
+  // Task 7's carry-forward auto-select effect seeds the top-of-stack layer (layer-2,
+  // the higher `order`) as soon as the WS snapshot arrives — before any click — so the
+  // Inspector isn't empty on load.
+  await expect(selectedLayer()).toHaveAttribute("data-selected-layer", "layer-2");
 
   // Click well inside layer-2's region (left half) -> selects layer-2.
   await page.mouse.click(box.x + box.width * 0.2, box.y + box.height * 0.5);
