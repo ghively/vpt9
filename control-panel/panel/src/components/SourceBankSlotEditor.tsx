@@ -2,7 +2,9 @@ import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { Fader } from "./primitives/Fader";
 import { TransportControls } from "./TransportControls";
-import type { SourceBankSlot, MediaItem, SourceRef, Transport } from "./types";
+import { CameraPicker } from "./CameraPicker";
+import { rgbToHex, hexToRgb } from "./color";
+import type { SourceBankSlot, MediaItem, SourceRef, Transport, CameraDevice } from "./types";
 import { BLEND_MODES } from "./types";
 
 /** Mirrors `server/src/state.js`'s `defaultTransport()` — used only as a display fallback
@@ -26,6 +28,8 @@ export interface SourceBankSlotEditorProps {
   media: MediaItem[];
   /** Every other slot (id + name), offered as an A/B pick target for mix content. */
   otherSlots: { id: string; name: string }[];
+  /** Enumerated video-input devices (task A14) for camera content + mix camera inputs. */
+  cameraDevices?: CameraDevice[];
   onRename?: (index: number, name: string) => void;
   onSetContent?: (slotId: string, index: number, content: SourceBankSlot["content"]) => void;
   /** Writes one per-slot transport field (task A9): `sourceBank.<index>.transport.<field>`.
@@ -33,23 +37,67 @@ export interface SourceBankSlotEditorProps {
   onSetTransport?: (index: number, field: string, value: unknown) => void;
 }
 
-function RefPicker({ value, media, otherSlots, onChange }: { value: SourceRef | null; media: MediaItem[]; otherSlots: { id: string; name: string }[]; onChange: (ref: SourceRef | null) => void }) {
+/** A/B ref picker for mix content. Offers media + other slots (original), plus Camera and
+ *  Solid-color (task A13) with their own inline detail control (a device picker / a color
+ *  input) when picked — the same terminal ref shapes the render-client resolves. */
+function RefPicker({
+  value,
+  media,
+  otherSlots,
+  cameraDevices = [],
+  onChange,
+}: {
+  value: SourceRef | null;
+  media: MediaItem[];
+  otherSlots: { id: string; name: string }[];
+  cameraDevices?: CameraDevice[];
+  onChange: (ref: SourceRef | null) => void;
+}) {
   const options = [
     { value: "", label: "—" },
     ...media.map((m) => ({ value: `media:${m.id}`, label: m.name })),
     ...otherSlots.map((s) => ({ value: `slot:${s.id}`, label: s.name })),
+    { value: "camera", label: "Camera" },
+    { value: "color", label: "Solid color" },
   ];
-  const current = value ? `${value.type}:${value.type === "media" ? value.mediaId : value.slotId}` : "";
+  const current =
+    value?.type === "media" ? `media:${value.mediaId}`
+      : value?.type === "slot" ? `slot:${value.slotId}`
+        : value?.type === "camera" ? "camera"
+          : value?.type === "color" ? "color"
+            : "";
   return (
-    <Select
-      value={current}
-      options={options}
-      onChange={(v) => {
-        if (!v) return onChange(null);
-        const [type, id] = v.split(":");
-        onChange(type === "media" ? { type: "media", mediaId: id } : { type: "slot", slotId: id });
-      }}
-    />
+    <div className="ref-picker">
+      <Select
+        value={current}
+        options={options}
+        onChange={(v) => {
+          if (!v) return onChange(null);
+          if (v === "camera") return onChange({ type: "camera" });
+          if (v === "color") return onChange({ type: "color", color: [1, 1, 1] });
+          const idx = v.indexOf(":");
+          const type = v.slice(0, idx);
+          const id = v.slice(idx + 1);
+          onChange(type === "media" ? { type: "media", mediaId: id } : { type: "slot", slotId: id });
+        }}
+      />
+      {value?.type === "camera" && (
+        <CameraPicker
+          deviceId={value.deviceId}
+          resolution={value.resolution}
+          devices={cameraDevices}
+          onDevice={(deviceId) => onChange({ type: "camera", deviceId, resolution: value.resolution })}
+          onResolution={(resolution) => onChange({ type: "camera", deviceId: value.deviceId, resolution: resolution ?? undefined })}
+        />
+      )}
+      {value?.type === "color" && (
+        <input
+          type="color"
+          value={rgbToHex(value.color ?? [1, 1, 1])}
+          onChange={(e) => onChange({ type: "color", color: hexToRgb(e.target.value) })}
+        />
+      )}
+    </div>
   );
 }
 
@@ -57,7 +105,7 @@ function RefPicker({ value, media, otherSlots, onChange }: { value: SourceRef | 
  *  type-specific controls. Extracted from `SourceBankPanel` so the compact rail
  *  `SlotGrid` can reveal the exact same controls — same markup, same write paths
  *  (`onRename`/`onSetContent`) — instead of a second, drifting implementation. */
-export function SourceBankSlotEditor({ slot, index, media, otherSlots, onRename, onSetContent, onSetTransport }: SourceBankSlotEditorProps) {
+export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDevices = [], onRename, onSetContent, onSetTransport }: SourceBankSlotEditorProps) {
   const isMix = slot.content?.type === "mix";
   const transport = slot.transport ?? DEFAULT_SLOT_TRANSPORT;
   return (
@@ -66,9 +114,17 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, onRename,
       <Select
         className="source-slot-type"
         value={slot.content?.type ?? ""}
-        options={[{ value: "", label: "Empty" }, { value: "media", label: "Media" }, { value: "mix", label: "Mix" }]}
+        options={[
+          { value: "", label: "Empty" },
+          { value: "media", label: "Media" },
+          { value: "camera", label: "Camera" },
+          { value: "color", label: "Solid color" },
+          { value: "mix", label: "Mix" },
+        ]}
         onChange={(v) => {
           if (v === "media") onSetContent?.(slot.id, index, { type: "media", mediaId: media[0]?.id ?? "" });
+          else if (v === "camera") onSetContent?.(slot.id, index, { type: "camera" });
+          else if (v === "color") onSetContent?.(slot.id, index, { type: "color", color: [1, 1, 1] });
           else if (v === "mix") onSetContent?.(slot.id, index, { type: "mix", a: null, b: null, blendMode: "normal", mix: 0.5 });
           else onSetContent?.(slot.id, index, null);
         }}
@@ -80,10 +136,26 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, onRename,
           onChange={(v) => onSetContent?.(slot.id, index, { type: "media", mediaId: v })}
         />
       )}
+      {slot.content?.type === "camera" && (
+        <CameraPicker
+          deviceId={slot.content.deviceId}
+          resolution={slot.content.resolution}
+          devices={cameraDevices}
+          onDevice={(deviceId) => onSetContent?.(slot.id, index, { type: "camera", deviceId, resolution: slot.content && slot.content.type === "camera" ? slot.content.resolution : undefined })}
+          onResolution={(resolution) => onSetContent?.(slot.id, index, { type: "camera", deviceId: slot.content && slot.content.type === "camera" ? slot.content.deviceId : undefined, resolution: resolution ?? undefined })}
+        />
+      )}
+      {slot.content?.type === "color" && (
+        <input
+          type="color"
+          value={rgbToHex(slot.content.color ?? [1, 1, 1])}
+          onChange={(e) => onSetContent?.(slot.id, index, { type: "color", color: hexToRgb(e.target.value) })}
+        />
+      )}
       {isMix && slot.content?.type === "mix" && (
         <>
-          <RefPicker value={slot.content.a} media={media} otherSlots={otherSlots} onChange={(a) => onSetContent?.(slot.id, index, { ...slot.content, a } as SourceBankSlot["content"])} />
-          <RefPicker value={slot.content.b} media={media} otherSlots={otherSlots} onChange={(b) => onSetContent?.(slot.id, index, { ...slot.content, b } as SourceBankSlot["content"])} />
+          <RefPicker value={slot.content.a} media={media} otherSlots={otherSlots} cameraDevices={cameraDevices} onChange={(a) => onSetContent?.(slot.id, index, { ...slot.content, a } as SourceBankSlot["content"])} />
+          <RefPicker value={slot.content.b} media={media} otherSlots={otherSlots} cameraDevices={cameraDevices} onChange={(b) => onSetContent?.(slot.id, index, { ...slot.content, b } as SourceBankSlot["content"])} />
           <Select
             value={slot.content.blendMode}
             options={BLEND_MODES.map((m) => ({ value: m, label: m }))}

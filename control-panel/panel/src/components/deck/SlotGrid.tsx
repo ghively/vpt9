@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { SourceBankSlotEditor } from "../SourceBankSlotEditor";
 import { otherSlotOptions } from "../sourceBank";
-import type { MediaItem, SourceBankSlot } from "../types";
+import type { CameraDevice, MediaItem, SourceBankSlot } from "../types";
 
 export interface SlotGridProps {
   slots: SourceBankSlot[];
@@ -9,6 +9,8 @@ export interface SlotGridProps {
    *  inline editor's pickers. Defaults to empty (grid still renders, editor just has
    *  nothing to offer for "media"/mix content). */
   media?: MediaItem[];
+  /** Enumerated video-input devices (task A14) for the inline editor's camera pickers. */
+  cameraDevices?: CameraDevice[];
   /** Same write paths `SourceBankPanel` already uses — reused unchanged by the inline
    *  editor below. */
   onRename?: (index: number, name: string) => void;
@@ -25,6 +27,8 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
   const content = slot.content;
   if (!content) return null;
   if (content.type === "mix") return "MIX";
+  if (content.type === "camera") return "CAM";
+  if (content.type === "color") return "COLOR";
   // A media slot only counts as filled once its mediaId resolves to a real library
   // item — an empty mediaId, or one pointing at deleted/not-yet-loaded media, must
   // render as an empty slot rather than a fake "Media" label (see Fix 1).
@@ -36,7 +40,7 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
  *  editor inline below the grid — `SourceBankSlotEditor`, extracted from
  *  `SourceBankPanel` — so editing keeps using the existing `onRename`/`onSetContent`
  *  write paths unchanged rather than a second, drifting implementation. */
-export function SlotGrid({ slots, media = [], onRename, onSetContent, onSetTransport, onEditSlot }: SlotGridProps) {
+export function SlotGrid({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot }: SlotGridProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const editingSlot = editingIndex != null ? slots[editingIndex] : undefined;
 
@@ -77,6 +81,7 @@ export function SlotGrid({ slots, media = [], onRename, onSetContent, onSetTrans
             index={editingIndex}
             media={media}
             otherSlots={otherSlotOptions(slots, editingSlot.id)}
+            cameraDevices={cameraDevices}
             onRename={onRename}
             onSetContent={onSetContent}
             onSetTransport={onSetTransport}

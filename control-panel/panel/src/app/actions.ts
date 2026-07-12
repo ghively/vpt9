@@ -302,6 +302,28 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
       send({ type: "update", path: `sourceBank.${index}.transport.${field}`, value });
     },
 
+    // ── Source-bank presets (task A12 — VPT8's `pattrstorage sources` + sourcenext/prev) ─
+    // Save/recall snapshot the whole 8-slot bank server-side (their own message types, like
+    // scene presetSave/presetRecall); rename/remove are plain leaf edits on the entry.
+    saveSourceBankPreset(name: string) {
+      send({ type: "sourceBankPresetSave", name });
+    },
+    recallSourceBankPreset(id: string) {
+      send({ type: "sourceBankPresetRecall", presetId: id });
+    },
+    renameSourceBankPreset(id: string, name: string) {
+      send({ type: "update", path: `sourceBankPresets.${id}.name`, value: name });
+    },
+    removeSourceBankPreset(id: string) {
+      send({ type: "delete", path: `sourceBankPresets.${id}` });
+    },
+    nextSourceBankPreset() {
+      send({ type: "sourceBankPresetNext" });
+    },
+    prevSourceBankPreset() {
+      send({ type: "sourceBankPresetPrev" });
+    },
+
     // ── Clip transport + playlist ───────────────────────────────────────────
     // `layers.<id>.transport.<field>` is reachable via the existing generic
     // `updateLayer(id, \`transport.${field}\`, value)` above — no dedicated wrapper needed.
@@ -310,6 +332,23 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     },
     setPlaylist(id: string, items: PlaylistItem[]) {
       send({ type: "update", path: `layers.${id}.playlist`, value: { items, cursor: 0 } });
+    },
+    // Manual clip trigger (task A15 — VPT8's /trig /last /random): advance/retreat/randomize
+    // a playlist layer's cursor live. The server's tickPlaylists/clipEnded advance it
+    // automatically; this writes the cursor leaf directly for an operator-driven jump. The
+    // render-client re-resolves effectiveSource on any cursor change, loading the new clip.
+    triggerClip(id: string, which: "next" | "prev" | "random") {
+      const layer = getState().layers[id];
+      const items = layer?.playlist?.items ?? [];
+      if (!items.length) return;
+      const cur = layer.playlist.cursor ?? 0;
+      const cursor =
+        which === "next"
+          ? (cur + 1) % items.length
+          : which === "prev"
+            ? (cur - 1 + items.length) % items.length
+            : Math.floor(Math.random() * items.length);
+      send({ type: "update", path: `layers.${id}.playlist.cursor`, value: cursor });
     },
   };
 }

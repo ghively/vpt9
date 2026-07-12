@@ -3,10 +3,11 @@ import type { ReactNode } from "react";
 /** The secondary show-control panels, unmounted from the flat layout (Task 1) and
  *  relocated here (Task 8). Order matches the tab strip left-to-right. "pip" (Task 13)
  *  restores the PiP (picture-in-picture) window manager that Task 1 dropped entirely. */
-export type ShowTab = "presets" | "cues" | "timers" | "lfo" | "midi" | "media" | "pip";
+export type ShowTab = "presets" | "sources" | "cues" | "timers" | "lfo" | "midi" | "media" | "pip";
 
 const SHOW_DRAWER_TABS: Array<[ShowTab, string]> = [
   ["presets", "Presets"],
+  ["sources", "Sources"],
   ["cues", "Cues"],
   ["timers", "Timers"],
   ["lfo", "LFO"],

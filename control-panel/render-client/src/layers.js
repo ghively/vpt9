@@ -2,6 +2,7 @@ import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture,
 import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
 import { SourceBank } from "./source-bank.js";
 import { applyVideoTransport, clearTransportState } from "./transport.js";
+import { cameraConstraints, cameraKey } from "./camera.js";
 
 // Order is load-bearing: BLEND_INDEX derives each mode's shader-side integer from
 // array position, and panel/src/components/types.ts's BLEND_MODES must list the exact
@@ -294,18 +295,21 @@ export class LayerStack {
     } else if (source?.type === "camera") {
       // Live camera input (VPT8's cam1/cam2). Chrome requires a secure context
       // (localhost counts) and prompts once per origin. Video only — a camera layer
-      // never participates in the audio-owner policy.
-      if (entry.currentUrl === "camera:") return;
-      entry.currentUrl = "camera:";
+      // never participates in the audio-owner policy. The entry is keyed by device +
+      // resolution (task A14) so changing either re-acquires getUserMedia; an unchanged
+      // camera ref is a no-op (no re-prompt, no stream churn).
+      const key = cameraKey(source.deviceId, source.resolution);
+      if (entry.currentUrl === key) return;
+      entry.currentUrl = key;
       this._stopSource(entry);
       const video = document.createElement("video");
       video.muted = true;
       video.playsInline = true;
       entry.videoEl = video;
       navigator.mediaDevices
-        ?.getUserMedia({ video: true, audio: false })
+        ?.getUserMedia(cameraConstraints(source.deviceId, source.resolution))
         .then((stream) => {
-          if (entry.currentUrl !== "camera:") {
+          if (entry.currentUrl !== key) {
             for (const track of stream.getTracks()) track.stop();
             return; // source changed while the permission prompt was open
           }
@@ -397,13 +401,34 @@ export class LayerStack {
     }
   }
 
+  // Per-source downscale (task A15 — VPT8's `p adapt`): when entry.downscale > 1, draw the
+  // source element into a reusable offscreen 2D canvas at 1/divisor size and return THAT
+  // to upload, so the GPU texture holds fewer pixels. divisor 1 (the default for every
+  // untouched layer) short-circuits to the element itself — the pre-A15 path, byte-identical.
+  // Returns the element unchanged if its dimensions aren't known yet (nothing to scale).
+  _maybeDownscale(entry, el, srcW, srcH) {
+    const divisor = entry.downscale ?? 1;
+    if (divisor <= 1 || !srcW || !srcH) return el;
+    const w = Math.max(1, Math.floor(srcW / divisor));
+    const h = Math.max(1, Math.floor(srcH / divisor));
+    if (!this._scaleCanvas) {
+      this._scaleCanvas = document.createElement("canvas");
+      this._scaleCtx = this._scaleCanvas.getContext("2d");
+    }
+    this._scaleCanvas.width = w;
+    this._scaleCanvas.height = h;
+    this._scaleCtx.drawImage(el, 0, 0, w, h);
+    return this._scaleCanvas;
+  }
+
   _uploadVideoFrame(entry) {
     const gl = this.gl;
     const hasVideo = entry.videoEl && entry.videoEl.readyState >= 2;
     if (!hasVideo) return false;
+    const src = this._maybeDownscale(entry, entry.videoEl, entry.videoEl.videoWidth, entry.videoEl.videoHeight);
     gl.bindTexture(gl.TEXTURE_2D, entry.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, entry.videoEl);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     return true;
   }
@@ -418,11 +443,14 @@ export class LayerStack {
     const img = entry.imgEl;
     if (!img || !img.complete || img.naturalWidth === 0) return false;
     // Static image uploads once; gif re-uploads every frame to catch the current frame.
+    // (A downscale change resets imgUploaded in render() so a still re-uploads at the new
+    // size — see the `entry.downscale !== divisor` reset there.)
     if (entry.imgKind === "image" && entry.imgUploaded) return true;
     const gl = this.gl;
+    const src = this._maybeDownscale(entry, img, img.naturalWidth, img.naturalHeight);
     gl.bindTexture(gl.TEXTURE_2D, entry.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     entry.imgUploaded = true;
     return true;
@@ -524,6 +552,11 @@ export class LayerStack {
       // effective source), not layer.source — for playlist layers the two can differ, and
       // entry is the single source of truth for what's actually currently loaded.
       const isSlot = entry.sourceType === "slot";
+      // Per-source downscale (task A15): applies only to a layer's DIRECT video/image/
+      // camera upload, not a shared-slot source (whose texture is shared across layers).
+      // Reset imgUploaded when it changes so a static image re-uploads at the new size.
+      const divisor = Math.max(1, Math.floor(layer.downscale ?? 1));
+      if (entry.downscale !== divisor) { entry.downscale = divisor; entry.imgUploaded = false; }
       let sourceTexture = entry.texture;
       if (isSlot) {
         sourceTexture = this.sourceBank.resolveTexture(entry.slotId, this.slots, this.media) ?? entry.texture;

@@ -21,6 +21,9 @@ export interface FxDrawerProps {
   sourceMode?: "single" | "playlist";
   /** Ordered clip queue for playlist mode. */
   playlist?: Playlist;
+  /** Per-source render downscale divisor (task A15 — VPT8's `p adapt`): 1/2/4/8. Absent
+   *  means full (1). Rendered as a small "Adapt" section select. */
+  downscale?: number;
   /** Library items offered by the playlist item picker — the same list LayerStrip's own
    *  source picker already receives, threaded through unchanged. */
   media?: MediaItem[];
@@ -35,7 +38,18 @@ export interface FxDrawerProps {
   onSetSourceMode?: (mode: "single" | "playlist") => void;
   /** Replaces the whole playlist item queue (it's one state leaf, like the cue list). */
   onSetPlaylist?: (items: PlaylistItem[]) => void;
+  /** Manual clip trigger (task A15): advance/retreat/randomize the playlist cursor live. */
+  onTriggerClip?: (which: "next" | "prev" | "random") => void;
 }
+
+// Per-source downscale presets (task A15 — VPT8's `p adapt` F..1/16). Value is the integer
+// divisor the render-client reduces the layer's decode/upload by.
+const DOWNSCALE_OPTIONS = [
+  { value: "1", label: "Full" },
+  { value: "2", label: "1/2" },
+  { value: "4", label: "1/4" },
+  { value: "8", label: "1/8" },
+];
 
 interface SliderSpec {
   label: string;
@@ -245,12 +259,14 @@ export function FxDrawer({
   transportPosition,
   sourceMode,
   playlist,
+  downscale,
   media,
   onUpdate,
   onEditMask,
   onEditWarp,
   onSetSourceMode,
   onSetPlaylist,
+  onTriggerClip,
 }: FxDrawerProps) {
   const fxRoot = fx as unknown as Record<string, unknown>;
   return (
@@ -369,6 +385,19 @@ export function FxDrawer({
           />
         </FxSection>
       )}
+      {downscale !== undefined && (
+        <FxSection caption="Adapt">
+          <label className="fx-control" data-neutral={(downscale ?? 1) === 1}>
+            <span className="fx-label">DOWNSCALE</span>
+            <Select
+              className="downscale-select"
+              value={String(downscale ?? 1)}
+              options={DOWNSCALE_OPTIONS}
+              onChange={(v) => onUpdate?.("downscale", Number(v))}
+            />
+          </label>
+        </FxSection>
+      )}
       {sourceMode !== undefined && (
         <FxSection caption="Playlist">
           <ToggleSquare
@@ -378,11 +407,19 @@ export function FxDrawer({
             onClick={() => onSetSourceMode?.(sourceMode === "playlist" ? "single" : "playlist")}
           />
           {sourceMode === "playlist" && (
-            <PlaylistEditor
-              items={playlist?.items ?? []}
-              media={media ?? []}
-              onChange={(items) => onSetPlaylist?.(items)}
-            />
+            <>
+              {/* Manual clip trigger (task A15 — VPT8's /trig /last /random). */}
+              <div className="playlist-triggers">
+                <Button label="◀ Prev" onClick={() => onTriggerClip?.("prev")} />
+                <Button label="Random" onClick={() => onTriggerClip?.("random")} />
+                <Button label="Next ▶" onClick={() => onTriggerClip?.("next")} />
+              </div>
+              <PlaylistEditor
+                items={playlist?.items ?? []}
+                media={media ?? []}
+                onChange={(items) => onSetPlaylist?.(items)}
+              />
+            </>
           )}
         </FxSection>
       )}

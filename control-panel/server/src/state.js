@@ -128,6 +128,7 @@ const DEFAULT_STATE = {
       transport: defaultTransport(),
       sourceMode: "single",
       playlist: { items: [], cursor: -1 },
+      downscale: 1,
     },
     "layer-2": {
       id: "layer-2",
@@ -142,6 +143,7 @@ const DEFAULT_STATE = {
       transport: defaultTransport(),
       sourceMode: "single",
       playlist: { items: [], cursor: -1 },
+      downscale: 1,
     },
   },
 
@@ -210,6 +212,17 @@ const DEFAULT_STATE = {
   // its OWN `transport` (task A9) — because many layers can share one slot, its
   // play/rate/loop state lives on the slot, not the consuming layer.
   sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultSlotTransport() })),
+
+  // Saved source-bank snapshots (task A12 — VPT8's `pattrstorage sources` bank with
+  // `sourcenext`/`sourceprev`). Each entry is { id, name, slots } where `slots` is a
+  // full structuredClone of the 8-slot `sourceBank` at save time. Recalling one replaces
+  // the live `sourceBank` wholesale; next/prev step through them via the cursor below.
+  // Kept separate from scene `presets` (which never captured sourceBank) so recalling a
+  // look and recalling a set of sources stay independent operations.
+  sourceBankPresets: {},
+  // Index into Object.keys(sourceBankPresets) of the last-recalled snapshot (-1 = none),
+  // so `sourcenext`/`sourceprev` wrap around the list from wherever recall last landed.
+  sourceBankPresetCursor: -1,
 };
 
 // `applyUpdate` only patches EXISTING leaves, so state loaded from an older
@@ -234,6 +247,10 @@ export function ensureLayerDefaults(layer) {
     transport: defaultTransport(),
     sourceMode: "single",
     playlist: { items: [], cursor: -1 },
+    // Per-source render downscale (task A15 — VPT8's `p adapt`): 1 = full res. Owned as an
+    // explicit leaf (not left undefined) so the Inspector's downscale select can patch it —
+    // applyUpdate only ever writes an existing leaf.
+    downscale: 1,
   });
 }
 
@@ -245,6 +262,8 @@ export function ensureStateDefaults(state) {
     master: 1,
     media: {},
     sourceBank: Array.from({ length: 8 }, (_, i) => ({ id: `slot-${i + 1}`, name: `Slot ${i + 1}`, content: null, transport: defaultSlotTransport() })),
+    sourceBankPresets: {},
+    sourceBankPresetCursor: -1,
   });
   // Backfill per-slot transport (task A9) onto a sourceBank saved before it existed:
   // fillMissing never recurses into array elements, so each slot object is patched
@@ -312,11 +331,12 @@ function isPlainObject(value) {
 // whole control plane. These sets pin the shapes; leaf *data* (opacity, a null loop point,
 // a source object swapped wholesale, …) stays unrestricted. See
 // test/crash-hardening.test.js.
-const OBJECT_TOPLEVEL = new Set(["layers", "screens", "pip", "presets", "media", "lfos", "midiMap", "automation"]);
+const OBJECT_TOPLEVEL = new Set(["layers", "screens", "pip", "presets", "media", "lfos", "midiMap", "automation", "sourceBankPresets"]);
 // Keyed collections whose entries are always objects (never scalars) — so an entry write
 // like "layers.<id>" or "pip.<id>" must carry an object, never null/a scalar. (lfos/timers
 // are already null-guarded at their read sites, so they're intentionally not pinned here.)
-const KEYED_OBJECT_COLLECTIONS = new Set(["layers", "screens", "pip", "presets", "media"]);
+// sourceBankPresets.<id> (task A12) is dereferenced by the recall path, so pin it too.
+const KEYED_OBJECT_COLLECTIONS = new Set(["layers", "screens", "pip", "presets", "media", "sourceBankPresets"]);
 
 // A mask's optional matte reference (task A5): either null (no matte) or a source ref
 // { type: "media", mediaId } / { type: "slot", slotId }. The render-client dereferences
@@ -348,6 +368,10 @@ function corruptsStructure(keys, last, value) {
   // the immediate sourceBank-slot parent (keys = ["sourceBank", "<n>"]), so a layer's own
   // `transport` object stays freely swappable, same as before.
   if (last === "transport" && keys.length === 2 && keys[0] === "sourceBank") return !isPlainObject(value);
+  // A source-bank preset's `slots` snapshot (task A12): sourceBankPresets.<id>.slots is an
+  // array the recall path iterates — pin it to an array so a LAN client can't null/scalar
+  // it and (only) desync the panel (recall itself already Array.isArray-guards it).
+  if (last === "slots" && keys.length === 2 && keys[0] === "sourceBankPresets") return !Array.isArray(value);
   // "...mask.source" (last === "source" under a "mask" parent) is the matte ref — pinned
   // to null-or-source-ref. Keyed on the immediate parent, so a layer's OWN top-level
   // `source` (parent = the layer id, not "mask") stays unrestricted and freely swappable.

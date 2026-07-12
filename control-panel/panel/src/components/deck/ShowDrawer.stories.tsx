@@ -7,6 +7,7 @@ import { MediaLibrary } from "../MediaLibrary";
 import { MidiMapPanel } from "../MidiMapPanel";
 import { PipWindows } from "../PipWindows";
 import { PresetsBar } from "../PresetsBar";
+import { SourceBankPresets } from "../SourceBankPresets";
 import { TimerBank } from "../TimerBank";
 import {
   noop,
@@ -36,6 +37,24 @@ const PANEL_BY_TAB: Record<ShowTab, ReactNode> = {
     <section className="sc-card">
       <h3>Presets</h3>
       <PresetsBar presets={samplePresets} onRecall={noop} onSave={noop} onRename={noop} onRemove={noop} />
+    </section>
+  ),
+  sources: (
+    <section className="sc-card">
+      <h3>Source snapshots</h3>
+      <SourceBankPresets
+        presets={[
+          { id: "sbp-1", name: "Cameras", slots: [] },
+          { id: "sbp-2", name: "VJ loops", slots: [] },
+        ]}
+        cursor={0}
+        onSave={noop}
+        onRecall={noop}
+        onRename={noop}
+        onRemove={noop}
+        onNext={noop}
+        onPrev={noop}
+      />
     </section>
   ),
   cues: (

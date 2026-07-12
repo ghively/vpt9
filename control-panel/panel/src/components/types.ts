@@ -7,12 +7,40 @@ export interface LayerSource {
   url?: string;
   color?: [number, number, number];
   slotId?: string;
+  /** Camera device id + capture resolution (task A14) — only meaningful when
+   *  `type === "camera"`. Absent = system default camera at its default resolution. */
+  deviceId?: string;
+  resolution?: CameraResolution;
 }
 
+/** A camera resolution constraint (task A14). Fed to `getUserMedia`'s width/height
+ *  `ideal` constraints; absent means the browser's default capture resolution. */
+export interface CameraResolution {
+  width: number;
+  height: number;
+}
+
+/** A video-input device offered in the camera pickers (task A14) — the subset of a
+ *  `MediaDeviceInfo` the panel shows. `label` is blank until camera permission is granted. */
+export interface CameraDevice {
+  deviceId: string;
+  label: string;
+}
+
+/** A reference to a source. Used by a mix slot's A/B inputs, a playlist item, and a
+ *  mask matte. `media`/`slot` are the original two; `camera`/`color` (task A13, VPT8's
+ *  cam1/2 + solid1/2 as shared-bank / mix inputs) are terminal — a mix A/B may be any of
+ *  media/slot/camera/color but never itself a mix, keeping the no-nested-mix guard sound. */
 export interface SourceRef {
-  type: "media" | "slot";
+  type: "media" | "slot" | "camera" | "color";
   mediaId?: string;
   slotId?: string;
+  /** Camera device id (task A14). Absent = system default camera. */
+  deviceId?: string;
+  /** Camera capture resolution (task A14). Absent = browser default. */
+  resolution?: CameraResolution;
+  /** Solid-color fill, rgb 0..1 (task A13). */
+  color?: [number, number, number];
 }
 
 export interface SourceBankSlot {
@@ -21,11 +49,21 @@ export interface SourceBankSlot {
   content:
     | null
     | { type: "media"; mediaId: string }
+    | { type: "camera"; deviceId?: string; resolution?: CameraResolution }
+    | { type: "color"; color: [number, number, number] }
     | { type: "mix"; a: SourceRef | null; b: SourceRef | null; blendMode: string; mix: number };
   /** Per-slot clip transport (task A9). Because many layers can point at one slot, its
    *  play/rate/loop/scrub state lives on the slot, not the consuming layer. Optional so
    *  the panel typechecks against state saved before A9 (the server backfills it). */
   transport?: Transport;
+}
+
+/** One saved snapshot of all 8 source-bank slots (task A12 — VPT8's `pattrstorage sources`
+ *  bank with `sourcenext`/`sourceprev`). Recalling replaces the live `sourceBank`. */
+export interface SourceBankPreset {
+  id: string;
+  name: string;
+  slots: SourceBankSlot[];
 }
 
 export type MediaKind = "video" | "gif" | "image";
@@ -130,6 +168,12 @@ export interface Layer {
   transport: Transport;
   sourceMode: "single" | "playlist";
   playlist: Playlist;
+  /** Per-source render downscale (task A15 — VPT8's `p adapt`): the layer's own decode/
+   *  upload is reduced by this integer divisor (1 = full, 2 = 1/2, 4 = 1/4, 8 = 1/8),
+   *  trading resolution for GPU/decode headroom. Optional so state saved before A15
+   *  typechecks (the server backfills 1). Only applies to a layer's DIRECT video/image/
+   *  camera source, not a shared-slot source (whose texture is shared across layers). */
+  downscale?: number;
 }
 
 export interface Point {

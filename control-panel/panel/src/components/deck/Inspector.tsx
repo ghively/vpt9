@@ -3,8 +3,9 @@ import { Select } from "../primitives/Select";
 import { Fader } from "../primitives/Fader";
 import { TextField } from "../primitives/TextField";
 import { FxDrawer } from "../FxDrawer";
+import { CameraPicker } from "../CameraPicker";
 import { rgbToHex } from "../color";
-import { BLEND_MODES, type Layer, type MediaItem, type PlaylistItem, type Screen, type SourceBankSlot, type SourceRef, type Warp } from "../types";
+import { BLEND_MODES, type CameraDevice, type Layer, type MediaItem, type PlaylistItem, type Screen, type SourceBankSlot, type SourceRef, type Warp } from "../types";
 
 /** Which stage-editing mode the segment (and, via `onModeChange`, the Stage's
  *  StageSelectionOverlay — Task 6) is showing for the selected layer. Mirrors
@@ -40,6 +41,8 @@ export interface InspectorLayerProps extends InspectorSharedProps {
   /** Library items offered in the source picker when the layer source is a URL/slot. */
   media?: MediaItem[];
   sourceBank?: SourceBankSlot[];
+  /** Enumerated video-input devices (task A14) for a camera layer source's device picker. */
+  cameraDevices?: CameraDevice[];
   /** Live playback position (seconds) for the selected layer — the FX drawer's Transport
    *  scrub readout (task A11). From the transportStatus telemetry relay. */
   transportPosition?: number;
@@ -52,6 +55,9 @@ export interface InspectorLayerProps extends InspectorSharedProps {
   /** FX drawer's Playlist section — same callbacks ChannelRack threads to LayerStrip. */
   onSetSourceMode?: (mode: "single" | "playlist") => void;
   onSetPlaylist?: (items: PlaylistItem[]) => void;
+  /** Manual clip trigger (task A15): advance/retreat/randomize a playlist layer's cursor.
+   *  Wired to `actions.triggerClip(layer.id, which)`. */
+  onTriggerClip?: (which: "next" | "prev" | "random") => void;
   /** FX drawer's Warp section (corner-pin preset menu) — same callback ChannelRack
    *  threads to LayerStrip, wired to `actions.applyLayerCornerPreset(layer.id, preset)`. */
   onApplyCornerPreset?: (preset: string) => void;
@@ -155,11 +161,13 @@ function SourceControl({
   layer,
   media = [],
   sourceBank = [],
+  cameraDevices = [],
   onUpdate,
 }: {
   layer: Layer;
   media?: MediaItem[];
   sourceBank?: SourceBankSlot[];
+  cameraDevices?: CameraDevice[];
   onUpdate?: (field: string, value: unknown) => void;
 }) {
   const isColor = layer.source?.type === "color";
@@ -195,7 +203,13 @@ function SourceControl({
       />
       <div className="source-field">
         {layer.source?.type === "camera" ? (
-          <span className="mono source-note">live capture</span>
+          <CameraPicker
+            deviceId={layer.source.deviceId}
+            resolution={layer.source.resolution}
+            devices={cameraDevices}
+            onDevice={(deviceId) => onUpdate?.("source", { type: "camera", deviceId, resolution: layer.source?.resolution })}
+            onResolution={(resolution) => onUpdate?.("source", { type: "camera", deviceId: layer.source?.deviceId, resolution: resolution ?? undefined })}
+          />
         ) : layer.source?.type === "slot" ? (
           <Select
             value={layer.source.slotId ?? ""}
@@ -530,10 +544,12 @@ export function Inspector(props: InspectorProps) {
     onModeChange,
     media,
     sourceBank,
+    cameraDevices,
     transportPosition,
     onUpdate,
     onSetSourceMode,
     onSetPlaylist,
+    onTriggerClip,
     onApplyCornerPreset,
     onSetWarpMode,
     onSetMeshSize,
@@ -569,7 +585,7 @@ export function Inspector(props: InspectorProps) {
       <div className="insp-body">
         <div className="field">
           <span className="label">Source</span>
-          <SourceControl layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} />
+          <SourceControl layer={layer} media={media} sourceBank={sourceBank} cameraDevices={cameraDevices} onUpdate={onUpdate} />
         </div>
         <div className="field">
           <span className="label">Opacity</span>
@@ -606,6 +622,7 @@ export function Inspector(props: InspectorProps) {
               transportPosition={transportPosition}
               sourceMode={layer.sourceMode}
               playlist={layer.playlist}
+              downscale={layer.downscale}
               media={media}
               onUpdate={(field, value) => {
                 if (field === "__cornerPreset__") onApplyCornerPreset?.(value as string);
@@ -615,6 +632,7 @@ export function Inspector(props: InspectorProps) {
               onEditWarp={() => onModeChange("warp")}
               onSetSourceMode={onSetSourceMode}
               onSetPlaylist={onSetPlaylist}
+              onTriggerClip={onTriggerClip}
             />
           )}
         </div>

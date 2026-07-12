@@ -5,6 +5,7 @@ import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerO
 import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
 import { createMediaRouter } from "./media.js";
+import { createSourceBankPresets } from "./source-bank-presets.js";
 
 // At most one console.warn per key per second, so a misbehaving/hostile client can't
 // flood the log — while a maintainer debugging "why isn't my update landing" still
@@ -218,6 +219,11 @@ function recallPreset(presetId) {
   return true;
 }
 
+// Source-bank presets (task A12 — VPT8's `pattrstorage sources` + sourcenext/prev). The
+// save/recall/step logic lives in its own factory so it's unit-testable without this file's
+// top-level listen(); see server/test/source-bank-presets.test.js.
+const sourceBankPresets = createSourceBankPresets({ state, broadcast, scheduleSave });
+
 const engine = createAutomationEngine({ state, broadcast, scheduleSave, recallPreset });
 
 wss.on("connection", (socket) => {
@@ -253,6 +259,18 @@ wss.on("connection", (socket) => {
         return;
       case "presetRecall":
         if (typeof message.presetId === "string") recallPreset(message.presetId);
+        return;
+      case "sourceBankPresetSave":
+        sourceBankPresets.save(message);
+        return;
+      case "sourceBankPresetRecall":
+        if (typeof message.presetId === "string") sourceBankPresets.recall(message.presetId);
+        return;
+      case "sourceBankPresetNext":
+        sourceBankPresets.next();
+        return;
+      case "sourceBankPresetPrev":
+        sourceBankPresets.prev();
         return;
       case "cueGo":
         engine.cueGo();
@@ -304,6 +322,15 @@ function handleOscMessage(address, args) {
   if (address === "/preset/recall") {
     if (typeof args[0] === "string" && !recallPreset(args[0])) {
       console.warn(`[osc] /preset/recall: no preset "${args[0]}"`);
+    }
+    return;
+  }
+  // Source-bank preset stepping/recall (task A12) — the OSC face of sourcenext/prev.
+  if (address === "/sources/next") return void sourceBankPresets.next();
+  if (address === "/sources/prev") return void sourceBankPresets.prev();
+  if (address === "/sources/recall") {
+    if (typeof args[0] === "string" && !sourceBankPresets.recall(args[0])) {
+      console.warn(`[osc] /sources/recall: no source-bank preset "${args[0]}"`);
     }
     return;
   }

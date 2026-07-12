@@ -385,6 +385,23 @@ html, body { height: 100%; }
   }
   .save-btn:hover { border-color: var(--beam); color: var(--beam); }
 
+  /* Source-bank preset bar (task A12) — reuses the .preset/.save-btn chip styles above;
+     the active chip (the recall cursor Next/Prev step from) glows like a hovered chip. */
+  #source-bank-presets .bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .preset[data-active="true"] { border-color: var(--beam); color: var(--beam); background: var(--beam-soft); }
+
+  /* Camera device+resolution picker (task A14) and the mix A/B ref picker (task A13):
+     lay their selects/inputs out inline, allowed to wrap inside the slot editor row. */
+  .camera-picker { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex: 1 1 auto; min-width: 0; }
+  .camera-picker select { flex: 1 1 90px; min-width: 0; }
+  .ref-picker { display: flex; gap: 6px; align-items: center; flex: 1 1 auto; min-width: 0; }
+  .ref-picker > select { flex: 1 1 auto; min-width: 0; }
+  .ref-picker input[type="color"], .source-slot-row > input[type="color"] { flex: 0 0 auto; }
+
+  /* Manual clip-trigger row (task A15): three equal buttons spanning the FX section. */
+  .playlist-triggers { display: flex; gap: 6px; flex-basis: 100%; }
+  .playlist-triggers .btn { flex: 1; }
+
   /* ── FX drawer (expanded LayerStrip) ─────────────────────────────────────────
      Captioned sections of labeled faders spanning the full strip width. Controls
      at their neutral ("stage off") value read dimmed so active fx pop at a glance. */

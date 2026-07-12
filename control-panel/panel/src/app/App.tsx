@@ -24,6 +24,7 @@ import {
   ScreenSelect,
   ShowDrawer,
   SlotGrid,
+  SourceBankPresets,
   Stage,
   StageSelectionOverlay,
   StatusLamp,
@@ -40,6 +41,7 @@ import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
 import { useMidi } from "./useMidi";
 import { useIsMobile } from "./useIsMobile";
+import { useCameraDevices } from "./useCameraDevices";
 import { createActions } from "./actions";
 import { useSelection } from "./useSelection";
 
@@ -113,6 +115,9 @@ export function App() {
   // overrides key off the `data-mobile` attribute that mirrors this same boolean, so the
   // CSS and the actual rendered tree can never disagree about which layout is showing.
   const isMobile = useIsMobile();
+  // Video-input devices for the camera pickers (task A14) — the panel enumerates them
+  // (it's already in a browser) and threads the list to the Inspector + SlotGrid editors.
+  const cameraDevices = useCameraDevices();
   const [mobileTab, setMobileTab] = useState<MobileTab>("layers");
   // Selecting the "Show" bottom tab also expands the Show drawer itself (it's collapsed
   // by default — see above) so the operator sees its content immediately instead of just
@@ -269,6 +274,9 @@ export function App() {
   const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
   const media = Object.values(state.media ?? {});
   const targetOptions = buildTargetOptions(state);
+  // Source-bank snapshots (task A12) + the recall cursor Next/Prev step from.
+  const sourceBankPresets = Object.values(state.sourceBankPresets ?? {});
+  const sourceBankPresetCursor = state.sourceBankPresetCursor ?? -1;
   // Task 13: PiP (picture-in-picture cast) windows for the currently selected screen —
   // recovered verbatim from the pre-Task-1 App.tsx (git show 3dcc100), where these fed a
   // permanently-mounted <PipWindows> next to WarpEditor in the screen aside. `sid` mirrors
@@ -410,6 +418,12 @@ export function App() {
     },
     [actions, selectedLayer],
   );
+  const onInspectorTriggerClip = useCallback(
+    (which: "next" | "prev" | "random") => {
+      if (selectedLayer) actions.triggerClip(selectedLayer.id, which);
+    },
+    [actions, selectedLayer],
+  );
   const onInspectorApplyCornerPreset = useCallback(
     (preset: string) => {
       if (selectedLayer) actions.applyLayerCornerPreset(selectedLayer.id, preset as Parameters<typeof actions.applyLayerCornerPreset>[1]);
@@ -475,6 +489,23 @@ export function App() {
             onSave={actions.savePreset}
             onRename={actions.renamePreset}
             onRemove={actions.removePreset}
+          />
+        </section>
+      );
+      break;
+    case "sources":
+      activePanel = (
+        <section className="sc-card">
+          <h3>Source snapshots</h3>
+          <SourceBankPresets
+            presets={sourceBankPresets}
+            cursor={sourceBankPresetCursor}
+            onSave={actions.saveSourceBankPreset}
+            onRecall={actions.recallSourceBankPreset}
+            onRename={actions.renameSourceBankPreset}
+            onRemove={actions.removeSourceBankPreset}
+            onNext={actions.nextSourceBankPreset}
+            onPrev={actions.prevSourceBankPreset}
           />
         </section>
       );
@@ -590,6 +621,7 @@ export function App() {
     <SlotGrid
       slots={state.sourceBank}
       media={Object.values(state.media)}
+      cameraDevices={cameraDevices}
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
       onSetTransport={actions.setSourceBankSlotTransport}
@@ -657,10 +689,12 @@ export function App() {
         onModeChange={selection.setStageEditMode}
         media={Object.values(state.media)}
         sourceBank={state.sourceBank}
+        cameraDevices={cameraDevices}
         transportPosition={selectedLayer ? transportPositionsRef.current[selectedLayer.id] : undefined}
         onUpdate={onInspectorUpdate}
         onSetSourceMode={onInspectorSetSourceMode}
         onSetPlaylist={onInspectorSetPlaylist}
+        onTriggerClip={onInspectorTriggerClip}
         onApplyCornerPreset={onInspectorApplyCornerPreset}
         onSetWarpMode={onInspectorSetWarpMode}
         onSetMeshSize={onInspectorSetMeshSize}

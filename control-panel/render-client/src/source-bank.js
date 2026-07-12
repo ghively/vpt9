@@ -1,5 +1,6 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
 import { applyVideoTransport, nativeLoop, clearTransportState } from "./transport.js";
+import { cameraConstraints, cameraKey } from "./camera.js";
 
 // A slot with no transport in state (older state that predates task A9, or an
 // impossible pre-backfill edge) falls back to the pre-A9 behavior — auto-play, whole-clip
@@ -108,10 +109,31 @@ export class SourceBank {
     if (!this.entries.has(slotId)) {
       this.entries.set(slotId, {
         texture: createTexture(this.gl), videoEl: null, imgEl: null, imgKind: null, imgUploaded: false,
-        currentUrl: null,
+        stream: null, currentUrl: null,
       });
     }
     return this.entries.get(slotId);
+  }
+
+  // Tears down whatever source element(s) an entry currently holds (media <video>/<img>,
+  // or a live-camera stream) without touching its GL texture — shared by the media/camera/
+  // color decode paths (when content switches type), the per-frame sweep, and dispose().
+  // Stopping camera tracks here is what releases the OS camera when a slot stops using it.
+  _releaseElements(entry) {
+    if (entry.videoEl) {
+      entry.videoEl.pause();
+      clearTransportState(entry, entry.videoEl); // detach loop handler + reset seek bookkeeping
+      entry.videoEl.srcObject = null;
+      entry.videoEl.remove();
+      entry.videoEl = null;
+    }
+    if (entry.stream) {
+      for (const track of entry.stream.getTracks()) track.stop();
+      entry.stream = null;
+    }
+    if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
+    entry.imgKind = null;
+    entry.imgUploaded = false;
   }
 
   // Decodes/uploads one media ref's current frame into the entry keyed by `entryKey`.
@@ -136,15 +158,7 @@ export class SourceBank {
     const t = transport ?? FALLBACK_SLOT_TRANSPORT;
     if (entry.currentUrl !== url) {
       entry.currentUrl = url;
-      if (entry.videoEl) {
-        entry.videoEl.pause();
-        clearTransportState(entry, entry.videoEl); // detach the old element's loop handler + reset seek bookkeeping
-        entry.videoEl.remove();
-        entry.videoEl = null;
-      }
-      if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
-      entry.imgKind = null;
-      entry.imgUploaded = false;
+      this._releaseElements(entry); // drop any prior media/camera source before rebinding
       const kind = media?.[mediaId]?.kind ?? "video";
       if (kind === "video") {
         const el = document.createElement("video");
@@ -186,6 +200,54 @@ export class SourceBank {
     }
   }
 
+  // Decodes/uploads a live-camera ref's current frame into the entry keyed by `entryKey`
+  // (task A13/A14 — VPT8's cam1/cam2 as a slot or mix input). Re-acquires getUserMedia only
+  // when the device/resolution signature changes (cameraKey), same as layers.js's camera
+  // path; a slot camera has no transport (always live, muted, video-only).
+  _decodeCameraInto(entryKey, ref) {
+    const entry = this._mediaEntry(entryKey);
+    const key = cameraKey(ref.deviceId, ref.resolution);
+    if (entry.currentUrl !== key) {
+      entry.currentUrl = key;
+      this._releaseElements(entry);
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      entry.videoEl = video;
+      navigator.mediaDevices
+        ?.getUserMedia(cameraConstraints(ref.deviceId, ref.resolution))
+        .then((stream) => {
+          if (entry.currentUrl !== key) {
+            for (const track of stream.getTracks()) track.stop();
+            return; // slot content changed while the permission prompt was open
+          }
+          entry.stream = stream;
+          video.srcObject = stream;
+          video.play().catch((err) => console.warn("[source-bank] camera play failed:", err.message));
+        })
+        .catch((err) => console.warn("[source-bank] camera unavailable:", err.message));
+    }
+    if (entry.videoEl) this._uploadVideoFrame(entry);
+  }
+
+  // Synthesizes a solid-color 1x1 texture for a color ref (task A13 — VPT8's solid1/solid2).
+  // Uploaded once per color value (short-circuited by the "color:<r>,<g>,<b>" signature),
+  // then sampled with CLAMP_TO_EDGE so it fills any consumer. `color` is rgb 0..1.
+  _synthColorInto(entryKey, color) {
+    const entry = this._mediaEntry(entryKey);
+    const rgb = Array.isArray(color) ? color : [0, 0, 0];
+    const key = `color:${rgb.join(",")}`;
+    if (entry.currentUrl === key) return;
+    entry.currentUrl = key;
+    this._releaseElements(entry);
+    const gl = this.gl;
+    const byte = (c) => Math.max(0, Math.min(255, Math.round((c ?? 0) * 255)));
+    const px = new Uint8Array([byte(rgb[0]), byte(rgb[1]), byte(rgb[2]), 255]);
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  }
+
   _uploadVideoFrame(entry) {
     if (entry.videoEl.readyState < 2) return;
     const gl = this.gl;
@@ -213,26 +275,35 @@ export class SourceBank {
   // LayerStack's own per-frame upload step.
   updateAll(slots, media) {
     const activeKeys = new Set();
+    // Decodes one slot input (a slot's own content, or a mix's `a`/`b` ref) into the entry
+    // keyed by `key`, branching on its type. A "slot" ref resolves live in resolveTexture,
+    // so it needs no decode entry here. Camera/color are terminal, same as media.
+    const decodeInput = (input, key, transport) => {
+      if (input?.type === "media") { activeKeys.add(key); this._decodeMediaInto(key, input.mediaId, media, transport); }
+      else if (input?.type === "camera") { activeKeys.add(key); this._decodeCameraInto(key, input); }
+      else if (input?.type === "color") { activeKeys.add(key); this._synthColorInto(key, input.color); }
+    };
     for (const slot of slots ?? []) {
-      // One transport per slot (task A9). A mix slot's two media inputs (a/b) both obey the
-      // slot's single transport — play/pause/rate/loop apply to the pair together.
+      // One transport per slot (task A9). A mix slot's two inputs (a/b) both obey the slot's
+      // single transport — play/pause/rate/loop apply to the pair together (camera/color
+      // ignore transport, having no timeline).
       const transport = slot.transport;
-      if (slot.content?.type === "media") {
-        activeKeys.add(slot.id);
-        this._decodeMediaInto(slot.id, slot.content.mediaId, media, transport);
-      } else if (slot.content?.type === "mix") {
-        if (slot.content.a?.type === "media") { activeKeys.add(`${slot.id}:a`); this._decodeMediaInto(`${slot.id}:a`, slot.content.a.mediaId, media, transport); }
-        if (slot.content.b?.type === "media") { activeKeys.add(`${slot.id}:b`); this._decodeMediaInto(`${slot.id}:b`, slot.content.b.mediaId, media, transport); }
+      const content = slot.content;
+      if (content?.type === "mix") {
+        decodeInput(content.a, `${slot.id}:a`, transport);
+        decodeInput(content.b, `${slot.id}:b`, transport);
+      } else {
+        decodeInput(content, slot.id, transport);
       }
     }
-    // Release any media entry a slot no longer decodes — content cleared, or the slot
-    // switched media<->mix (which re-keys to `${id}:a`/`:b`). Without this its <video> keeps
-    // decoding and looping invisibly forever. (updateAll runs before resolveTexture in the
-    // frame, and only inactive keys are swept, so nothing recreates them this frame.)
+    // Release any entry a slot no longer decodes — content cleared, or the slot switched
+    // type (which re-keys to `${id}:a`/`:b` for a mix, or drops a camera stream). Without
+    // this its <video>/camera keeps decoding invisibly forever. (updateAll runs before
+    // resolveTexture in the frame, and only inactive keys are swept, so nothing recreates
+    // them this frame.)
     for (const [key, entry] of [...this.entries]) {
       if (activeKeys.has(key)) continue;
-      if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); }
-      if (entry.imgEl) entry.imgEl.remove();
+      this._releaseElements(entry); // stops <video>/<img> AND live-camera tracks
       if (entry.texture) this.gl.deleteTexture(entry.texture);
       this.entries.delete(key);
     }
@@ -250,13 +321,23 @@ export class SourceBank {
     if (depth > 2) return null;
     const slot = (slots ?? []).find((s) => s.id === slotId);
     if (!slot?.content) return null;
-    if (slot.content.type === "media") {
+    // media/camera/color all decode into this slot's own entry (keyed by slot.id) in
+    // updateAll — return that texture directly.
+    if (slot.content.type === "media" || slot.content.type === "camera" || slot.content.type === "color") {
       return this._mediaEntry(slot.id).texture;
     }
     if (slot.content.type === "mix") {
       const { a, b, blendMode, mix } = slot.content;
-      const texA = a?.type === "slot" ? this.resolveTexture(a.slotId, slots, media, depth + 1) : a?.type === "media" ? this._mediaEntry(`${slot.id}:a`).texture : null;
-      const texB = b?.type === "slot" ? this.resolveTexture(b.slotId, slots, media, depth + 1) : b?.type === "media" ? this._mediaEntry(`${slot.id}:b`).texture : null;
+      // A "slot" ref recurses; media/camera/color resolve to the `${slot.id}:a`/`:b` entry
+      // decoded in updateAll. Anything else (or a null ref) is a missing input.
+      const resolveSide = (ref, side) =>
+        ref?.type === "slot"
+          ? this.resolveTexture(ref.slotId, slots, media, depth + 1)
+          : (ref?.type === "media" || ref?.type === "camera" || ref?.type === "color")
+            ? this._mediaEntry(`${slot.id}:${side}`).texture
+            : null;
+      const texA = resolveSide(a, "a");
+      const texB = resolveSide(b, "b");
       // Missing-input behavior (design spec, Section 2): pass the other input through
       // at full weight rather than rendering black.
       if (!texA && !texB) return null;
@@ -288,8 +369,7 @@ export class SourceBank {
   dispose() {
     const gl = this.gl;
     for (const entry of this.entries.values()) {
-      if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); }
-      if (entry.imgEl) entry.imgEl.remove();
+      this._releaseElements(entry); // stops <video>/<img> AND live-camera tracks
       if (entry.texture) gl.deleteTexture(entry.texture);
     }
     this.entries.clear();
