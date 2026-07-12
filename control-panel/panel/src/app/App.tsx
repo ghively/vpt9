@@ -20,6 +20,7 @@ import {
   MidiMapPanel,
   MobileTabBar,
   PresetsBar,
+  ScreenSelect,
   ShowDrawer,
   SlotGrid,
   Stage,
@@ -224,6 +225,14 @@ export function App() {
 
   const faceplate = (
     <Faceplate
+      screenSelect={
+        <ScreenSelect
+          screens={screens}
+          selectedId={selectedScreenId}
+          onSelect={setSelectedScreenId}
+          onAdd={actions.addScreen}
+        />
+      }
       center={
         <div className="faceplate-center">
           <AudioOwner screens={screens} ownerId={state.audioOwnerScreenId} onSelect={actions.setAudioOwner} />

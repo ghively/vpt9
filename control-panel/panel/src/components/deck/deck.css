@@ -45,6 +45,44 @@
   min-width: 0;
 }
 
+/* ---------------- command bar: active-screen selector (Task 11) ----------------
+ * Ported from the mockup's `.seg` (docs/superpowers/specs/2026-07-11-projection-deck-
+ * mockup.html), real tokens only — the same segmented-button shape as `.modes` below,
+ * just living beside the wordmark instead of in the Inspector. Picks which screen the
+ * Stage previews/edits; deliberately separate from `#audio-owner` (which screen plays
+ * audio) even though both render as chip/segment rows in the command bar. */
+.screen-select { display: flex; align-items: center; gap: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button {
+  padding: 6px 12px;
+  border: none;
+  border-right: 1px solid var(--hairline);
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.seg button:last-child { border-right: none; }
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { color: var(--beam); background: var(--beam-soft); }
+.screen-select-add {
+  padding: 6px 9px;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.screen-select-add:hover { border-color: var(--beam-line); color: var(--beam); }
+
 /* ---------------- body columns ---------------- */
 .body {
   display: grid;
@@ -590,6 +628,10 @@
 /* Drop the wordmark's " control" suffix first — cheapest width to reclaim before
  * anything has to wrap. */
 .deck[data-mobile="true"] .wordmark .desc { display: none; }
+/* Task 11: the nameplate now also carries the screen-select segment beside the
+ * wordmark — let it wrap onto its own line rather than overflow on the narrowest
+ * phones, same rationale as `.cmd > header` above. */
+.deck[data-mobile="true"] .nameplate { flex-wrap: wrap; row-gap: 6px; }
 
 /* ── Touch: enlarge the deck's own interactive controls (not already covered by
  * panel.css's `.toggle-sq`/`.handle`/`.mask-shape__edge`/`.pip-box__resize` rules, which
@@ -602,6 +644,8 @@
   .addbtn { min-height: var(--tap-min); }
   .modes button,
   .togglepill button { min-height: var(--tap-min); }
+  .seg button,
+  .screen-select-add { min-height: var(--tap-min); }
   .show-drawer-tab,
   .show-drawer-toggle { min-height: var(--tap-min); }
   .subhead .rst { min-height: var(--tap-min); padding-left: 12px; padding-right: 12px; }
