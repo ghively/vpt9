@@ -137,3 +137,66 @@ test("a layer's own warp moves it independently of screen warp, mask follows the
   const movedAway = await readPixel(0.75, 0.5);
   expect(movedAway[0]).toBeLessThan(60);
 });
+
+test("fx.rotationDeg rotates a layer's content about its anchor (VPT8 parity: td.rota.jxs's rota field)", async ({ page }) => {
+  // No mask/asymmetric image fixture needed: a solid-color layer's point pass treats
+  // anything sampled outside content uv [0,1] as transparent ("border" in fx.js's
+  // POINT_FRAG) — so rotating a full-cover color layer 45 degrees about its center
+  // pushes every corner of the viewport outside that [0,1] window (each corner sits at
+  // radius ~0.66 from center post-rotation, past the 0.5 half-width), turning solid
+  // color into transparent-revealing-background right at the corner. That's a
+  // deterministic, purely numeric way to prove rotation is wired end-to-end (state ->
+  // WS -> render-client -> shader uniform -> pixels).
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      // order: 300 — above layer-w (order 100, left over from the previous test in this
+      // file) as well as the two seeded demo layers, so it's unambiguously the topmost.
+      id: "layer-rot", name: "rotation test", order: 300,
+      source: { type: "color", color: [1, 0, 0] }, opacity: 1, blendMode: "normal",
+      // fx omitted entirely (not null) so the server's ensureLayerDefaults backfill on
+      // create fills in a full defaultFx() — including the new rotationDeg/anchor/zoomXY
+      // leaves — leaving "layers.layer-rot.fx.rotationDeg" a valid, existing patch path.
+    },
+  });
+  socket.close();
+
+  await page.goto(`http://localhost:${RENDER_PORT}/index.html?screen=screen-1&ws=ws://localhost:${WS_PORT}`);
+  await page.waitForTimeout(500);
+  const canvas = page.locator("canvas");
+
+  const readPixel = (xFrac, yFrac) =>
+    canvas.evaluate(
+      (el, [xf, yf]) => {
+        const gl = el.getContext("webgl2");
+        const px = new Uint8Array(4);
+        gl.readPixels(Math.round(el.width * xf), Math.round(el.height * yf), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        return Array.from(px);
+      },
+      [xFrac, yFrac],
+    );
+
+  // Baseline, rotationDeg=0 (the default): fx are all neutral, so the layer never enters
+  // the fx chain at all (fxNeedsChain returns false) and renders as a flat, full-opacity
+  // fill covering the entire quad — deterministically red at every corner, regardless of
+  // whatever's composited beneath it.
+  const baseline = await readPixel(0.05, 0.05);
+  expect(baseline[0]).toBeGreaterThan(180);
+
+  const socket2 = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket2.once("open", resolve));
+  await wsSend(socket2, { type: "update", path: "layers.layer-rot.fx.rotationDeg", value: 45 });
+  socket2.close();
+  await page.waitForTimeout(500);
+
+  // After a 45-degree rotation about the default center anchor (0.5, 0.5), this corner's
+  // inverse-mapped sample point lands outside content uv [0,1] (radius ~0.66 > half-width
+  // 0.5) — transparent, revealing whatever's beneath (near-black canvas ground) instead of
+  // the layer's opaque red fill. Proves rotationDeg reached the shader and actually moved
+  // the content, not just a state/type plumbing no-op.
+  const rotated = await readPixel(0.05, 0.05);
+  expect(rotated[0]).toBeLessThan(60);
+});

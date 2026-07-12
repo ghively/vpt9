@@ -52,6 +52,11 @@ type LayerLook = Pick<Layer, "opacity" | "blendMode" | "mask" | "fx">;
 const LAYER_TARGET_FIELDS: Array<[string, string]> = [
   ["opacity", "opacity"],
   ["fx.zoom", "zoom"],
+  ["fx.zoomX", "zoom x"],
+  ["fx.zoomY", "zoom y"],
+  ["fx.rotationDeg", "rotation"],
+  ["fx.anchorX", "anchor x"],
+  ["fx.anchorY", "anchor y"],
   ["fx.panX", "pan x"],
   ["fx.panY", "pan y"],
   ["fx.blur", "blur"],

@@ -36,6 +36,17 @@ export function defaultFx() {
     tileX: 1,
     tileY: 1,
     zoom: 1,
+    // Non-uniform zoom, an off-center pivot, and rotation — ported from VPT8's `p zoom`
+    // stage (td.rota.jxs: zoom + xzoom/yzoom + xanchor/yanchor + rota). `zoom` above stays
+    // the overall uniform multiplier (existing LFO/MIDI targets, presets, and state.json
+    // all reference `fx.zoom` and must keep working); zoomX/zoomY are applied ON TOP of it
+    // (effective per-axis scale = zoom * zoomX / zoom * zoomY), so old shows that never set
+    // these new leaves render byte-identical to before.
+    zoomX: 1,
+    zoomY: 1,
+    anchorX: 0.5,
+    anchorY: 0.5,
+    rotationDeg: 0,
     panX: 0,
     panY: 0,
     blur: 0,

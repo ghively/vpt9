@@ -47,6 +47,11 @@ const TRANSFORM_SLIDERS: SliderSpec[] = [
   { label: "TILE X", field: "fx.tileX", min: 1, max: 8, step: 1, neutral: 1 },
   { label: "TILE Y", field: "fx.tileY", min: 1, max: 8, step: 1, neutral: 1 },
   { label: "ZOOM", field: "fx.zoom", min: 0.1, max: 4, step: 0.01, neutral: 1 },
+  { label: "ZOOM X", field: "fx.zoomX", min: 0.1, max: 4, step: 0.01, neutral: 1 },
+  { label: "ZOOM Y", field: "fx.zoomY", min: 0.1, max: 4, step: 0.01, neutral: 1 },
+  { label: "ROTATION", field: "fx.rotationDeg", min: -180, max: 180, step: 1, neutral: 0 },
+  { label: "ANCHOR X", field: "fx.anchorX", min: 0, max: 1, step: 0.01, neutral: 0.5 },
+  { label: "ANCHOR Y", field: "fx.anchorY", min: 0, max: 1, step: 0.01, neutral: 0.5 },
   { label: "PAN X", field: "fx.panX", min: -1, max: 1, step: 0.01, neutral: 0 },
   { label: "PAN Y", field: "fx.panY", min: -1, max: 1, step: 0.01, neutral: 0 },
 ];

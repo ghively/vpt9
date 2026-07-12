@@ -32,6 +32,9 @@ uniform vec3 u_color;
 uniform bvec2 u_flip;      // (flipH, flipV)
 uniform vec2 u_tile;       // repeat counts, 1 = off
 uniform float u_zoom;
+uniform vec2 u_zoomXY;     // non-uniform zoom multipliers (on top of u_zoom), 1 = off
+uniform vec2 u_anchor;     // zoom/rotate pivot, in uv space; (0.5, 0.5) = center
+uniform float u_rotation;  // radians, about u_anchor
 uniform vec2 u_pan;
 uniform vec3 u_brcosa;     // brightness, contrast, saturation
 uniform vec4 u_edges;      // left, right, top, bottom fractional widths
@@ -39,9 +42,20 @@ uniform float u_edgeGamma;
 out vec4 outColor;
 
 void main() {
-  // Inverse of the image-space op chain flip -> tile -> zoom/pan: undo zoom/pan, then
-  // tiling, then flip, and sample there.
-  vec2 uv = (v_uv - 0.5) / max(u_zoom, 0.001) + 0.5 - u_pan;
+  // Inverse of the image-space op chain flip -> tile -> rotate/zoom/pan: undo pan, then
+  // rotation and non-uniform zoom about the anchor pivot (VPT8's td.rota.jxs: rota +
+  // xzoom/yzoom + xanchor/yanchor, composed with the overall zoom), then tiling, then
+  // flip, and sample there.
+  //
+  // At the defaults (u_rotation=0, u_zoomXY=(1,1), u_anchor=(0.5,0.5)) this reduces
+  // algebraically to the original (v_uv - 0.5) / u_zoom + 0.5 - u_pan — old shows that
+  // never touch the new fields render byte-identical to before.
+  vec2 rel = v_uv - u_anchor;
+  float rad = -u_rotation; // inverse-rotate to find the source sample, not the destination
+  float cs = cos(rad), sn = sin(rad);
+  vec2 relRot = vec2(cs * rel.x - sn * rel.y, sn * rel.x + cs * rel.y);
+  vec2 scale = vec2(max(u_zoom, 0.001)) * max(u_zoomXY, vec2(0.001));
+  vec2 uv = relRot / scale + u_anchor - u_pan;
 
   float border = 1.0;
   vec2 suv;
@@ -140,6 +154,9 @@ export function fxNeedsChain(fx) {
     fx.flipH || fx.flipV ||
     (fx.tileX ?? 1) !== 1 || (fx.tileY ?? 1) !== 1 ||
     (fx.zoom ?? 1) !== 1 || (fx.panX ?? 0) !== 0 || (fx.panY ?? 0) !== 0 ||
+    (fx.zoomX ?? 1) !== 1 || (fx.zoomY ?? 1) !== 1 ||
+    (fx.anchorX ?? 0.5) !== 0.5 || (fx.anchorY ?? 0.5) !== 0.5 ||
+    (fx.rotationDeg ?? 0) !== 0 ||
     (fx.blur ?? 0) > 0 || (fx.motionBlur ?? 0) > 0 ||
     (fx.brightness ?? 1) !== 1 || (fx.contrast ?? 1) !== 1 || (fx.saturation ?? 1) !== 1 ||
     (eb.left ?? 0) > 0 || (eb.right ?? 0) > 0 || (eb.top ?? 0) > 0 || (eb.bottom ?? 0) > 0
@@ -157,8 +174,11 @@ export class FxPasses {
     this.mask = createProgram(gl, QUAD_VERT, MASK_FRAG);
     this.u = {
       point: Object.fromEntries(
-        ["u_src", "u_isColor", "u_color", "u_flip", "u_tile", "u_zoom", "u_pan", "u_brcosa", "u_edges", "u_edgeGamma"]
-          .map((name) => [name, gl.getUniformLocation(this.point, name)])
+        [
+          "u_src", "u_isColor", "u_color", "u_flip", "u_tile",
+          "u_zoom", "u_zoomXY", "u_anchor", "u_rotation", "u_pan",
+          "u_brcosa", "u_edges", "u_edgeGamma",
+        ].map((name) => [name, gl.getUniformLocation(this.point, name)])
       ),
       blur: Object.fromEntries(
         ["u_src", "u_dir"].map((name) => [name, gl.getUniformLocation(this.blur, name)])
@@ -213,6 +233,9 @@ export class FxChain {
     gl.uniform2i(u.u_flip, fx.flipH ? 1 : 0, fx.flipV ? 1 : 0);
     gl.uniform2f(u.u_tile, fx.tileX ?? 1, fx.tileY ?? 1);
     gl.uniform1f(u.u_zoom, fx.zoom ?? 1);
+    gl.uniform2f(u.u_zoomXY, fx.zoomX ?? 1, fx.zoomY ?? 1);
+    gl.uniform2f(u.u_anchor, fx.anchorX ?? 0.5, fx.anchorY ?? 0.5);
+    gl.uniform1f(u.u_rotation, ((fx.rotationDeg ?? 0) * Math.PI) / 180);
     gl.uniform2f(u.u_pan, fx.panX ?? 0, fx.panY ?? 0);
     gl.uniform3f(u.u_brcosa, fx.brightness ?? 1, fx.contrast ?? 1, fx.saturation ?? 1);
     gl.uniform4f(u.u_edges, eb.left ?? 0, eb.right ?? 0, eb.top ?? 0, eb.bottom ?? 0);

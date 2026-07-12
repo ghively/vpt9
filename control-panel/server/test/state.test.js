@@ -227,3 +227,36 @@ test("ensureLayerDefaults backfills transport, sourceMode, and playlist on an ol
   assert.equal(layer.sourceMode, "single");
   assert.deepEqual(layer.playlist, { items: [], cursor: -1 });
 });
+
+test("defaultFx includes rotation, anchor, and non-uniform zoom, all at their neutral/off values", () => {
+  const fx = defaultFx();
+  assert.equal(fx.rotationDeg, 0);
+  assert.equal(fx.anchorX, 0.5);
+  assert.equal(fx.anchorY, 0.5);
+  assert.equal(fx.zoomX, 1);
+  assert.equal(fx.zoomY, 1);
+  // The pre-existing overall zoom field must be untouched — old LFO/MIDI targets and
+  // presets that reference "fx.zoom" must keep working unchanged.
+  assert.equal(fx.zoom, 1);
+});
+
+test("ensureLayerDefaults backfills rotation/anchor/non-uniform-zoom onto an fx object saved before this feature existed", () => {
+  const layer = {
+    id: "layer-1",
+    order: 1,
+    warp: defaultWarp(),
+    fx: {
+      flipH: false, flipV: false, tileX: 1, tileY: 1, zoom: 1.5, panX: 0, panY: 0,
+      blur: 0, motionBlur: 0, brightness: 1, contrast: 1, saturation: 1,
+      edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2 },
+    },
+  };
+  ensureLayerDefaults(layer);
+  assert.equal(layer.fx.rotationDeg, 0);
+  assert.equal(layer.fx.anchorX, 0.5);
+  assert.equal(layer.fx.anchorY, 0.5);
+  assert.equal(layer.fx.zoomX, 1);
+  assert.equal(layer.fx.zoomY, 1);
+  // The old value on the pre-existing field must survive the backfill untouched.
+  assert.equal(layer.fx.zoom, 1.5);
+});

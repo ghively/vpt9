@@ -64,6 +64,15 @@ export interface Fx {
   tileX: number;
   tileY: number;
   zoom: number;
+  /** Non-uniform zoom multipliers applied on top of `zoom` (VPT8's td.rota.jxs
+   *  xzoom/yzoom). 1 = off. */
+  zoomX: number;
+  zoomY: number;
+  /** Zoom/rotate pivot, in uv space (VPT8's xanchor/yanchor). (0.5, 0.5) = center. */
+  anchorX: number;
+  anchorY: number;
+  /** Rotation about (anchorX, anchorY), in degrees (VPT8's `rota`). 0 = off. */
+  rotationDeg: number;
   panX: number;
   panY: number;
   blur: number;
