@@ -113,3 +113,13 @@ document.addEventListener("dblclick", () => {
   if (!document.fullscreenElement) canvas.requestFullscreen?.();
   else document.exitFullscreen?.();
 });
+
+// Hide the mouse cursor over the projector output while fullscreen (VPT8's `cursor:none`
+// on the output window) — an idle pointer must never show up in a live projection. Restore
+// it on exit so the windowed client stays usable. Applied to both the canvas and <body> so
+// the cursor stays hidden even in the letterbox margins around the fullscreened canvas.
+document.addEventListener("fullscreenchange", () => {
+  const hide = document.fullscreenElement ? "none" : "";
+  canvas.style.cursor = hide;
+  document.body.style.cursor = hide;
+});
