@@ -276,3 +276,18 @@
  * 0..1 coordinates against this same box. */
 .stage-overlay { position: absolute; inset: 0; }
 
+/* Task 5: faint hover outline over whichever layer's warp quad is under the pointer —
+ * a plain SVG polygon in normalized 0..1 space (viewBox="0 0 1 1", stretched to the
+ * stage box via preserveAspectRatio="none"), so it needs no per-frame pixel math.
+ * `vector-effect: non-scaling-stroke` keeps the stroke a constant screen-space width
+ * despite the 0..1 -> box-pixels viewBox scale. Purely decorative: pointer-events:none
+ * so it never steals the click/hover hit-test out from under .deck-stage itself. */
+.deck-hover-outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.deck-hover-outline polygon {
+  fill: var(--hairline);
+  fill-opacity: 0.12;
+  stroke: var(--beam-line);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+

@@ -1,5 +1,6 @@
-import { forwardRef, useImperativeHandle, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { ConfidenceMonitorHandle } from "../ConfidenceMonitor";
+import { pointInQuad, type Quad } from "./layerGeometry";
 
 export interface StageProps {
   /** Selected screen id (e.g. "screen-1") — shown in the LIVE badge. Display only; Stage
@@ -14,6 +15,12 @@ export interface StageProps {
   height: number;
   /** Selection/warp/mask handles (Tasks 5 & 6), absolutely positioned over the frame. */
   overlay: ReactNode;
+  /** Every layer's on-screen quad, topmost first — used ONLY to draw a faint hover
+   *  outline under the pointer (the click-to-select hit-test itself runs in App, which
+   *  owns the resulting selection state; Stage stays presentational and just reports
+   *  what the pointer is over visually). Optional — omit to skip the hover affordance
+   *  (e.g. Storybook demos with no live layers). */
+  hitLayers?: Array<{ id: string; quad: Quad }>;
   /** Fires for pointer-downs on the stage background — but NOT for pointer-downs that
    *  land on a Task 6 drag handle (any element carrying `.deck-handle`, checked via
    *  `target.closest`), so grabbing a handle never also triggers a background/select
@@ -44,11 +51,12 @@ export interface StageProps {
  *  drive the `<img>` directly at the render-client's ~250ms cadence, without a
  *  React re-render (mirrors `ConfidenceMonitor.tsx`'s own `setFrame` contract). */
 export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function Stage(
-  { screenId, frame, width, height, overlay, onBackgroundPointerDown },
+  { screenId, frame, width, height, overlay, hitLayers, onBackgroundPointerDown },
   ref,
 ) {
   const imgRef = useRef<HTMLImageElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const [hoverQuad, setHoverQuad] = useState<Quad | null>(null);
 
   useImperativeHandle(
     ref,
@@ -67,8 +75,27 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
     onBackgroundPointerDown(e);
   };
 
+  // Faint hover outline so objects on the stage read as clickable before the operator
+  // commits to a click — hit-tests the same normalized 0..1 point (against this same
+  // box) that App's click handler uses, just locally and read-only.
+  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!hitLayers?.length) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const p = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+    const hit = hitLayers.find((layer) => pointInQuad(p, layer.quad));
+    setHoverQuad(hit?.quad ?? null);
+  };
+  const handlePointerLeave = () => setHoverQuad(null);
+
   return (
-    <div className="deck-stage" ref={stageRef} data-live={!!frame} onPointerDown={handlePointerDown}>
+    <div
+      className="deck-stage"
+      ref={stageRef}
+      data-live={!!frame}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+    >
       {/* src omitted when there's no frame so panel.css's `.preview-img:not([src])` rule
        *  hides the broken-image glyph instead of showing one. */}
       <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" />
@@ -87,7 +114,14 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       <div className="stage-fps mono">
         {width}×{height}
       </div>
-      <div className="stage-overlay">{overlay}</div>
+      <div className="stage-overlay">
+        {hoverQuad && (
+          <svg className="deck-hover-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+            <polygon points={hoverQuad.map((pt) => `${pt.x},${pt.y}`).join(" ")} />
+          </svg>
+        )}
+        {overlay}
+      </div>
     </div>
   );
 });

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useMemo, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   AudioOwner,
   Faceplate,
@@ -9,6 +9,7 @@ import {
   StatusLamp,
   type ConnectionState,
 } from "../components";
+import { layerQuad, pickTopLayer } from "../components/deck/layerGeometry";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
@@ -136,6 +137,25 @@ export function App() {
   );
   const selection = useSelection(layersTopFirst[0]?.id ?? null);
 
+  // Task 5: clicking an object on the stage selects its layer — hit-test every
+  // layer's warp quad (topmost first) against the normalized click position, mapped
+  // against the stage's own box so it lines up with the same 0..1 space the overlay
+  // (Task 6) and Stage's hover outline use. Clicking empty space (no quad contains the
+  // point) deselects.
+  const onBackgroundPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const p = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+      const topFirst = Object.values(stateRef.current.layers).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+      selection.setSelectedLayerId(pickTopLayer(topFirst, p));
+    },
+    [selection],
+  );
+  // Not memoized: layersTopFirst is itself a fresh array every render (see above), so
+  // there'd be nothing stable to key a memo off; this is a cheap map over a handful of
+  // layers, not worth the added complexity.
+  const hitLayers = layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }));
+
   return (
     <div className="deck">
       {/* Faceplate already renders its own <header> (wordmark, AudioOwner, MasterControl
@@ -168,7 +188,8 @@ export function App() {
               width={1280}
               height={720}
               overlay={null /* Task 6 fills this with warp/mask handles */}
-              onBackgroundPointerDown={() => {} /* Task 5 wires layer-region selection */}
+              hitLayers={hitLayers}
+              onBackgroundPointerDown={onBackgroundPointerDown}
             />
           )}
         </main>
