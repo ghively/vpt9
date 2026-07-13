@@ -419,8 +419,15 @@ Not verifiable from this environment, by nature of what they are:
   implementation is spec-correct for the subset YouTube uses, but real-app compatibility
   (some details of YouTube's Leanback launch flow are reverse-engineered, not officially
   documented) hasn't been tested against a real device.
-- **Docker/GPU execution** — the Dockerfiles and compose file are written and reviewed
-  but not run in this environment (no Docker daemon available).
+- **Docker execution** — the Dockerfiles and compose file are written and reviewed but not
+  run under a Docker daemon (none available in the dev environment).
+- **GPU execution — VERIFIED on real hardware (2026-07-13).** The four services were brought
+  up locally on a Windows box with a discrete GPU (Node processes, no Docker): the render
+  client obtained a hardware WebGL2 context — `ANGLE (AMD, AMD Radeon RX 9070 XT, Direct3D11)`,
+  no context loss — and composited a driven scene end-to-end (color sources + `screen` blend +
+  a feathered ellipse mask, pixel-verified), while the control panel connected to the
+  control-plane, drove the scene, and showed the render client's live preview in its Stage, and
+  the cast-receiver served its DIAL `dd.xml`. Only Docker-daemon packaging remains unrun.
 - **Real hardware at the edges** — a physical camera on a projector machine (the
   getUserMedia + device-picker path is written but headless has no camera; the
   record-to-disk button is implemented but unverified against a real device), a hardware
