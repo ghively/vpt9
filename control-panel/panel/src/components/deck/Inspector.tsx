@@ -353,6 +353,16 @@ function MatteSourcePicker({
   );
 }
 
+/** A centered regular hexagon in normalized (0..1) mask space, used to seed a polygon
+ *  mask's vertices the moment the shape is switched to "polygon" — an empty polygon has
+ *  no draggable handles and (before the render-client's <3-point guard) blanked the layer,
+ *  so there was no way to bootstrap one from the UI. The operator then drags/inserts/deletes
+ *  these vertices on the stage (MaskShapeOverlay). */
+const DEFAULT_POLYGON = Array.from({ length: 6 }, (_, i) => {
+  const t = (i / 6) * Math.PI * 2 - Math.PI / 2;
+  return { x: 0.5 + 0.3 * Math.cos(t), y: 0.5 + 0.3 * Math.sin(t) };
+});
+
 /** Mask contextual body: enable toggle, shape toggle (rect/ellipse/polygon), invert
  *  toggle, feather fader, a matte-source picker (task A5), and — for rect/ellipse only —
  *  a live read-only center/radius readout (dragged on the stage, same rationale as
@@ -404,7 +414,14 @@ function MaskBody({
             { value: "polygon", label: "Polygon" },
           ]}
           value={mask.shape}
-          onChange={(v) => onUpdate?.("mask.shape", v)}
+          onChange={(v) => {
+            onUpdate?.("mask.shape", v);
+            // Seed vertices when switching INTO polygon with none yet, so the on-canvas
+            // editor has handles to drag (and the layer isn't blanked by an empty polygon).
+            if (v === "polygon" && (mask.points?.length ?? 0) < 3) {
+              onUpdate?.("mask.points", DEFAULT_POLYGON);
+            }
+          }}
         />
       </div>
       <div className="mini">

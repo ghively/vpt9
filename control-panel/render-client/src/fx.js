@@ -106,7 +106,11 @@ void main() {
     if (u_edges.y > 0.0) e *= pow(clamp((1.0 - v_uv.x) / u_edges.y, 0.0, 1.0), u_edgeGamma);
     if (u_edges.z > 0.0) e *= pow(clamp((1.0 - v_uv.y) / u_edges.z, 0.0, 1.0), u_edgeGamma);
     if (u_edges.w > 0.0) e *= pow(clamp(v_uv.y / u_edges.w, 0.0, 1.0), u_edgeGamma);
-    if (u_edgeInvert) e = 1.0 - e;
+    // Invert the ramp only when at least one edge width is set. With no edges, e is 1.0
+    // everywhere and inverting it (1.0 - e = 0.0) would blank the whole layer on a bare
+    // invert toggle with no edges configured.
+    bool anyEdge = u_edges.x > 0.0 || u_edges.y > 0.0 || u_edges.z > 0.0 || u_edges.w > 0.0;
+    if (u_edgeInvert && anyEdge) e = 1.0 - e;
   }
 
   outColor = vec4(c.rgb, c.a * border * e);
@@ -186,10 +190,17 @@ void main() {
     vec3 m = texture(u_matte, v_uv).rgb;
     a = dot(m, vec3(0.299, 0.587, 0.114));
   } else if (u_maskShape == 2) {
-    bool inside = maskPolygonContains(v_uv);
-    float edgeDist = maskPolygonEdgeDist(v_uv);
-    float signedDist = inside ? -edgeDist : edgeDist;
-    a = 1.0 - smoothstep(0.0, u_maskFeather, signedDist);
+    if (u_maskCount < 3) {
+      // Fewer than 3 vertices is not a polygon — show the layer fully instead of blanking
+      // it (a freshly-enabled polygon mask before any vertices are placed would otherwise
+      // go fully transparent). invert below still applies.
+      a = 1.0;
+    } else {
+      bool inside = maskPolygonContains(v_uv);
+      float edgeDist = maskPolygonEdgeDist(v_uv);
+      float signedDist = inside ? -edgeDist : edgeDist;
+      a = 1.0 - smoothstep(0.0, u_maskFeather, signedDist);
+    }
   } else {
     vec2 d = (v_uv - u_maskCenter) / max(u_maskRadius, vec2(0.0001));
     float dist = (u_maskShape == 1) ? length(d) : max(abs(d.x), abs(d.y));

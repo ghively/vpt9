@@ -203,12 +203,15 @@ export class Compositor {
   // boundaries, and we've already redrawn the frozen frame before yielding). This reuses the
   // proven, correctly-oriented drawImage path instead of a separate GL readback.
   capturePreview(maxWidth = 320) {
-    if (this.blind && this._liveScene) {
+    // Only draw the live frame if we can immediately restore the frozen one afterward
+    // (_heldFbo ready). On the very first preview tick after engaging blind — before the
+    // next rAF has snapshotted the held frame — _heldFbo is still null; drawing the live
+    // scene then would leave it on the projector canvas until the next rAF (a one-frame
+    // off-air leak). In that window just capture the frozen/last frame already on the canvas.
+    if (this.blind && this._liveScene && this._heldFbo) {
       this.screenWarp.render(this._liveScene, this.warp, this.canvas.width, this.canvas.height, this.master);
       const url = this._downsampleCanvas(maxWidth);
-      if (this._heldFbo) {
-        this.screenWarp.render(this._heldFbo.texture, this._heldWarp, this.canvas.width, this.canvas.height, this._heldMaster);
-      }
+      this.screenWarp.render(this._heldFbo.texture, this._heldWarp, this.canvas.width, this.canvas.height, this._heldMaster);
       return url;
     }
     return this._downsampleCanvas(maxWidth);
