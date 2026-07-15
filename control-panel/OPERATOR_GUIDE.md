@@ -85,10 +85,13 @@ source picker.
 **Import by link.** Paste a URL — anywhere in the panel (outside a text field), or into
 the media bin's "paste a link" field — and the **server** downloads it into the library:
 a direct `.mp4`/`.webm`/`.gif`/`.jpg` link streams straight in; a YouTube/Vimeo/other
-streaming-site link is fetched with `yt-dlp` (install it on the server machine —
-`pip install yt-dlp` or your package manager — or those links will report an error;
-direct file links work either way). Progress shows as a dashed cell in the bin;
-a failed import shows its reason — click it to dismiss.
+streaming-site link is fetched with `yt-dlp`. The Docker image includes yt-dlp + ffmpeg
+already; if you run the server bare, install yt-dlp yourself (`pip install yt-dlp` or
+your package manager) or those links will report an error — direct file links work
+either way. Streaming sites change constantly and old yt-dlp versions stop working
+against them: if YouTube imports start failing, update yt-dlp (rebuild the image, or
+`yt-dlp -U` on a bare install). Progress shows as a dashed cell in the bin; a failed
+import shows its reason — click it to dismiss.
 
 ## Layer stack (left rail)
 
