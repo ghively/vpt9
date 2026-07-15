@@ -185,6 +185,18 @@ function broadcast(message, exclude) {
   oscOut.observe(message);
 }
 
+// Panel-only relay for high-frequency telemetry (preview frames, transport positions):
+// render clients identify themselves with a `hello` message and are skipped — without
+// this, every screen's ~10fps 640px preview JPEG stream was mirrored to every projector,
+// which parsed and dropped all of it. Clients that never send `hello` (panels, e2e
+// sockets, older render clients) receive everything, exactly as before.
+function broadcastToPanels(message, exclude) {
+  const payload = JSON.stringify(message);
+  for (const client of wss.clients) {
+    if (client !== exclude && !client.isRenderClient && client.readyState === client.OPEN) client.send(payload);
+  }
+}
+
 const mediaRouter = createMediaRouter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES });
 
 function handleCreate(socket, message) {
@@ -279,6 +291,11 @@ wss.on("connection", (socket) => {
       case "blindDiscard":
         blindSession.discard();
         return;
+      case "hello":
+        // Client self-identification (see broadcastToPanels): render clients opt out of
+        // panel-only telemetry relays. Sent on every (re)connect by render-client main.js.
+        if (message.role === "render") socket.isRenderClient = true;
+        return;
       case "create":
         if (typeof message.path === "string") handleCreate(socket, message);
         return;
@@ -313,18 +330,19 @@ wss.on("connection", (socket) => {
         if (Number.isInteger(message.index)) engine.cueJump(message.index);
         return;
       case "preview":
-        // Confidence-monitor frames for the warp editor: relayed live, never persisted
-        // or stored in `state` — high-frequency and disposable by design.
+        // Confidence-monitor frames for the warp editor: relayed live to PANELS only
+        // (see broadcastToPanels), never persisted or stored in `state` —
+        // high-frequency and disposable by design.
         if (typeof message.screenId === "string" && typeof message.frame === "string") {
-          broadcast({ type: "preview", screenId: message.screenId, frame: message.frame }, socket);
+          broadcastToPanels({ type: "preview", screenId: message.screenId, frame: message.frame }, socket);
         }
         return;
       case "transportStatus":
-        // Playback-position telemetry: relay-only, never persisted, mirroring the
+        // Playback-position telemetry: panel-only relay, never persisted, mirroring the
         // `preview` pattern exactly — see docs/superpowers/specs/2026-07-08-parity-
         // finish-line-design.md Section 3 for why this is NOT part of `state`.
         if (typeof message.layerId === "string" && typeof message.position === "number") {
-          broadcast({ type: "transportStatus", layerId: message.layerId, position: message.position }, socket);
+          broadcastToPanels({ type: "transportStatus", layerId: message.layerId, position: message.position }, socket);
         }
         return;
       case "clipEnded":

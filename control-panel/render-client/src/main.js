@@ -97,6 +97,13 @@ function noteControlActivity() {
 const socket = connectControlPlane(wsUrl, {
   onStatus(status) {
     if (statusEl) statusEl.textContent = `${status} · ${wsUrl} · screen "${screenId}"`;
+    // Identify this connection as a render client (on every (re)connect): the server
+    // then skips it when relaying panel-only telemetry — every screen's ~10fps 640px
+    // preview JPEGs and transport positions used to be mirrored to every projector,
+    // which silently dropped them all.
+    if (status === "connected") {
+      socket.send(JSON.stringify({ type: "hello", role: "render", screenId }));
+    }
   },
   onState(newState) {
     state = newState;

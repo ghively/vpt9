@@ -78,6 +78,7 @@ export class Compositor {
     this._heldFbo = null;
     this._liveScene = null;
     this._blindNeedsSnapshot = this.blind;
+    this.layerStack.setBlindHold(this.blind); // the fresh LayerStack must inherit the hold
   }
 
   _resize() {
@@ -125,11 +126,15 @@ export class Compositor {
 
   // Task A20: enter/leave blind (preview) mode. On the false→true edge, arm a one-shot
   // snapshot so the NEXT rendered frame freezes into the held FBO; while blind the canvas
-  // keeps showing that frozen frame. Leaving blind just resumes live drawing.
+  // keeps showing that frozen frame. Leaving blind resumes live drawing AND releases the
+  // layer stack's audio hold (clips cued while blind un-mute per the owner policy).
   setBlind(blind) {
     const next = !!blind;
-    if (next && !this.blind) this._blindNeedsSnapshot = true;
+    if (next === this.blind) return;
+    if (next) this._blindNeedsSnapshot = true;
     this.blind = next;
+    this.layerStack.setBlindHold(next);
+    if (!next) this._applyMute(); // re-apply the audio-owner policy to the born-blind elements
   }
 
   // Copies the just-composited `scene` (plus the warp/master in effect right now) into the

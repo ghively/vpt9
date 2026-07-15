@@ -328,6 +328,14 @@ The command bar has three house-level controls that live outside every preset an
   This is the lighting-console Blind / broadcast preview-program workflow: prepare the
   next look in safety, then either take it or throw it away.
 
+  **Audio while blind** holds like the picture does: clips you load while blind stay
+  muted until GO LIVE, volume/pan faders hold at their pre-blind levels, and PiP
+  windows hold their pre-blind arrangement. Whatever was already playing keeps playing
+  — blind freezes the show, it doesn't cut it. One documented limit: pausing or
+  scrubbing a clip that was *already audible* before you went blind is still audible
+  (one decoder can't play two positions at once) — leave the live clip's transport
+  alone while blind.
+
 None of the three can be moved or undone by a preset recall, a cue fade, or any
 automation step — they're the controls that are yours alone, always.
 

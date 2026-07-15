@@ -283,6 +283,9 @@ export class LayerStack {
           if (this.onClipEnded) this.onClipEnded(id);
         });
         video.play().catch((err) => console.warn(`[layers] could not play "${url}":`, err.message));
+        // Born while blind (see setBlindHold): stays muted until the session commits,
+        // so cueing a new clip off-air is never audible to the audience.
+        entry._bornBlind = this.blindHold;
         entry.videoEl = video;
       } else {
         // Still image (jpg) or animated gif: sample an <img> into the texture. A gif
@@ -337,7 +340,25 @@ export class LayerStack {
 
   setLayerMuted(id, muted) {
     const entry = this.entries.get(id);
-    if (entry?.videoEl) entry.videoEl.muted = muted;
+    // The blind audio hold overrides the audio-owner policy for elements created during
+    // the blind session — they stay muted until commit no matter who owns audio.
+    if (entry?.videoEl) entry.videoEl.muted = muted || (this.blindHold && !!entry._bornBlind);
+  }
+
+  // Blind audio hold (the audible face of task A20's frozen wall): while the wall is
+  // frozen, what the audience HEARS must hold like what they see. Video elements created
+  // while blind start and stay muted (a clip cued off-air must not play out loud), and
+  // applyTransport freezes vol/pan gains at their pre-blind levels. Elements that were
+  // already playing keep their audio running — blind freezes the show, it doesn't cut it.
+  // Committing (blind off) clears the tags; the compositor then re-applies the normal
+  // audio-owner mute policy, bringing the new clips' audio up. Known limit, documented in
+  // the operator guide: pausing/scrubbing a clip that was ALREADY audible before blind is
+  // still audible — one decode pipeline can't play two positions at once.
+  setBlindHold(on) {
+    this.blindHold = !!on;
+    if (!this.blindHold) {
+      for (const entry of this.entries.values()) entry._bornBlind = false;
+    }
   }
 
   // Applies transport control (play/pause, rate, loop in/out via manual seek, palindrome
@@ -396,6 +417,10 @@ export class LayerStack {
     // each frame: it succeeds immediately under kiosk autoplay flags, or on the first
     // frame after any user gesture (click/fullscreen dblclick) otherwise.
     if (this.audioCtx && this.audioCtx.state === "suspended") this.audioCtx.resume().catch(() => {});
+    // Blind audio hold: vol/pan freeze at their pre-blind levels while the wall is
+    // frozen — an off-air fader move must not be audible. Values resume tracking the
+    // live state on the first frame after commit/discard.
+    if (this.blindHold) return;
     if (entry._audioNodes) {
       entry._audioNodes.gainNode.gain.value = t.vol ?? 1;
       if (entry._audioNodes.pannerNode) entry._audioNodes.pannerNode.pan.value = t.pan ?? 0;

@@ -279,10 +279,14 @@ web codec instead), and reverse/negative playback rate (no browser exposes a neg
   was last set true, clears `blind`, and broadcasts a full `{"type":"state",...}`.
   (Committing a blind session is just an ordinary `update` setting `blind` to false —
   see `server/src/blind.js`.)
+- `{"type":"hello","role":"render","screenId":"screen-1"}` — client → server on every
+  (re)connect; a render client identifying itself so the server skips it when relaying
+  panel-only telemetry (`preview`/`transportStatus`). Clients that never send it
+  (panels, scripts, older render clients) receive everything.
 - `{"type":"preview","screenId":"screen-1","frame":"data:image/jpeg;base64,..."}` — a
-  render client's live low-res confidence-monitor frame, relayed to every *other*
-  connected client (never persisted, never sent back to its own sender) — this is what
-  the Stage renders and hit-tests for click-to-select.
+  render client's live confidence-monitor frame, relayed to every connected *panel*
+  (never persisted, never sent back to its own sender or to other render clients) —
+  this is what the Stage renders and hit-tests for click-to-select.
 - `{"type":"batch","updates":[{"path":"...","value":...},...]}` — server → clients;
   one message per 30 Hz engine tick carrying every fade/LFO value change at once.
   Clients apply all patches, then re-derive once.
