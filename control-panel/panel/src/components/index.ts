@@ -38,6 +38,8 @@ export { Inspector } from "./deck/Inspector";
 export type { InspectorProps, EditMode, EditTarget } from "./deck/Inspector";
 export { ShowDrawer } from "./deck/ShowDrawer";
 export type { ShowDrawerProps, ShowTab } from "./deck/ShowDrawer";
+export { LookBar } from "./deck/LookBar";
+export type { LookBarProps } from "./deck/LookBar";
 export { ConfidenceMonitor } from "./ConfidenceMonitor";
 export type { ConfidenceMonitorProps, ConfidenceMonitorHandle } from "./ConfidenceMonitor";
 export { WarpHandle } from "./WarpHandle";

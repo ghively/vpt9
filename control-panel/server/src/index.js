@@ -7,6 +7,7 @@ import { startOsc } from "./osc.js";
 import { createOscOut } from "./osc-out.js";
 import { createMediaRouter } from "./media.js";
 import { createSourceBankPresets } from "./source-bank-presets.js";
+import { createBlindSession } from "./blind.js";
 
 // At most one console.warn per key per second, so a misbehaving/hostile client can't
 // flood the log — while a maintainer debugging "why isn't my update landing" still
@@ -233,6 +234,11 @@ function recallPreset(presetId) {
 // top-level listen(); see server/test/source-bank-presets.test.js.
 const sourceBankPresets = createSourceBankPresets({ state, broadcast, scheduleSave });
 
+// True blind editing (extends task A20): engaging blind snapshots the live look so the
+// operator can commit (plain blind=false) or discard (`blindDiscard`) their off-air edits.
+// See server/src/blind.js + server/test/blind.test.js.
+const blindSession = createBlindSession({ state, broadcast, scheduleSave });
+
 const engine = createAutomationEngine({
   state,
   broadcast,
@@ -258,12 +264,16 @@ wss.on("connection", (socket) => {
     switch (message.type) {
       case "update": {
         if (typeof message.path !== "string") return;
+        blindSession.noteUpdate(message.path, message.value); // must see pre-write state.blind
         if (applyUpdate(state, message.path, message.value)) {
           scheduleSave();
           broadcast({ type: "update", path: message.path, value: message.value });
         }
         return;
       }
+      case "blindDiscard":
+        blindSession.discard();
+        return;
       case "create":
         if (typeof message.path === "string") handleCreate(socket, message);
         return;
@@ -363,6 +373,7 @@ function handleOscMessage(address, args) {
   const path = address.replace(/^\//, "").replaceAll("/", ".");
   const value = args[0];
   if (value === undefined) return;
+  blindSession.noteUpdate(path, value); // an OSC /blind write opens/commits a session too
   if (applyUpdate(state, path, value)) {
     scheduleSave();
     broadcast({ type: "update", path, value });

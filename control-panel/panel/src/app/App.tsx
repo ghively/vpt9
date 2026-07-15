@@ -15,6 +15,7 @@ import {
   Inspector,
   LayerStack,
   LfoRack,
+  LookBar,
   MasterControl,
   MediaLibrary,
   MidiMapPanel,
@@ -116,6 +117,10 @@ export function App() {
   // overrides key off the `data-mobile` attribute that mirrors this same boolean, so the
   // CSS and the actual rendered tree can never disagree about which layout is showing.
   const isMobile = useIsMobile();
+  // Focus mode (VDMX's closable-inspectors pattern): hide the rails + Show drawer so the
+  // stage and look bar are the entire surface during the show. Desktop-only — the mobile
+  // layout already shows one surface at a time.
+  const [focusMode, setFocusMode] = useState(false);
   // Video-input devices for the camera pickers (task A14) — the panel enumerates them
   // (it's already in a browser) and threads the list to the Inspector + SlotGrid editors.
   const cameraDevices = useCameraDevices();
@@ -225,11 +230,16 @@ export function App() {
       // it would show a change the server never received, which the reconnect snapshot then
       // silently reverts — the StatusLamp already signals the disconnect instead.
       if (sent && message.type === "update" && typeof message.path === "string") {
-        applyUpdate(stateRef.current, message.path, message.value);
+        // Re-render when the local apply changed something: the server echo will no-op
+        // (applyUpdate's value-identity check) and so can never trigger the render
+        // itself — without this, a scalar write like `blind` or `master` mutated the
+        // mirror but left the UI stale until the next unrelated message. Coalesced and
+        // drag-guarded by `rerender`, so pointer-rate writes stay cheap.
+        if (applyUpdate(stateRef.current, message.path, message.value)) rerender();
       }
       return sent;
     },
-    [rawSend],
+    [rawSend, rerender],
   );
   const getState = useCallback(() => stateRef.current, []);
   const actions = useMemo(() => createActions(send, getState), [send, getState]);
@@ -248,10 +258,54 @@ export function App() {
     }
   }, [actions]);
 
-  // Task A20: toggle blind (preview) mode — freeze the projector, keep building off-air.
+  // Task A20 + true blind editing: toggle blind (preview) mode — freeze the projector,
+  // keep building off-air. Toggling OFF is the COMMIT (the server drops its pre-blind
+  // snapshot); discardBlind reverts to that snapshot instead.
   const toggleBlind = useCallback(() => {
     actions.setBlind(!(stateRef.current.blind ?? false));
   }, [actions]);
+  const discardBlind = useCallback(() => {
+    actions.blindDiscard();
+  }, [actions]);
+
+  // Look bar save: snapshot the current scene under an auto-name. Renaming/deleting
+  // stays in the Show drawer's Presets tab — the bar itself is trigger-only.
+  const saveLook = useCallback(() => {
+    const n = Object.keys(stateRef.current.presets ?? {}).length + 1;
+    actions.savePreset(`Look ${n}`);
+  }, [actions]);
+
+  // Show-control keyboard shortcuts: 1-9 fire looks, B toggles blind, F toggles focus.
+  // Guarded off anything editable (typing a preset name must not fire look 1); arrows
+  // are deliberately NOT handled here — the stage overlay owns point nudging. Blackout
+  // has NO shortcut on purpose: a destructive full-output cut stays a deliberate click.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (e.key >= "1" && e.key <= "9") {
+        const looks = Object.values(stateRef.current.presets ?? {});
+        const look = looks[Number(e.key) - 1];
+        if (look) {
+          actions.recallPreset(look.id);
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === "b" || e.key === "B") {
+        toggleBlind();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "f" || e.key === "F") {
+        setFocusMode((f) => !f);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [actions, toggleBlind]);
 
   // Task A14b: camera record-to-disk. The render-client owning the camera stream does the
   // actual MediaRecorder capture + upload; this only fires the relay trigger and tracks the
@@ -333,6 +387,7 @@ export function App() {
             onToggleBlackout={toggleBlackout}
             blind={state.blind ?? false}
             onToggleBlind={toggleBlind}
+            onDiscardBlind={discardBlind}
           />
         </div>
       }
@@ -395,6 +450,21 @@ export function App() {
   const hitLayers = selection.editTarget === "screen" ? [] : layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }));
   const selectedLayer = layersTopFirst.find((l) => l.id === selection.selectedLayerId) ?? null;
   const selectedScreen = (selectedScreenId && state.screens?.[selectedScreenId]) || null;
+
+  // Flattened selection model: the LayerStack's pinned OUTPUT row selects the screen
+  // target; selecting any layer row (or clicking a layer on the stage) returns to the
+  // layer target. Replaces the old Inspector-buried Layer/Screen toggle — the stack now
+  // lists everything selectable in one place: the output, then the layers inside it.
+  const selectLayer = useCallback(
+    (id: string) => {
+      selection.setSelectedLayerId(id);
+      selection.setEditTarget("layer");
+    },
+    [selection],
+  );
+  const selectOutput = useCallback(() => {
+    selection.setEditTarget("screen");
+  }, [selection]);
 
   // Task 6: on-stage warp/mask handles (StageSelectionOverlay) drag imperatively via
   // WarpHandle/MaskShapeOverlay's own pointer machinery, the same way the rail-side
@@ -661,14 +731,17 @@ export function App() {
   const layerStackEl = (
     <LayerStack
       layers={layersTopFirst}
-      selectedId={selection.selectedLayerId}
-      onSelect={selection.setSelectedLayerId}
+      selectedId={selection.editTarget === "screen" ? null : selection.selectedLayerId}
+      onSelect={selectLayer}
       onAddLayer={actions.addLayer}
       onMoveLayer={actions.moveLayer}
       onRemoveLayer={actions.removeLayer}
       onCopyLayer={copyLayer}
       onPasteLayer={pasteLayer}
       hasClipboard={hasClipboard}
+      outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}
+      outputSelected={selection.editTarget === "screen"}
+      onSelectOutput={selectOutput}
     />
   );
   const slotGridEl = (
@@ -679,6 +752,18 @@ export function App() {
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
       onSetTransport={actions.setSourceBankSlotTransport}
+    />
+  );
+  // The look bar rides directly above the stage in both layouts — firing a look and
+  // watching it land are one glance. Trigger-only by design (see LookBar's module doc).
+  const lookBarEl = (
+    <LookBar
+      looks={presets}
+      onRecall={actions.recallPreset}
+      onSave={saveLook}
+      focus={focusMode}
+      onToggleFocus={() => setFocusMode((f) => !f)}
+      blind={state.blind ?? false}
     />
   );
   const stageEl = selectedScreenId && (
@@ -726,7 +811,6 @@ export function App() {
     selection.editTarget === "screen" ? (
       <Inspector
         editTarget="screen"
-        onSetEditTarget={selection.setEditTarget}
         screen={selectedScreen}
         onRenameScreen={onInspectorRenameScreen}
         onSetScreenWarpMode={onInspectorSetScreenWarpMode}
@@ -736,7 +820,6 @@ export function App() {
     ) : (
       <Inspector
         editTarget="layer"
-        onSetEditTarget={selection.setEditTarget}
         layer={selectedLayer}
         mode={selection.stageEditMode}
         onModeChange={selection.setStageEditMode}
@@ -761,7 +844,7 @@ export function App() {
   );
 
   return (
-    <div className="deck" data-mobile={isMobile}>
+    <div className="deck" data-mobile={isMobile} data-focus={!isMobile && focusMode}>
       {/* Faceplate already renders its own <header> (wordmark, AudioOwner, MasterControl
           w/ blackout, StatusLamp); a plain div carries the .cmd shell/grid-row styling so
           we don't nest <header> inside <header>. */}
@@ -774,7 +857,10 @@ export function App() {
               variant) so deck-panel.spec.js's selection assertions keep working
               unchanged if it's ever run at a narrow viewport. */}
           <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
-            <main className="stage-wrap">{stageEl}</main>
+            <main className="stage-wrap">
+              {lookBarEl}
+              {stageEl}
+            </main>
             <div className="sheet">
               {mobileTab === "layers" && <aside className="rail rail-l">{layerStackEl}</aside>}
               {mobileTab === "slots" && <aside className="rail rail-l">{slotGridEl}</aside>}
@@ -793,7 +879,10 @@ export function App() {
               {layerStackEl}
               {slotGridEl}
             </aside>
-            <main className="stage-wrap">{stageEl}</main>
+            <main className="stage-wrap">
+              {lookBarEl}
+              {stageEl}
+            </main>
             <aside className="rail rail-r insp">{inspectorEl}</aside>
           </div>
           {showDrawerEl}

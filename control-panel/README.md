@@ -274,6 +274,11 @@ web codec instead), and reverse/negative playback rate (no browser exposes a neg
   `presets`).
 - `{"type":"presetRecall","presetId":"preset-1"}` → server replaces those same fields
   from the preset snapshot and broadcasts a full `{"type":"state",...}`.
+- `{"type":"blindDiscard"}` — client → server; abandons the current blind session:
+  restores the layers/screens/pip/sourceBank snapshot the server captured when `blind`
+  was last set true, clears `blind`, and broadcasts a full `{"type":"state",...}`.
+  (Committing a blind session is just an ordinary `update` setting `blind` to false —
+  see `server/src/blind.js`.)
 - `{"type":"preview","screenId":"screen-1","frame":"data:image/jpeg;base64,..."}` — a
   render client's live low-res confidence-monitor frame, relayed to every *other*
   connected client (never persisted, never sent back to its own sender) — this is what

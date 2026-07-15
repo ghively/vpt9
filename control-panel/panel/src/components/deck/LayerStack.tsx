@@ -16,6 +16,13 @@ export interface LayerStackProps {
   onPasteLayer: (id: string) => void;
   /** Whether the clipboard currently holds a copied look — gates the paste button. */
   hasClipboard: boolean;
+  /** The pinned projector OUTPUT row (replaces the old Inspector Layer/Screen toggle):
+   *  the active screen appears at the top of the stack as the thing everything below
+   *  composites INTO. Selecting it puts the stage + inspector in screen-warp mode.
+   *  Omit `outputName` (e.g. Storybook, no screen yet) to hide the row. */
+  outputName?: string | null;
+  outputSelected?: boolean;
+  onSelectOutput?: () => void;
 }
 
 /** Compact left-rail layer list: a color swatch (or gradient placeholder) thumbnail,
@@ -32,6 +39,9 @@ export function LayerStack({
   onCopyLayer,
   onPasteLayer,
   hasClipboard,
+  outputName,
+  outputSelected = false,
+  onSelectOutput,
 }: LayerStackProps) {
   return (
     <>
@@ -40,6 +50,17 @@ export function LayerStack({
         <span className="count mono">top first</span>
       </div>
       <div className="layers">
+        {outputName != null && (
+          <div className="layer layer-output" data-selected={outputSelected}>
+            <button type="button" className="layer-hit" aria-selected={outputSelected} onClick={() => onSelectOutput?.()}>
+              <span className="thumb thumb-output" aria-hidden="true" />
+              <span className="layer-info">
+                <span className="nm">{outputName}</span>
+                <span className="meta">projector output · warp</span>
+              </span>
+            </button>
+          </div>
+        )}
         {layers.map((layer, i) => {
           const isColor = layer.source?.type === "color";
           const thumbBg = isColor
@@ -50,7 +71,7 @@ export function LayerStack({
           const isSelected = layer.id === selectedId;
 
           return (
-            <div key={layer.id} className="layer" data-selected={isSelected}>
+            <div key={layer.id} className="layer" data-id={layer.id} data-selected={isSelected}>
               <button
                 type="button"
                 className="layer-hit"

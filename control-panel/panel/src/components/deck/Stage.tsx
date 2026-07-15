@@ -135,7 +135,7 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
         <span className="dot" /> {blind ? "BLIND" : "LIVE"} · {screenId.replace(/-/g, " ").toUpperCase()}
       </div>
       <div ref={resRef} className="stage-fps mono" />
-      {blind && <div className="stage-blind-note mono">wall frozen · edits off-air</div>}
+      {blind && <div className="stage-blind-note mono">wall frozen · edits off-air · go live commits · discard reverts</div>}
       <div className="stage-overlay">
         {hoverQuad && (
           <svg className="deck-hover-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">

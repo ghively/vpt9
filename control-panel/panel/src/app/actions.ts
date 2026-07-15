@@ -181,10 +181,16 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     setMaster(value: number) {
       send({ type: "update", path: "master", value: Math.min(1, Math.max(0, value)) });
     },
-    // Blind / preview mode (task A20): freezes the projector on its last frame while
-    // compositing + the confidence preview keep running. A plain top-level leaf write.
+    // Blind / preview mode (task A20 + true blind editing): freezes the projector on its
+    // last frame while compositing + the confidence preview keep running. Engaging blind
+    // makes the server snapshot the live look; setBlind(false) is the COMMIT (edits go
+    // live), blindDiscard() reverts to the snapshot instead. Plain top-level leaf write.
     setBlind(value: boolean) {
       send({ type: "update", path: "blind", value: !!value });
+    },
+    // Abandon the blind session: restore the pre-blind look and unfreeze the wall.
+    blindDiscard() {
+      send({ type: "blindDiscard" });
     },
 
     // ── Camera record-to-disk (task A14b) ────────────────────────────────────

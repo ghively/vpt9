@@ -172,6 +172,24 @@
 .layer .opbar { width: 34px; height: 3px; background: var(--panel-sunken); border-radius: 2px; overflow: hidden; }
 .layer .opbar > i { display: block; height: 100%; background: var(--beam); opacity: .8; }
 
+/* The pinned OUTPUT row — the active screen as the topmost item of the stack (what
+ * everything below composites INTO). Cyan-accented: screens are render/machine data
+ * (see tokens.css), unlike the operator-amber layer selection. */
+.layer-output .layer-hit[aria-selected="true"] { border-color: var(--cool-line); background: rgba(75, 214, 226, 0.07); }
+.layer-output .layer-hit[aria-selected="true"]::before { background: var(--cool); box-shadow: 0 0 8px var(--cool); }
+.layer-output .meta { color: var(--cool); opacity: .8; }
+.thumb-output {
+  flex: none;
+  width: 44px;
+  height: 25px;
+  border-radius: 2px;
+  border: 1px solid var(--cool-line);
+  background:
+    linear-gradient(var(--cool-line) 1px, transparent 1px) 0 0 / 8px 8px,
+    linear-gradient(90deg, var(--cool-line) 1px, transparent 1px) 0 0 / 8px 8px,
+    var(--panel-sunken);
+}
+
 .layer-ops { display: flex; align-items: center; gap: 4px; padding-left: 54px; }
 .layer-ops .move-btn { width: 22px; height: 16px; font-size: 8px; }
 .layer-ops .remove-btn { margin-left: auto; }
@@ -256,6 +274,79 @@
   flex-direction: column;
   gap: 10px;
 }
+
+/* ── The look bar — trigger-only scene recall riding directly above the stage.
+ * Chips show their 1-9 shortcut key; +save snapshots the current scene; focus (F)
+ * collapses the rails/drawer for a clean show surface. Amber-tinted while blind:
+ * recalls/saves land off-air. ── */
+.lookbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+.lookbar__label { flex: none; }
+.lookbar__chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.lookbar__empty { font-size: 9px; color: var(--muted-dim); letter-spacing: .08em; white-space: nowrap; }
+.look-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 160px;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.look-chip:hover { border-color: var(--beam-line); background: var(--beam-soft); }
+.look-chip__key {
+  flex: none;
+  font-size: 9px;
+  color: var(--beam);
+  border: 1px solid var(--beam-line);
+  border-radius: 2px;
+  padding: 0 3px;
+  line-height: 1.4;
+}
+.look-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.look-save,
+.look-focus {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.look-save:hover,
+.look-focus:hover { color: var(--text); border-color: var(--muted-dim); }
+.look-focus[aria-pressed="true"] { color: var(--beam); border-color: var(--beam-line); background: var(--beam-soft); }
+.lookbar[data-blind="true"] .lookbar__label,
+.lookbar[data-blind="true"] .look-chip__key { color: var(--warn); border-color: var(--warn); }
+
+/* ── Focus mode (VDMX's closable-inspectors pattern): stage + look bar ARE the surface.
+ * Desktop-only (App never sets data-focus with the mobile layout active). ── */
+.deck[data-focus="true"] .body { grid-template-columns: 1fr; }
+.deck[data-focus="true"] .rail { display: none; }
+.deck[data-focus="true"] .show-drawer { display: none; }
 .deck-stage {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -395,15 +486,6 @@
  * The mockup's own `.select`/`.fader` div mockups are NOT ported — the real Select/Fader
  * primitives (native <select>/<input type=range>) are already themed globally in
  * tokens/base.css, so Inspector.tsx uses those directly instead of redrawing them. */
-/* Layer/Screen edit-target toggle (Task 12) — always the first thing in the Inspector,
- * above .insp-head, regardless of which target is active. Same .togglepill shape the
- * warp corner/mesh toggle uses. */
-.insp-target {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--hairline-soft);
-  flex: none;
-}
-
 .insp-head {
   padding: 14px 14px 10px;
   border-bottom: 1px solid var(--hairline-soft);
@@ -443,13 +525,18 @@
 .field .row { display: flex; align-items: center; gap: 8px; }
 .field .row input[type="range"] { flex: 1; min-width: 60px; }
 
-/* Warp · Mask · FX segmented control — drives both this panel's contextual body AND
- * (via the container's onModeChange -> selection.setStageEditMode) the Stage's
- * StageSelectionOverlay mode. */
-.modes { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
-.modes button {
-  padding: 9px 4px;
-  border-right: 1px solid var(--hairline);
+/* Warp / Mask / FX sections — the flattened replacement for the old exclusive segment:
+ * every section header is ALWAYS visible (title + live summary + chevron), only the
+ * active section's body expands, and activating one drives the Stage overlay via the
+ * container's onModeChange -> selection.setStageEditMode, same as the segment did. */
+.insp-sections { display: flex; flex-direction: column; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+.insp-sec { display: flex; flex-direction: column; border-bottom: 1px solid var(--hairline); }
+.insp-sec:last-child { border-bottom: none; }
+.insp-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
   background: var(--panel-raised);
   color: var(--muted);
   font-family: var(--font-mono);
@@ -457,14 +544,30 @@
   letter-spacing: .1em;
   text-transform: uppercase;
   cursor: pointer;
+  text-align: left;
   transition: color 120ms ease, background 120ms ease;
 }
-.modes button:last-child { border-right: none; }
-.modes button:hover { color: var(--text); }
-.modes button[aria-pressed="true"] { color: var(--beam); background: var(--beam-soft); }
+.insp-sec__head:hover { color: var(--text); }
+.insp-sec[data-active="true"] .insp-sec__head { color: var(--beam); background: var(--beam-soft); }
+.insp-sec__title { flex: none; }
+.insp-sec__sum {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 9px;
+  color: var(--muted-dim);
+  text-transform: lowercase;
+  letter-spacing: .06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.insp-sec[data-active="true"] .insp-sec__sum { color: var(--beam); opacity: .75; }
+.insp-sec__chev { flex: none; font-size: 8px; opacity: .7; }
+.insp-sec__body { padding: 11px 10px 13px; }
 
-/* Contextual body (warp / mask / fx), swapped by the segment above. */
-.ctx { display: flex; flex-direction: column; gap: 13px; border-top: 1px solid var(--hairline-soft); padding-top: 13px; }
+/* Contextual body (warp / mask / fx) inside the active section. */
+.ctx { display: flex; flex-direction: column; gap: 13px; }
 .subhead {
   display: flex;
   align-items: center;
@@ -687,8 +790,11 @@
   .layer-hit { min-height: var(--tap-min); }
   .slot { min-height: var(--tap-min); }
   .addbtn { min-height: var(--tap-min); }
-  .modes button,
+  .insp-sec__head,
   .togglepill button { min-height: var(--tap-min); }
+  .look-chip,
+  .look-save,
+  .look-focus { min-height: var(--tap-min); }
   .screen-select .seg button,
   .screen-select-add { min-height: var(--tap-min); }
   .show-drawer-tab,

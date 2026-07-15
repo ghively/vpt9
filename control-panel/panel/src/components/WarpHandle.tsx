@@ -59,8 +59,15 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
     };
     const onMove = (moveEvent: PointerEvent) => {
       const rect = stage.getBoundingClientRect();
-      const nx = Math.min(1, Math.max(0, (moveEvent.clientX - rect.left) / rect.width));
-      const ny = Math.min(1, Math.max(0, (moveEvent.clientY - rect.top) / rect.height));
+      let nx = Math.min(1, Math.max(0, (moveEvent.clientX - rect.left) / rect.width));
+      let ny = Math.min(1, Math.max(0, (moveEvent.clientY - rect.top) / rect.height));
+      // Ctrl-drag snaps to a 1/40 grid (Resolume's snap-with-modifier pattern, inverted:
+      // snapping is opt-in here since free placement is the common case). Combined with
+      // tap-then-arrow-key nudging this covers coarse/aligned/exact placement.
+      if (moveEvent.ctrlKey) {
+        nx = Math.round(nx * 40) / 40;
+        ny = Math.round(ny * 40) / 40;
+      }
       el.style.left = `${nx * 100}%`;
       el.style.top = `${ny * 100}%`;
       if (badgeRef.current) badgeRef.current.textContent = `x ${nx.toFixed(2)} · y ${ny.toFixed(2)}`;

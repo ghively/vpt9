@@ -210,12 +210,12 @@ test("switching to Screen edit target and dragging a corner handle sends the SCR
   await expect(stage).toBeVisible();
   const box = await stage.boundingBox();
 
-  // useSelection.ts defaults editTarget to "layer" — flip the Inspector's Layer/Screen
-  // toggle (scoped to ".insp-target" so this can't collide with any other togglepill,
-  // e.g. the warp corner/mesh toggle which also renders a pill in the same panel).
-  const targetToggle = page.locator(".insp-target");
-  await expect(targetToggle).toBeVisible();
-  await targetToggle.getByRole("button", { name: "Screen", exact: true }).click();
+  // useSelection.ts defaults editTarget to "layer" — select the LayerStack's pinned
+  // OUTPUT row (the flattened replacement for the old Inspector Layer/Screen toggle):
+  // it represents the active screen's projector warp target.
+  const outputRow = page.locator(".layer-output .layer-hit");
+  await expect(outputRow).toBeVisible();
+  await outputRow.click();
 
   // Selecting screen mode should render the ACTIVE SCREEN's corner-pin handles
   // directly on the stage — no layer overlay — including ".deck-handle.tl", the handle
@@ -294,10 +294,10 @@ test("polygon mask vertices are draggable on the stage and persist through the e
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-poly-ui");
 
-  const targetToggle = page.locator(".insp-target");
-  await expect(targetToggle).toBeVisible();
-  await targetToggle.getByRole("button", { name: "Layer", exact: true }).click();
-  await page.locator(".modes").getByRole("button", { name: "Mask", exact: true }).click();
+  // The stage click above already selected the layer target; expand the Mask section
+  // (the accordion header carries aria-label="Mask" — its visible text also includes a
+  // live summary like "polygon", so target the accessible name).
+  await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
   const vertex = page.locator(".mask-point").first();
@@ -364,8 +364,7 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
   const stage = page.locator(".deck-stage");
   const box = await stage.boundingBox();
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
-  await page.locator(".insp-target").getByRole("button", { name: "Layer", exact: true }).click();
-  await page.locator(".modes").getByRole("button", { name: "Mask", exact: true }).click();
+  await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
   const readMaskPoints = async () => {
