@@ -512,6 +512,12 @@ export function App() {
     },
     [actions],
   );
+  const duplicateLayer = useCallback(
+    (id: string) => {
+      actions.duplicateLayer(id);
+    },
+    [actions],
+  );
 
   // Flattened selection model: the LayerStack's pinned OUTPUT row selects the screen
   // target; selecting any layer row (or clicking a layer on the stage) returns to the
@@ -805,6 +811,7 @@ export function App() {
       onDropMedia={assignMediaToLayer}
       onToggleVisible={toggleLayerVisible}
       onSetLayerOrder={setLayerOrder}
+      onDuplicateLayer={duplicateLayer}
       media={media}
       mediaBase={httpBase}
       outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}
@@ -813,7 +820,13 @@ export function App() {
     />
   );
   const mediaBinEl = (
-    <MediaBin media={media} mediaBase={httpBase} uploadUrl={`${httpBase}/api/media`} onUseOnSelected={useMediaOnSelected} />
+    <MediaBin
+      media={media}
+      mediaBase={httpBase}
+      uploadUrl={`${httpBase}/api/media`}
+      onUseOnSelected={useMediaOnSelected}
+      onRemove={removeMedia}
+    />
   );
   const slotGridEl = (
     <SlotGrid
@@ -833,6 +846,8 @@ export function App() {
       looks={presets}
       onRecall={actions.recallPreset}
       onSave={saveLook}
+      onRename={actions.renamePreset}
+      onRemove={actions.removePreset}
       focus={focusMode}
       onToggleFocus={() => setFocusMode((f) => !f)}
       blind={state.blind ?? false}
@@ -877,6 +892,25 @@ export function App() {
           : null
       }
       onDropMedia={onStageDropMedia}
+      contextItems={
+        selection.editTarget === "screen"
+          ? selectedScreen
+            ? [{ label: "Reset screen warp", onSelect: onInspectorResetScreenWarp }]
+            : []
+          : selectedLayer
+            ? [
+                { label: "Edit warp", onSelect: () => selection.setStageEditMode("warp") },
+                { label: "Edit mask", onSelect: () => selection.setStageEditMode("mask") },
+                { label: "Edit FX", onSelect: () => selection.setStageEditMode("fx") },
+                "separator",
+                { label: "Reset layer warp", onSelect: onInspectorResetWarp },
+                {
+                  label: selectedLayer.visible === false ? "Show layer" : "Hide layer",
+                  onSelect: () => toggleLayerVisible(selectedLayer.id, selectedLayer.visible === false),
+                },
+              ]
+            : []
+      }
     />
   );
   // Task-12-final type-tighten: Inspector's props are now a discriminated union keyed

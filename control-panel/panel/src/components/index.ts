@@ -43,6 +43,8 @@ export type { LookBarProps } from "./deck/LookBar";
 export { MediaBin } from "./deck/MediaBin";
 export type { MediaBinProps } from "./deck/MediaBin";
 export { MediaThumb } from "./deck/MediaThumb";
+export { ContextMenu, useContextMenu } from "./deck/ContextMenu";
+export type { MenuItem } from "./deck/ContextMenu";
 export { ConfidenceMonitor } from "./ConfidenceMonitor";
 export type { ConfidenceMonitorProps, ConfidenceMonitorHandle } from "./ConfidenceMonitor";
 export { WarpHandle } from "./WarpHandle";

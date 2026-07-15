@@ -23,6 +23,12 @@ up right there.
  show drawer (bottom, collapsible): Looks · Source sets · Cues · Timers · Motion · MIDI · Media · Cast
 ```
 
+**Right-click anything.** Layer rows (rename, hide/show, duplicate, copy/paste look,
+remove), media-bin items (use on selected layer, delete from library), shared slots
+(open editor, clear), look chips (recall, rename, delete), and the Stage itself (switch
+Warp/Mask/FX, reset warp, hide layer) all carry context menus — every verb where the
+pointer already is, like any desktop graphics tool.
+
 **Drag and drop is the fast path.** Every thumbnail in the left rail's **media bin** drags
 onto a layer row, a shared slot, or straight onto the Stage (the layer whose picture is
 under the drop point gets it). Drop video/gif/jpg files from your computer onto the bin

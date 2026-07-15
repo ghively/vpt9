@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent } from "react";
 import { MediaThumb } from "./MediaThumb";
+import { useContextMenu } from "./ContextMenu";
 import { setMediaDrag } from "./dnd";
 import type { MediaItem } from "../types";
 
@@ -12,6 +13,9 @@ export interface MediaBinProps {
   /** Double-click an item = put it on the currently selected layer (the pointer-only
    *  complement to dragging it onto a specific layer/slot/stage region). */
   onUseOnSelected?: (item: MediaItem) => void;
+  /** Context menu "Delete from library" — removes the file server-side (layers/slots
+   *  referencing it are swept to safe fallbacks by the server). */
+  onRemove?: (id: string) => void;
 }
 
 /** The visual media bin (MadMapper's Media Panel / Resolume's file browser, sized for
@@ -19,11 +23,12 @@ export interface MediaBinProps {
  *  source-bank slot, or the stage itself. Files can be dropped straight onto the bin
  *  (or picked via + add) to upload. Renaming/deleting stays in the Show drawer's Media
  *  tab — the bin is the fast path, not the manager. */
-export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected }: MediaBinProps) {
+export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove }: MediaBinProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dropArmed, setDropArmed] = useState(false);
+  const ctx = useContextMenu();
 
   const upload = async (files: FileList | File[]) => {
     setError(null);
@@ -81,6 +86,14 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected }: Media
             draggable
             onDragStart={(e) => setMediaDrag(e, item)}
             onDoubleClick={() => onUseOnSelected?.(item)}
+            onContextMenu={(e) =>
+              ctx.open(e, [
+                ...(onUseOnSelected ? [{ label: "Use on selected layer", onSelect: () => onUseOnSelected(item) }] : []),
+                ...(onRemove
+                  ? ["separator" as const, { label: "Delete from library", danger: true, onSelect: () => onRemove(item.id) }]
+                  : []),
+              ])
+            }
           >
             <MediaThumb item={item} mediaBase={mediaBase} />
             <span className="media-cell__name">{item.name}</span>
@@ -108,6 +121,7 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected }: Media
         </button>
         {error && <span className="media-bin__error mono">{error}</span>}
       </div>
+      {ctx.menu}
     </div>
   );
 }

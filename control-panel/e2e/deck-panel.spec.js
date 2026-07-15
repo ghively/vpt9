@@ -289,6 +289,36 @@ test("the visibility eye toggles layers.<id>.visible through the normal update p
   await expect.poll(readVisible).toBe(true);
 });
 
+test("layer context menu: right-click offers Hide and Duplicate through the normal write paths", async ({ page }) => {
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  const row = page.locator('.layer[data-id="layer-2"] .layer-hit');
+  await expect(row).toBeVisible();
+
+  const readState = async () => (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+  const visibleBefore = (await readState()).layers["layer-2"].visible;
+
+  // Hide via the menu.
+  await row.click({ button: "right" });
+  await page.locator(".ctx-menu").getByRole("menuitem", { name: visibleBefore === false ? "Show layer" : "Hide layer" }).click();
+  await expect.poll(async () => (await readState()).layers["layer-2"].visible).toBe(visibleBefore === false);
+
+  // Duplicate via the menu: a new layer appears carrying the source layer's blend mode.
+  const countBefore = Object.keys((await readState()).layers).length;
+  await row.click({ button: "right" });
+  await page.locator(".ctx-menu").getByRole("menuitem", { name: "Duplicate" }).click();
+  await expect.poll(async () => Object.keys((await readState()).layers).length).toBe(countBefore + 1);
+  const state = await readState();
+  const copy = Object.values(state.layers).find((l) => l.name?.endsWith(" copy"));
+  expect(copy).toBeTruthy();
+  expect(copy.blendMode).toBe(state.layers["layer-2"].blendMode);
+
+  // Escape closes an open menu without acting.
+  await row.click({ button: "right" });
+  await expect(page.locator(".ctx-menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ctx-menu")).toHaveCount(0);
+});
+
 test("polygon mask vertices are draggable on the stage and persist through the existing mask update path", async ({ page }) => {
   const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
   await new Promise((resolve) => socket.once("open", resolve));

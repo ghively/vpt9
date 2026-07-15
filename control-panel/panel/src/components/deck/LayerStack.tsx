@@ -2,6 +2,7 @@ import { useState, type DragEvent, type KeyboardEvent } from "react";
 import { ToggleSquare } from "../primitives/ToggleSquare";
 import { rgbToHex } from "../color";
 import { MediaThumb } from "./MediaThumb";
+import { useContextMenu, type MenuItem } from "./ContextMenu";
 import { hasMediaDrag, getMediaDrag, hasLayerDrag, getLayerDrag, setLayerDrag, type MediaDragPayload } from "./dnd";
 import type { Layer, MediaItem } from "../types";
 
@@ -39,6 +40,8 @@ export interface LayerStackProps {
   onToggleVisible?: (id: string, visible: boolean) => void;
   /** Drag-to-reorder (rows are draggable): writes the dragged layer's new `order`. */
   onSetLayerOrder?: (id: string, order: number) => void;
+  /** Context menu "Duplicate": clone the layer to the top of the stack. */
+  onDuplicateLayer?: (id: string) => void;
   /** Library items + serving origin, for rendering each layer's REAL content thumbnail. */
   media?: MediaItem[];
   mediaBase?: string;
@@ -77,11 +80,31 @@ function LayerThumb({ layer, media, mediaBase }: { layer: Layer; media: MediaIte
 }
 
 /** The layer's display name, renamed inline on double-click (like every clip name in
- *  Resolume/preset chip here) — no trip to a form field somewhere else. */
-function LayerName({ layer, onRename }: { layer: Layer; onRename?: (id: string, name: string) => void }) {
+ *  Resolume/preset chip here) — no trip to a form field somewhere else. `forceEdit`
+ *  lets the row's context menu ("Rename") open the same editor. */
+function LayerName({
+  layer,
+  onRename,
+  forceEdit,
+  onEditDone,
+}: {
+  layer: Layer;
+  onRename?: (id: string, name: string) => void;
+  forceEdit?: boolean;
+  onEditDone?: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(layer.name ?? "");
-  if (!editing) {
+  const [wasForced, setWasForced] = useState(false);
+  if (forceEdit && !wasForced) {
+    // Entering via the context menu: refresh the draft from the current name.
+    setWasForced(true);
+    setDraft(layer.name ?? "");
+  } else if (!forceEdit && wasForced) {
+    setWasForced(false);
+  }
+  const active = editing || forceEdit;
+  if (!active) {
     return (
       <span
         className="nm"
@@ -97,10 +120,14 @@ function LayerName({ layer, onRename }: { layer: Layer; onRename?: (id: string, 
       </span>
     );
   }
-  const commit = () => {
+  const stop = () => {
     setEditing(false);
+    onEditDone?.();
+  };
+  const commit = () => {
     const name = draft.trim();
     if (name && name !== layer.name) onRename?.(layer.id, name);
+    stop();
   };
   return (
     <input
@@ -113,7 +140,7 @@ function LayerName({ layer, onRename }: { layer: Layer; onRename?: (id: string, 
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") commit();
-        if (e.key === "Escape") setEditing(false);
+        if (e.key === "Escape") stop();
       }}
     />
   );
@@ -138,6 +165,7 @@ export function LayerStack({
   onDropMedia,
   onToggleVisible,
   onSetLayerOrder,
+  onDuplicateLayer,
   media = [],
   mediaBase,
   outputName,
@@ -145,6 +173,24 @@ export function LayerStack({
   onSelectOutput,
 }: LayerStackProps) {
   const [dropId, setDropId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const ctx = useContextMenu();
+
+  // The right-click menu — every entry is an existing affordance (dblclick rename, the
+  // eye, the ops squares) surfaced where a graphics-tool user first looks for it.
+  const layerMenu = (layer: Layer): MenuItem[] => {
+    const isVisible = layer.visible !== false;
+    const items: MenuItem[] = [];
+    if (onRenameLayer) items.push({ label: "Rename…", onSelect: () => setRenamingId(layer.id) });
+    if (onToggleVisible) items.push({ label: isVisible ? "Hide layer" : "Show layer", onSelect: () => onToggleVisible(layer.id, !isVisible) });
+    if (onDuplicateLayer) items.push({ label: "Duplicate", onSelect: () => onDuplicateLayer(layer.id) });
+    items.push("separator");
+    items.push({ label: "Copy look", onSelect: () => onCopyLayer(layer.id) });
+    items.push({ label: "Paste look", disabled: !hasClipboard, onSelect: () => onPasteLayer(layer.id) });
+    items.push("separator");
+    items.push({ label: "Remove layer", danger: true, onSelect: () => onRemoveLayer(layer.id) });
+    return items;
+  };
 
   // Drag a row onto another row to move it ABOVE that row (GIMP's reorder gesture).
   // Fractional orders keep it a single leaf write — no renumbering of the whole stack.
@@ -231,6 +277,7 @@ export function LayerStack({
               data-hidden={!isVisible}
               data-drop={dropId === layer.id}
               {...dragProps(layer.id)}
+              onContextMenu={(e) => ctx.open(e, layerMenu(layer))}
             >
               {/* A div-with-button-role, not a <button>: the visibility eye nests inside
                *  the hit area (nested <button>s are invalid HTML). */}
@@ -258,7 +305,12 @@ export function LayerStack({
                 )}
                 <LayerThumb layer={layer} media={media} mediaBase={mediaBase} />
                 <span className="layer-info">
-                  <LayerName layer={layer} onRename={onRenameLayer} />
+                  <LayerName
+                    layer={layer}
+                    onRename={onRenameLayer}
+                    forceEdit={renamingId === layer.id}
+                    onEditDone={() => setRenamingId((cur) => (cur === layer.id ? null : cur))}
+                  />
                   <span className="meta">
                     {layer.blendMode ?? "normal"} · L{stackIndex}
                   </span>
@@ -314,6 +366,7 @@ export function LayerStack({
       <button type="button" className="addbtn" onClick={() => onAddLayer()}>
         + Add layer
       </button>
+      {ctx.menu}
     </>
   );
 }

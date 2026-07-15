@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type Drag
 import type { ConfidenceMonitorHandle } from "../ConfidenceMonitor";
 import { pointInQuad, type Quad } from "./layerGeometry";
 import { hasMediaDrag, getMediaDrag, type MediaDragPayload } from "./dnd";
+import { useContextMenu, type MenuItem } from "./ContextMenu";
 import type { EditMode } from "./Inspector";
 
 export interface StageProps {
@@ -36,6 +37,9 @@ export interface StageProps {
   /** A MediaBin item dropped onto the stage: `point` is the normalized 0..1 drop
    *  position, so the container can assign to whichever layer's quad is under it. */
   onDropMedia?: (point: { x: number; y: number }, payload: MediaDragPayload) => void;
+  /** Right-click menu entries for the stage (mode switches, reset warp, …) — built by
+   *  the container from the current selection. Omit/empty = browser default menu. */
+  contextItems?: MenuItem[];
 }
 
 const MODE_CHIPS: Array<{ key: EditMode; label: string }> = [
@@ -67,9 +71,10 @@ const MODE_CHIPS: Array<{ key: EditMode; label: string }> = [
  *  drive the `<img>` directly at the render-client's ~250ms cadence, without a
  *  React re-render (mirrors `ConfidenceMonitor.tsx`'s own `setFrame` contract). */
 export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function Stage(
-  { screenId, frame, blind = false, overlay, hitLayers, onBackgroundPointerDown, modeChips, onDropMedia },
+  { screenId, frame, blind = false, overlay, hitLayers, onBackgroundPointerDown, modeChips, onDropMedia, contextItems },
   ref,
 ) {
+  const ctx = useContextMenu();
   const imgRef = useRef<HTMLImageElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const resRef = useRef<HTMLDivElement>(null);
@@ -155,6 +160,9 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
+      onContextMenu={(e) => {
+        if (contextItems?.length) ctx.open(e, contextItems);
+      }}
       onDragOver={(e: DragEvent) => {
         if (!onDropMedia || !hasMediaDrag(e)) return;
         e.preventDefault();
@@ -206,6 +214,7 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
         </div>
       )}
       {blind && <div className="stage-blind-note mono">wall frozen · edits off-air · go live commits · discard reverts</div>}
+      {ctx.menu}
       <div className="stage-overlay">
         {hoverQuad && (
           <svg className="deck-hover-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">

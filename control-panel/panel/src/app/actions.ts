@@ -67,6 +67,18 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     updateLayer(id: string, field: string, value: unknown) {
       send({ type: "update", path: `layers.${id}.${field}`, value });
     },
+    // GIMP's Duplicate Layer: a full clone (source, look, warp, mask, fx, transport)
+    // under a fresh id, placed at the top of the stack (order omitted — the server's
+    // handleCreate assigns nextLayerOrder).
+    duplicateLayer(id: string) {
+      const layer = getState().layers[id];
+      if (!layer) return;
+      const copy = structuredClone(layer);
+      copy.id = `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+      copy.name = `${layer.name || layer.id} copy`;
+      delete (copy as { order?: number }).order; // server assigns top-of-stack
+      send({ type: "create", path: "layers", value: copy });
+    },
     removeLayer(id: string) {
       send({ type: "delete", path: `layers.${id}` });
     },

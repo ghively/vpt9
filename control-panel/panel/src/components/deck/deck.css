@@ -355,6 +355,39 @@
 
 /* Inline layer rename (double-click the name). */
 .layer-rename-input { width: 100%; min-width: 0; font-size: 12px; padding: 1px 4px; }
+.look-rename-input { flex: none; width: 120px; font-size: 11px; padding: 3px 6px; }
+
+/* ---------------- context menus (right-click) ----------------
+ * The GIMP/desktop-app convention: every object offers its verbs where the pointer
+ * already is. Fixed-positioned at the cursor, clamped to the viewport (ContextMenu.tsx). */
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  box-shadow: 0 12px 32px -8px #000, inset 0 0 0 1px #00000066;
+}
+.ctx-menu__item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.ctx-menu__item:hover:not(:disabled) { background: var(--beam-soft); color: var(--beam); }
+.ctx-menu__item:disabled { color: var(--muted-dim); cursor: default; }
+.ctx-menu__item[data-danger] { color: var(--live); opacity: .85; }
+.ctx-menu__item[data-danger]:hover:not(:disabled) { background: rgba(255, 70, 88, 0.14); color: var(--live); opacity: 1; }
+.ctx-menu__sep { height: 1px; margin: 4px 6px; background: var(--hairline-soft); }
 
 /* Non-visual source tags (camera / shared slot / external URL) on a layer thumb. */
 .thumb--tag {
