@@ -212,8 +212,13 @@ function handleDelete(message) {
 function handlePresetSave(message) {
   const snapshot = {};
   for (const field of PRESET_FIELDS) snapshot[field] = structuredClone(state[field]);
-  const preset = { id: message.id || `preset-${Date.now()}`, name: message.name || "Untitled", snapshot };
+  // Coerce a non-string id to a generated one instead of letting applyCreate refuse it —
+  // the old path broadcast a phantom {key:null} create that every client dropped, so the
+  // operator's "saved" look silently vanished.
+  const id = typeof message.id === "string" && message.id ? message.id : `preset-${Date.now()}`;
+  const preset = { id, name: typeof message.name === "string" && message.name ? message.name : "Untitled", snapshot };
   const key = applyCreate(state, "presets", preset);
+  if (key == null) return;
   scheduleSave();
   broadcast({ type: "create", path: "presets", key, value: preset });
 }
@@ -371,8 +376,12 @@ function handleOscMessage(address, args) {
   }
 
   const path = address.replace(/^\//, "").replaceAll("/", ".");
-  const value = args[0];
+  let value = args[0];
   if (value === undefined) return;
+  // OSC toggles overwhelmingly send numeric 0/1 (`i`/`f` tags), but state pins `blind`
+  // to a strict boolean — normalize here so `/blind 1` from TouchOSC/QLab actually
+  // engages blind instead of being silently refused by applyUpdate.
+  if (path === "blind" && typeof value === "number") value = value !== 0;
   blindSession.noteUpdate(path, value); // an OSC /blind write opens/commits a session too
   if (applyUpdate(state, path, value)) {
     scheduleSave();

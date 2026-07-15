@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { ConfidenceMonitorHandle } from "../ConfidenceMonitor";
 import { pointInQuad, type Quad } from "./layerGeometry";
 
@@ -71,6 +71,26 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
     }),
     [],
   );
+
+  // Reconcile the imperative frame path with React's props: setFrame writes img.src and
+  // data-live outside the vDOM, so React's diff still believes src is whatever the last
+  // render set — switching to a screen with NO cached frame diffs undefined→undefined
+  // and changes nothing, leaving the previous screen's frozen frame under the new
+  // screen's badge. This effect re-asserts the prop truth whenever the screen (or its
+  // cached frame) changes; live pushes keep flowing through setFrame in between.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    if (frame) {
+      img.src = frame;
+      stageRef.current?.setAttribute("data-live", "true");
+    } else {
+      img.removeAttribute("src");
+      stageRef.current?.setAttribute("data-live", "false");
+      resTextRef.current = "";
+      if (resRef.current) resRef.current.textContent = "";
+    }
+  }, [screenId, frame]);
 
   // Honest resolution readout: the ACTUAL preview frame size, measured off the decoded
   // image (its predecessor showed a hardcoded "1280×720" while displaying a 320px-wide

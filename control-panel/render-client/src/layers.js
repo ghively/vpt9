@@ -27,7 +27,9 @@ function mediaKindFromUrl(url) {
   const dot = clean.lastIndexOf(".");
   const ext = dot < 0 ? "" : clean.slice(dot + 1).toLowerCase();
   if (ext === "gif") return "gif";
-  if (ext === "jpg" || ext === "jpeg") return "image";
+  // Library uploads only allow jpg/jpeg, but external URLs can be any still format —
+  // routing e.g. a .png through the <video> path renders an opaque black layer.
+  if (ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp" || ext === "bmp") return "image";
   return "video";
 }
 
@@ -346,6 +348,14 @@ export class LayerStack {
   applyTransport(layer, entry) {
     const video = entry.videoEl;
     if (!video) return;
+    // Resync native `loop` from the layer's CURRENT loopMode every frame (the slot path
+    // does the same in source-bank.js). setLayerSource sets it too, but a bare
+    // `layers.<id>.transport.loopMode` update takes main.js's render-time-leaf fast path,
+    // which skips setLayers()/setLayerSource entirely — without this per-frame resync,
+    // toggling Loop off left the wall's <video> looping forever (and off->loop froze on
+    // the clip's last frame instead of looping).
+    const loop = this.shouldLoop(layer);
+    if (video.loop !== loop) video.loop = loop;
     const t = layer.transport;
     if (!t) return;
 
@@ -380,6 +390,12 @@ export class LayerStack {
         entry._audioNodesFor = video; // still mark as "attempted for this element" so we don't retry every frame
       }
     }
+    // Autoplay policy: a context created before any user gesture starts "suspended" and
+    // outputs SILENCE — and createMediaElementSource has already rerouted the element's
+    // audio into it, so the audio-owner screen would stay mute forever. Retry resume()
+    // each frame: it succeeds immediately under kiosk autoplay flags, or on the first
+    // frame after any user gesture (click/fullscreen dblclick) otherwise.
+    if (this.audioCtx && this.audioCtx.state === "suspended") this.audioCtx.resume().catch(() => {});
     if (entry._audioNodes) {
       entry._audioNodes.gainNode.gain.value = t.vol ?? 1;
       if (entry._audioNodes.pannerNode) entry._audioNodes.pannerNode.pan.value = t.pan ?? 0;

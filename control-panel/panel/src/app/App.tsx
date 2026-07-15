@@ -188,10 +188,16 @@ export function App() {
       stateRef.current = next;
       const screenIds = Object.keys(next.screens ?? {});
       if (!selectedRef.current || !next.screens?.[selectedRef.current]) {
-        setSelectedScreenId(screenIds[0] ?? null); // triggers a render itself
-      } else {
-        forceRender();
+        const nextId = screenIds[0] ?? null;
+        if (nextId !== selectedRef.current) {
+          setSelectedScreenId(nextId); // triggers a render itself
+          return;
+        }
       }
+      // Route through the drag-guarded, coalesced rerender — a reconnect snapshot
+      // landing mid-gesture must not yank the DOM out from under an active drag (the
+      // same rule every other message type follows); endDrag reconciles afterward.
+      rerender();
     },
     onUpdate(path, value) {
       if (applyUpdate(stateRef.current, path, value)) rerender();
@@ -209,9 +215,11 @@ export function App() {
       preview.push(screenId, frame);
     },
     onTransportStatus(layerId, position) {
-      // No forceRender here on purpose — this ticks at playback frame rate and is read
-      // directly off the ref by the (future) Transport scrub readout, not the store.
       transportPositionsRef.current[layerId] = position;
+      // The Inspector's Transport scrub readout renders this value, so an otherwise-idle
+      // panel needs a repaint or the seconds counter freezes. rerender() is rAF-coalesced
+      // and drag-guarded, so this ~2 Hz telemetry costs at most one render per frame.
+      rerender();
     },
     onStatus(state, url) {
       setStatus({ state, label: `${state} · ${url}` });
@@ -282,6 +290,9 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      // No auto-repeat: a held B would machine-gun blind toggles, and every OFF edge is
+      // a COMMIT that destroys the server's pre-blind snapshot.
+      if (e.repeat) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if (e.key >= "1" && e.key <= "9") {

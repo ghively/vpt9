@@ -228,6 +228,77 @@ test("warp vertical orientation matches the panel: corner y=0 lands at the DISPL
   socket.close();
 });
 
+test("mask vertical orientation matches the panel: mask cy=0.25 shows content at the DISPLAYED top", async ({ page }) => {
+  // Sibling of the warp orientation test above: mask.cx/cy/points arrive in the panel's
+  // top-left-origin space, but the mask shader compares them against v_uv, where v=1 is
+  // the displayed top (UNPACK_FLIP_Y uploads) — without a flip, a mask dragged toward
+  // the panel's top gates the displayed BOTTOM. Every older mask spec used vertically
+  // symmetric geometry (cy=0.5, y-centered polygons), which can't see this.
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+
+  const stateBefore = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+  const demoOpacities = [stateBefore.layers["layer-1"]?.opacity, stateBefore.layers["layer-2"]?.opacity];
+  await wsSend(socket, { type: "update", path: "layers.layer-1.opacity", value: 0 });
+  await wsSend(socket, { type: "update", path: "layers.layer-2.opacity", value: 0 });
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      id: "layer-mask-vert", name: "mask vertical orientation", order: 210,
+      source: { type: "color", color: [1, 0, 0] }, opacity: 1, blendMode: "normal",
+      // Ellipse centered in the TOP quarter of panel space, wide enough to be sampled
+      // safely: visible red should appear near the displayed TOP, none at the bottom.
+      mask: { enabled: true, shape: "ellipse", cx: 0.5, cy: 0.25, rx: 0.45, ry: 0.2, feather: 0 },
+      fx: null,
+      warp: {
+        mode: "corner",
+        corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+        mesh: { size: 4, points: [] },
+      },
+    },
+  });
+
+  await page.goto(`http://localhost:${RENDER_PORT}/index.html?screen=screen-1&ws=ws://localhost:${WS_PORT}`);
+  await page.waitForTimeout(700);
+  const canvas = page.locator("canvas");
+  const readPixel = (xFrac, yFrac) =>
+    canvas.evaluate(
+      (el, [xf, yf]) => {
+        const gl = el.getContext("webgl2");
+        const px = new Uint8Array(4);
+        gl.readPixels(Math.round(el.width * xf), Math.round(el.height * yf), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        return Array.from(px);
+      },
+      [xFrac, yFrac],
+    );
+
+  // readPixels origin is bottom-left: displayed top quarter = window yFrac 0.75.
+  const displayedTop = await readPixel(0.5, 0.75);
+  const displayedBottom = await readPixel(0.5, 0.25);
+  expect(displayedTop[0]).toBeGreaterThan(180);
+  expect(displayedBottom[0]).toBeLessThan(60);
+
+  // Polygon leg: a triangle occupying the panel's TOP half must show at the displayed top.
+  await wsSend(socket, { type: "update", path: "layers.layer-mask-vert.mask.shape", value: "polygon" });
+  await wsSend(socket, {
+    type: "update",
+    path: "layers.layer-mask-vert.mask.points",
+    value: [{ x: 0.1, y: 0.05 }, { x: 0.9, y: 0.05 }, { x: 0.5, y: 0.5 }],
+  });
+  await page.waitForTimeout(500);
+  const polyTop = await readPixel(0.5, 0.85);
+  const polyBottom = await readPixel(0.5, 0.15);
+  expect(polyTop[0]).toBeGreaterThan(180);
+  expect(polyBottom[0]).toBeLessThan(60);
+
+  // Cleanup for the tests that share this server.
+  await wsSend(socket, { type: "delete", path: "layers.layer-mask-vert" });
+  if (demoOpacities[0] != null) await wsSend(socket, { type: "update", path: "layers.layer-1.opacity", value: demoOpacities[0] });
+  if (demoOpacities[1] != null) await wsSend(socket, { type: "update", path: "layers.layer-2.opacity", value: demoOpacities[1] });
+  socket.close();
+});
+
 test("fx.rotationDeg rotates a layer's content about its anchor (VPT8 parity: td.rota.jxs's rota field)", async ({ page }) => {
   // No mask/asymmetric image fixture needed: a solid-color layer's point pass treats
   // anything sampled outside content uv [0,1] as transparent ("border" in fx.js's

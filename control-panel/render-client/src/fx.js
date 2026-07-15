@@ -199,12 +199,15 @@ void main() {
       bool inside = maskPolygonContains(v_uv);
       float edgeDist = maskPolygonEdgeDist(v_uv);
       float signedDist = inside ? -edgeDist : edgeDist;
-      a = 1.0 - smoothstep(0.0, u_maskFeather, signedDist);
+      // feather floored at a hair above 0: smoothstep with edge0 == edge1 is
+      // spec-undefined (division by zero) — some drivers return the intended hard
+      // edge, others NaN. 1e-4 in 0..1 uv space is visually identical to hard.
+      a = 1.0 - smoothstep(0.0, max(u_maskFeather, 1e-4), signedDist);
     }
   } else {
     vec2 d = (v_uv - u_maskCenter) / max(u_maskRadius, vec2(0.0001));
     float dist = (u_maskShape == 1) ? length(d) : max(abs(d.x), abs(d.y));
-    a = 1.0 - smoothstep(1.0 - u_maskFeather, 1.0, dist);
+    a = 1.0 - smoothstep(1.0 - max(u_maskFeather, 1e-4), 1.0, dist);
   }
   // invert: flips which side is visible, for every shape AND the matte (VPT8's layermask.maxpat pattr inv).
   a = mix(a, 1.0 - a, u_maskInvert);
@@ -458,7 +461,12 @@ export class FxChain {
     gl.uniform1i(u.u_maskUseMatte, useMatte ? 1 : 0);
     gl.uniform1i(u.u_maskEnabled, mask?.enabled ? 1 : 0);
     gl.uniform1i(u.u_maskShape, mask?.shape === "rect" ? 0 : mask?.shape === "polygon" ? 2 : 1);
-    gl.uniform2f(u.u_maskCenter, mask?.cx ?? 0.5, mask?.cy ?? 0.5);
+    // Mask geometry arrives in the panel's top-left-origin space (y down), but the shader
+    // compares it against v_uv, where v=1 is the DISPLAYED top (sources upload with
+    // UNPACK_FLIP_Y). Flip y at this boundary — same convention fix as the warp vertex
+    // shader (warp.js) — so a mask dragged toward the panel's top gates the displayed
+    // top, not the bottom. x and the radii are orientation-free.
+    gl.uniform2f(u.u_maskCenter, mask?.cx ?? 0.5, 1 - (mask?.cy ?? 0.5));
     gl.uniform2f(u.u_maskRadius, mask?.rx ?? 0.5, mask?.ry ?? 0.5);
     gl.uniform1f(u.u_maskFeather, mask?.feather ?? 0.05);
     gl.uniform1f(u.u_maskInvert, mask?.invert ? 1 : 0);
@@ -469,7 +477,7 @@ export class FxChain {
       const flat = new Float32Array(count * 2);
       for (let i = 0; i < count; i++) {
         flat[i * 2] = points[i].x;
-        flat[i * 2 + 1] = points[i].y;
+        flat[i * 2 + 1] = 1 - points[i].y; // panel y-down -> v_uv y-up, see u_maskCenter note
       }
       gl.uniform2fv(u.u_maskPoints, flat);
     }

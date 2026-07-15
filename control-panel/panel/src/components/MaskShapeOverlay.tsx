@@ -151,8 +151,12 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     onChange?.({ points: next });
   };
 
-  const insertPoint = (nx: number, ny: number) => {
-    if (points.length < 2) return;
+  // Returns true when a vertex was actually inserted, so the caller can stop the event
+  // from doubling as a stage background click (which would re-run App's click-to-select
+  // hit-test and could yank the selection to another layer mid-mask-edit). Clicks that
+  // miss every edge still bubble, keeping click-empty-space-to-deselect working.
+  const insertPoint = (nx: number, ny: number): boolean => {
+    if (points.length < 2) return false;
     const p = { x: clamp01(nx), y: clamp01(ny) };
     let bestIndex = 0;
     let best = { dist: Number.POSITIVE_INFINITY, x: p.x, y: p.y };
@@ -163,11 +167,12 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
         bestIndex = i;
       }
     }
-    if (best.dist > POLY_INSERT_THRESHOLD) return;
+    if (best.dist > POLY_INSERT_THRESHOLD || points.length >= 32) return false;
     const next = clonePoints(points);
     next.splice(bestIndex + 1, 0, { x: best.x, y: best.y });
     updatePoints(next);
     setSelectedIndex(bestIndex + 1);
+    return true;
   };
 
   const radius = mask.shape === "rect" ? "2px" : "50%";
@@ -188,7 +193,9 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
         const stage = rootRef.current?.parentElement;
         if (!stage) return;
         const rect = stage.getBoundingClientRect();
-        insertPoint((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+        if (insertPoint((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)) {
+          e.stopPropagation();
+        }
       }}
     >
       {isPolygon ? (
@@ -196,9 +203,16 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
           <svg className="mask-shape__poly" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
             <polygon points={points.map((p) => `${p.x},${p.y}`).join(" ")} />
           </svg>
+          {/* Keyed by INDEX only — never by coordinates. A coordinate-derived key
+           *  remounts the handle when its own drag's optimistic writes change the point
+           *  and anything re-renders mid-gesture (WS status change, reconnect snapshot,
+           *  breakpoint flip): the remount removes the element holding the pointer
+           *  capture, pointerup never fires, onDragEnd never runs, and App's
+           *  isDraggingRef wedges true — silently freezing every store-driven re-render
+           *  until another full drag completes. */}
           {points.map((p, i) => (
             <WarpHandle
-              key={`${i}-${p.x}-${p.y}`}
+              key={i}
               x={p.x}
               y={p.y}
               selected={selectedIndex === i}

@@ -33,6 +33,23 @@ const recorder = new CameraRecorder(
 let state = { layers: {}, screens: {}, pip: {}, audioOwnerScreenId: null };
 
 let isAudioOwner = false;
+
+// PiP windows are DOM iframes stacked OVER the GL canvas, outside the blind held-frame
+// freeze — without holding them, an off-air pip move/show while blind would be visible
+// to the audience immediately. Hold the pre-blind arrangement while blind; a commit
+// (blind=false) syncs to the live state, a discard restores state anyway.
+let heldPip = null;
+function syncPipOverlay() {
+  lastBlind = !!state.blind; // keep the light path's edge detector in step (see below)
+  if (state.blind) {
+    if (!heldPip) heldPip = structuredClone(state.pip);
+    pipOverlay.sync(heldPip, isAudioOwner);
+  } else {
+    heldPip = null;
+    pipOverlay.sync(state.pip, isAudioOwner);
+  }
+}
+
 function applyDerivedState() {
   isAudioOwner = state.audioOwnerScreenId === screenId;
   compositor.setLayers(state.layers, state.sourceBank, state.media);
@@ -40,7 +57,7 @@ function applyDerivedState() {
   compositor.setMuted(!isAudioOwner);
   compositor.setMaster(state.master ?? 1);
   compositor.setBlind(state.blind ?? false); // task A20: freeze the wall, keep preview live
-  pipOverlay.sync(state.pip, isAudioOwner);
+  syncPipOverlay();
 }
 
 // Cheap subset of applyDerivedState for high-frequency leaf updates (warp/mask drags,
@@ -50,10 +67,17 @@ function applyDerivedState() {
 // is re-running the trivial scalar setters. Skipping setLayers() here matters: the full
 // path re-sorts and re-resolves EVERY layer's source on every message, which at drag
 // pointer rates was a real per-message CPU cost competing with the rAF render loop.
+let lastBlind = false;
 function applyDerivedStateLight() {
   compositor.setWarp(state.screens?.[screenId]?.warp);
   compositor.setMaster(state.master ?? 1);
   compositor.setBlind(state.blind ?? false);
+  // Blind toggles arrive as a light-path leaf; the PiP hold must still engage/release on
+  // that edge (edge-detected so 30 Hz LFO batches don't re-sync the pip DOM every tick).
+  if (!!state.blind !== lastBlind) {
+    lastBlind = !!state.blind;
+    syncPipOverlay();
+  }
 }
 
 // Paths whose new values are read per-frame straight off the shared state objects (see
@@ -172,12 +196,21 @@ function pushPreview() {
       const frame = compositor.capturePreview(PREVIEW_WIDTH);
       socket.send(JSON.stringify({ type: "preview", screenId, frame }));
     } catch (err) {
-      previewDisabled = true;
-      console.error(
-        "[preview] disabling confidence-monitor preview — canvas capture failed " +
-          "(likely a video source missing CORS headers, which taints the canvas):",
-        err.message,
-      );
+      // A tainted canvas (video source without CORS headers) throws SecurityError on
+      // EVERY capture forever — that one is latched off permanently. Any other throw
+      // (e.g. a transient failure during a GPU reset window) is recoverable: log it
+      // rate-limited by the pause below and keep the loop alive.
+      if (err?.name === "SecurityError") {
+        previewDisabled = true;
+        console.error(
+          "[preview] disabling confidence-monitor preview — canvas capture failed " +
+            "(a video source missing CORS headers taints the canvas):",
+          err.message,
+        );
+        return;
+      }
+      console.warn("[preview] capture failed (retrying):", err?.message);
+      setTimeout(pushPreview, 1000); // back off before retrying a non-fatal failure
       return;
     }
   }

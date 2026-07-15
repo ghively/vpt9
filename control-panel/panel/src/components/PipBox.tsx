@@ -27,6 +27,19 @@ export function PipBox({ pip, onDragStart, onMove, onResize, onDragEnd }: PipBox
     const originX = pip.x;
     const originY = pip.y;
 
+    // Coalesce onMove emissions to one per animation frame (each fans out into TWO WS
+    // updates via movePip — x and y — so raw pointermove rates flooded the control
+    // plane); the box's own DOM position still tracks every raw event. Same pattern as
+    // WarpHandle/MaskShapeOverlay.
+    let raf = 0;
+    let pending: [number, number] | null = null;
+    const flush = () => {
+      raf = 0;
+      if (!pending) return;
+      const [px, py] = pending;
+      pending = null;
+      onMove?.(px, py);
+    };
     const onPointerMove = (moveEvent: PointerEvent) => {
       const dx = (moveEvent.clientX - startX) / rect.width;
       const dy = (moveEvent.clientY - startY) / rect.height;
@@ -34,9 +47,12 @@ export function PipBox({ pip, onDragStart, onMove, onResize, onDragEnd }: PipBox
       const ny = Math.min(1 - pip.height, Math.max(0, originY + dy));
       box.style.left = `${nx * 100}%`;
       box.style.top = `${ny * 100}%`;
-      onMove?.(nx, ny);
+      pending = [nx, ny];
+      if (!raf) raf = requestAnimationFrame(flush);
     };
     const onPointerUp = () => {
+      if (raf) cancelAnimationFrame(raf);
+      flush(); // the release position always goes out
       bar.removeEventListener("pointermove", onPointerMove);
       bar.removeEventListener("pointerup", onPointerUp);
       bar.removeEventListener("pointercancel", onPointerUp);
@@ -59,6 +75,16 @@ export function PipBox({ pip, onDragStart, onMove, onResize, onDragEnd }: PipBox
     const originW = pip.width;
     const originH = pip.height;
 
+    // rAF-coalesced like beginMove above (resizePip likewise fans out into two updates).
+    let raf = 0;
+    let pending: [number, number] | null = null;
+    const flush = () => {
+      raf = 0;
+      if (!pending) return;
+      const [pw, ph] = pending;
+      pending = null;
+      onResize?.(pw, ph);
+    };
     const onPointerMove = (moveEvent: PointerEvent) => {
       const dx = (moveEvent.clientX - startX) / rect.width;
       const dy = (moveEvent.clientY - startY) / rect.height;
@@ -66,10 +92,13 @@ export function PipBox({ pip, onDragStart, onMove, onResize, onDragEnd }: PipBox
       const nh = Math.max(0.05, Math.min(1 - pip.y, originH + dy));
       box.style.width = `${nw * 100}%`;
       box.style.height = `${nh * 100}%`;
-      onResize?.(nw, nh);
+      pending = [nw, nh];
+      if (!raf) raf = requestAnimationFrame(flush);
     };
     const handle = event.currentTarget as HTMLElement;
     const onPointerUp = () => {
+      if (raf) cancelAnimationFrame(raf);
+      flush();
       handle.removeEventListener("pointermove", onPointerMove);
       handle.removeEventListener("pointerup", onPointerUp);
       handle.removeEventListener("pointercancel", onPointerUp);

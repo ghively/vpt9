@@ -602,7 +602,10 @@ export function Inspector(props: InspectorProps) {
       <div className="insp-body">
         <div className="field">
           <span className="label">Source</span>
-          <SourceControl layer={layer} media={media} sourceBank={sourceBank} cameraDevices={cameraDevices} onUpdate={onUpdate} />
+          {/* key: SourceControl holds per-layer UI state (externalMode) — remount it on
+           *  selection change so layer A's "External URL…" choice can't leak onto layer
+           *  B's library-sourced picker. */}
+          <SourceControl key={layer.id} layer={layer} media={media} sourceBank={sourceBank} cameraDevices={cameraDevices} onUpdate={onUpdate} />
         </div>
         <div className="field">
           <span className="label">Opacity</span>

@@ -302,8 +302,11 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     removeLfo(id: string) {
       send({ type: "delete", path: `lfos.${id}` });
     },
-    // Global LFO tempo (A19). Guarded server-side to a finite positive number.
+    // Global LFO tempo (A19). Guarded server-side to a finite positive number — also
+    // guarded here because the optimistic local echo applies whatever we send, so a NaN
+    // (Math.max(1, NaN) is NaN) would show a phantom tempo the server actually refused.
     setTempo(bpm: number) {
+      if (!Number.isFinite(bpm)) return;
       send({ type: "update", path: "tempoBpm", value: Math.max(1, bpm) });
     },
 

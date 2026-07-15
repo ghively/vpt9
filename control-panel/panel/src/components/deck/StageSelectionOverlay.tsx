@@ -191,7 +191,11 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
     return (
       <>
         <SelLabel x={anchor.x} y={anchor.y} text={`${screen.name || screen.id} · screen warp`} />
-        <WarpHandles warp={screen.warp} onPoint={onScreenWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+        {/* key: switching target must reset the tap-to-select point index — layer and
+         *  screen branches render WarpHandles at the same tree position, so without a
+         *  key the old selectedIndex survives and the next arrow-press nudges a point
+         *  the operator never armed on the NEW target. */}
+        <WarpHandles key={`screen-${screen.id}`} warp={screen.warp} onPoint={onScreenWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
       </>
     );
   }
@@ -215,7 +219,10 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
     return (
       <>
         <SelLabel x={anchor.x} y={anchor.y} text={`${layer.name || layer.id} · mask`} />
-        <MaskShapeOverlay mask={mask} onDragStart={onDragStart} onDragEnd={onDragEnd} onChange={onMask} />
+        {/* key: reset the polygon vertex selection when the selected LAYER changes —
+         *  without it, Delete/arrows after switching layers act on the new layer's
+         *  same-numbered vertex the operator never tapped. */}
+        <MaskShapeOverlay key={layer.id} mask={mask} onDragStart={onDragStart} onDragEnd={onDragEnd} onChange={onMask} />
       </>
     );
   }
@@ -243,7 +250,8 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
   return (
     <>
       <SelLabel x={anchor.x} y={anchor.y} text={`${layer.name || layer.id} · warp`} />
-      <WarpHandles warp={layer.warp} onPoint={onWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+      {/* key: see the screen branch — reset point selection when the target changes. */}
+      <WarpHandles key={`layer-${layer.id}`} warp={layer.warp} onPoint={onWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
     </>
   );
 }

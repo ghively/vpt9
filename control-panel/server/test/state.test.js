@@ -234,10 +234,14 @@ test("A20: ensureStateDefaults backfills blind=false onto an older state without
   assert.equal(state.blind, false);
 });
 
-test("A20: ensureStateDefaults does not clobber an existing blind flag", () => {
+test("blind resets to false on load (true blind editing: the snapshot is memory-only)", () => {
+  // Policy change with true blind editing (server/src/blind.js): the pre-blind snapshot
+  // lives only in server memory, so a persisted blind:true after a restart would leave
+  // the wall stuck frozen with nothing to discard-restore. Same boot-reset rule as
+  // automation.running, asserted right below in the seeded defaults.
   const state = { layers: {}, presets: {}, automation: { running: false }, blind: true };
   ensureStateDefaults(state);
-  assert.equal(state.blind, true); // fillMissing only adds absent keys
+  assert.equal(state.blind, false);
 });
 
 test("A20: applyUpdate accepts a boolean blind toggle but rejects a non-boolean", () => {
@@ -503,4 +507,55 @@ test("applyUpdate does NOT restrict a layer's own top-level source (only mask.so
   state.layers["layer-1"].source = { type: "video", url: "/a.mp4" };
   assert.equal(applyUpdate(state, "layers.layer-1.source", { type: "color", color: [0, 0, 0] }), true);
   assert.deepEqual(state.layers["layer-1"].source, { type: "color", color: [0, 0, 0] });
+});
+
+// ── Bug-audit fixes (2026-07-15) ─────────────────────────────────────────────
+
+test("applyCreate refuses containers outside the known keyed collections", () => {
+  const state = sampleState();
+  // Structural singletons and nested objects are not creatable collections.
+  assert.equal(applyCreate(state, "automation", { id: "junk" }), null);
+  assert.equal(applyCreate(state, "layers.layer-1", { id: "junk" }), null);
+  assert.equal(applyCreate(state, "layers.layer-1.fx", { id: "junk" }), null);
+  assert.equal(state.automation.junk, undefined);
+  assert.equal(state.layers["layer-1"].junk, undefined);
+  // The known collections keep working.
+  assert.equal(applyCreate(state, "layers", { id: "layer-9" }), "layer-9");
+  assert.equal(applyCreate(state, "automation.timers", { id: "timer-1" }), "timer-1");
+});
+
+test("ensureLayerDefaults replaces explicit null structural fields with defaults", () => {
+  const layer = { id: "l", fx: null, mask: null, warp: null, transport: null, playlist: null };
+  ensureLayerDefaults(layer);
+  assert.equal(typeof layer.fx?.enabled, "object", "fx: null replaced with defaultFx");
+  assert.equal(typeof layer.mask?.feather, "number", "mask: null replaced with defaultMask");
+  assert.equal(layer.warp?.mode, "corner", "warp: null replaced with defaultWarp");
+  assert.equal(typeof layer.transport, "object");
+  assert.deepEqual(layer.playlist, { items: [], cursor: -1 });
+});
+
+test("resolveDanglingSourceRefs sweeps layer sources, mattes, and playlist items", async () => {
+  const { resolveDanglingSourceRefs } = await import("../src/state.js");
+  const state = {
+    sourceBank: [],
+    layers: {
+      "layer-1": {
+        id: "layer-1",
+        source: { type: "media", mediaId: "m-dead" },
+        mask: { enabled: true, source: { type: "media", mediaId: "m-dead" } },
+        playlist: {
+          items: [
+            { ref: { type: "media", mediaId: "m-dead" } },
+            { ref: { type: "media", mediaId: "m-alive" } },
+          ],
+          cursor: 1,
+        },
+      },
+    },
+  };
+  resolveDanglingSourceRefs(state, "media", "m-dead");
+  assert.equal(state.layers["layer-1"].source.type, "color", "layer source falls back to a color fill");
+  assert.equal(state.layers["layer-1"].mask.source, null, "matte ref cleared back to the shape");
+  assert.equal(state.layers["layer-1"].playlist.items.length, 1, "dead playlist item removed");
+  assert.equal(state.layers["layer-1"].playlist.cursor, 0, "cursor clamped into the shrunk list");
 });
