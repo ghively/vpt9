@@ -138,6 +138,96 @@ test("a layer's own warp moves it independently of screen warp, mask follows the
   expect(movedAway[0]).toBeLessThan(60);
 });
 
+test("warp vertical orientation matches the panel: corner y=0 lands at the DISPLAYED top (layer AND screen warp)", async ({ page }) => {
+  // Regression test for the "warping felt upside down / mirrored" bug: the per-layer
+  // warp pass rendered into its FBO without the dest/uv Y-flip the on-screen pass uses,
+  // so a corner dragged at the TOP of the panel stage moved content at the BOTTOM of the
+  // display. The older test above only asserts horizontal direction (x), which the bug
+  // didn't touch — this one pins the vertical axis for both warp levels.
+  //
+  // readPixels' origin is BOTTOM-left, so "displayed top half" = window yFrac near 1.
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+
+  // This spec file shares one server across tests — remember what we mutate (seeded
+  // demo-layer opacities) so the cleanup below can restore it for the tests after us.
+  const stateBefore = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+  const demoOpacities = [stateBefore.layers["layer-1"]?.opacity, stateBefore.layers["layer-2"]?.opacity];
+
+  // Silence the two seeded demo layers so the background is the flat dark ground color.
+  await wsSend(socket, { type: "update", path: "layers.layer-1.opacity", value: 0 });
+  await wsSend(socket, { type: "update", path: "layers.layer-2.opacity", value: 0 });
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      id: "layer-vert", name: "vertical orientation", order: 200,
+      source: { type: "color", color: [1, 0, 0] }, opacity: 1, blendMode: "normal",
+      mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0 },
+      fx: null,
+      // Squeeze the layer's content into the TOP half of panel space: TL/TR stay at
+      // y=0, BR/BL move up to y=0.5. Panel y=0 is the top of the stage, so a correct
+      // pipeline shows red in the displayed TOP half and background below it.
+      warp: {
+        mode: "corner",
+        corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 0.5 }, { x: 0, y: 0.5 }],
+        mesh: { size: 4, points: [] },
+      },
+    },
+  });
+
+  await page.goto(`http://localhost:${RENDER_PORT}/index.html?screen=screen-1&ws=ws://localhost:${WS_PORT}`);
+  await page.waitForTimeout(700);
+  const canvas = page.locator("canvas");
+  const readPixel = (xFrac, yFrac) =>
+    canvas.evaluate(
+      (el, [xf, yf]) => {
+        const gl = el.getContext("webgl2");
+        const px = new Uint8Array(4);
+        gl.readPixels(Math.round(el.width * xf), Math.round(el.height * yf), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        return Array.from(px);
+      },
+      [xFrac, yFrac],
+    );
+
+  // LAYER warp: displayed top half (window yFrac 0.75) red, bottom half background.
+  const layerTop = await readPixel(0.5, 0.75);
+  const layerBottom = await readPixel(0.5, 0.25);
+  expect(layerTop[0]).toBeGreaterThan(180);
+  expect(layerBottom[0]).toBeLessThan(60);
+
+  // SCREEN warp, same squeeze: reset the layer to identity, then warp the projector's
+  // own corners into the top half — the whole (red-filled) scene must land up top.
+  await wsSend(socket, {
+    type: "update",
+    path: "layers.layer-vert.warp.corners",
+    value: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+  });
+  await wsSend(socket, {
+    type: "update",
+    path: "screens.screen-1.warp.corners",
+    value: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 0.5 }, { x: 0, y: 0.5 }],
+  });
+  await page.waitForTimeout(700);
+
+  const screenTop = await readPixel(0.5, 0.75);
+  const screenBottom = await readPixel(0.5, 0.25);
+  expect(screenTop[0]).toBeGreaterThan(180);
+  expect(screenBottom[0]).toBeLessThan(60);
+
+  // Cleanup: this server is shared with the tests that run after this one — put back
+  // the screen warp, remove our layer, and restore the demo layers' opacities.
+  await wsSend(socket, {
+    type: "update",
+    path: "screens.screen-1.warp.corners",
+    value: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+  });
+  await wsSend(socket, { type: "delete", path: "layers.layer-vert" });
+  if (demoOpacities[0] != null) await wsSend(socket, { type: "update", path: "layers.layer-1.opacity", value: demoOpacities[0] });
+  if (demoOpacities[1] != null) await wsSend(socket, { type: "update", path: "layers.layer-2.opacity", value: demoOpacities[1] });
+  socket.close();
+});
+
 test("fx.rotationDeg rotates a layer's content about its anchor (VPT8 parity: td.rota.jxs's rota field)", async ({ page }) => {
   // No mask/asymmetric image fixture needed: a solid-color layer's point pass treats
   // anything sampled outside content uv [0,1] as transparent ("border" in fx.js's

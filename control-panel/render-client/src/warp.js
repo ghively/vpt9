@@ -6,15 +6,20 @@ import { createProgram } from "./gl-utils.js";
 // enough for room-decoration-scale corrections, not for large professional installs.
 const WARP_VERT = `#version 300 es
 in vec2 a_uv;
-in vec2 a_dest; // destination position in 0..1 screen space, (0,0) = top-left
-uniform bool u_flipDest; // true when writing to the default framebuffer (GL's bottom-left
-                         // origin needs the destination Y flipped); false when writing to
-                         // an intermediate FBO (already top-left-origin, no flip needed).
+in vec2 a_dest; // destination position in 0..1 DISPLAY space, (0,0) = top-left
 out vec2 v_sceneUv;
+// Y is flipped for BOTH the destination and the sampled uv, for every target. Sources
+// are uploaded with UNPACK_FLIP_Y (layers.js), so texture v=1 is the displayed top in
+// every framebuffer of the pipeline — the default framebuffer AND the intermediate
+// FBOs alike. Flipping dest+uv together keeps an identity warp exactly identity while
+// making a_dest's top-left-origin convention (the panel's handle space) land where the
+// operator put the point. The per-layer warp pass used to skip this flip when writing
+// to its FBO, which mirrored the warp vertically: a corner dragged at the TOP of the
+// panel stage moved content at the displayed BOTTOM (see e2e/layer-warp.spec.js's
+// "vertical orientation" test).
 void main() {
-  float destY = u_flipDest ? (1.0 - a_dest.y * 2.0) : (a_dest.y * 2.0 - 1.0);
-  gl_Position = vec4(a_dest.x * 2.0 - 1.0, destY, 0.0, 1.0);
-  v_sceneUv = vec2(a_uv.x, u_flipDest ? 1.0 - a_uv.y : a_uv.y);
+  gl_Position = vec4(a_dest.x * 2.0 - 1.0, 1.0 - a_dest.y * 2.0, 0.0, 1.0);
+  v_sceneUv = vec2(a_uv.x, 1.0 - a_uv.y);
 }`;
 
 const WARP_FRAG = `#version 300 es
@@ -183,7 +188,6 @@ export class ScreenWarp {
     this.program = createProgram(gl, WARP_VERT, WARP_FRAG);
     this.u_scene = gl.getUniformLocation(this.program, "u_scene");
     this.u_master = gl.getUniformLocation(this.program, "u_master");
-    this.u_flipDest = gl.getUniformLocation(this.program, "u_flipDest");
     this.a_uv = gl.getAttribLocation(this.program, "a_uv");
     this.a_dest = gl.getAttribLocation(this.program, "a_dest");
 
@@ -247,9 +251,10 @@ export class ScreenWarp {
   }
 
   // warp: { mode: "corner"|"mesh", corners: [{x,y}x4] TL,TR,BR,BL, mesh: { size, points } }
-  // target: null (default framebuffer, on-screen orientation) | { framebuffer, width, height }
-  //   (an offscreen FBO, source-orientation, no display flip) — used by the per-layer warp
-  //   stage (render-client/src/layers.js) so the same geometry math serves both roles.
+  // target: null (default framebuffer) | { framebuffer, width, height } (an offscreen FBO
+  //   — the per-layer warp stage and the blind held-frame snapshot). Geometry semantics
+  //   are identical for both: warp coordinates are display-space, (0,0) = top-left, the
+  //   same space the panel's drag handles live in (see WARP_VERT's flip note).
   render(sceneTexture, warp, viewportWidth, viewportHeight, master = 1, target = null) {
     const gl = this.gl;
     const cornerFallback = () => {
@@ -311,7 +316,6 @@ export class ScreenWarp {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.useProgram(this.program);
-    gl.uniform1i(this.u_flipDest, target ? 0 : 1);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuffer);
     gl.enableVertexAttribArray(this.a_uv);
