@@ -168,6 +168,10 @@ export interface Layer {
   transport: Transport;
   sourceMode: "single" | "playlist";
   playlist: Playlist;
+  /** The visibility eye (GIMP convention): false = not composited (playback continues
+   *  underneath so re-showing is seamless — identical semantics to opacity 0). Optional
+   *  so state saved before the eye existed typechecks (the server backfills true). */
+  visible?: boolean;
   /** Per-source render downscale (task A15 — VPT8's `p adapt`): the layer's own decode/
    *  upload is reduced by this integer divisor (1 = full, 2 = 1/2, 4 = 1/4, 8 = 1/8),
    *  trading resolution for GPU/decode headroom. Optional so state saved before A15

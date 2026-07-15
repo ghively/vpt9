@@ -6,7 +6,9 @@ import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
 import { createOscOut } from "./osc-out.js";
 import { createMediaRouter } from "./media.js";
+import { createMediaImporter } from "./media-import.js";
 import { createSourceBankPresets } from "./source-bank-presets.js";
+import { createBlindSession } from "./blind.js";
 
 // At most one console.warn per key per second, so a misbehaving/hostile client can't
 // flood the log — while a maintainer debugging "why isn't my update landing" still
@@ -184,7 +186,22 @@ function broadcast(message, exclude) {
   oscOut.observe(message);
 }
 
-const mediaRouter = createMediaRouter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES });
+// Panel-only relay for high-frequency telemetry (preview frames, transport positions):
+// render clients identify themselves with a `hello` message and are skipped — without
+// this, every screen's ~10fps 640px preview JPEG stream was mirrored to every projector,
+// which parsed and dropped all of it. Clients that never send `hello` (panels, e2e
+// sockets, older render clients) receive everything, exactly as before.
+function broadcastToPanels(message, exclude) {
+  const payload = JSON.stringify(message);
+  for (const client of wss.clients) {
+    if (client !== exclude && !client.isRenderClient && client.readyState === client.OPEN) client.send(payload);
+  }
+}
+
+// Import-by-link (paste a URL on the panel): direct media files download straight in;
+// streaming sites go through yt-dlp when installed. See server/src/media-import.js.
+const mediaImporter = createMediaImporter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES });
+const mediaRouter = createMediaRouter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES, importer: mediaImporter });
 
 function handleCreate(socket, message) {
   const value = message.value ?? {};
@@ -211,8 +228,18 @@ function handleDelete(message) {
 function handlePresetSave(message) {
   const snapshot = {};
   for (const field of PRESET_FIELDS) snapshot[field] = structuredClone(state[field]);
-  const preset = { id: message.id || `preset-${Date.now()}`, name: message.name || "Untitled", snapshot };
+  // Coerce a non-string id to a generated one instead of letting applyCreate refuse it —
+  // the old path broadcast a phantom {key:null} create that every client dropped, so the
+  // operator's "saved" look silently vanished. The random suffix matters: two saves in
+  // the same millisecond (a double-clicked +save, a scripted setup) used to collide on
+  // a bare Date.now() id and the second silently overwrote the first.
+  const id =
+    typeof message.id === "string" && message.id
+      ? message.id
+      : `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const preset = { id, name: typeof message.name === "string" && message.name ? message.name : "Untitled", snapshot };
   const key = applyCreate(state, "presets", preset);
+  if (key == null) return;
   scheduleSave();
   broadcast({ type: "create", path: "presets", key, value: preset });
 }
@@ -232,6 +259,11 @@ function recallPreset(presetId) {
 // save/recall/step logic lives in its own factory so it's unit-testable without this file's
 // top-level listen(); see server/test/source-bank-presets.test.js.
 const sourceBankPresets = createSourceBankPresets({ state, broadcast, scheduleSave });
+
+// True blind editing (extends task A20): engaging blind snapshots the live look so the
+// operator can commit (plain blind=false) or discard (`blindDiscard`) their off-air edits.
+// See server/src/blind.js + server/test/blind.test.js.
+const blindSession = createBlindSession({ state, broadcast, scheduleSave });
 
 const engine = createAutomationEngine({
   state,
@@ -258,12 +290,21 @@ wss.on("connection", (socket) => {
     switch (message.type) {
       case "update": {
         if (typeof message.path !== "string") return;
+        blindSession.noteUpdate(message.path, message.value); // must see pre-write state.blind
         if (applyUpdate(state, message.path, message.value)) {
           scheduleSave();
           broadcast({ type: "update", path: message.path, value: message.value });
         }
         return;
       }
+      case "blindDiscard":
+        blindSession.discard();
+        return;
+      case "hello":
+        // Client self-identification (see broadcastToPanels): render clients opt out of
+        // panel-only telemetry relays. Sent on every (re)connect by render-client main.js.
+        if (message.role === "render") socket.isRenderClient = true;
+        return;
       case "create":
         if (typeof message.path === "string") handleCreate(socket, message);
         return;
@@ -298,18 +339,19 @@ wss.on("connection", (socket) => {
         if (Number.isInteger(message.index)) engine.cueJump(message.index);
         return;
       case "preview":
-        // Confidence-monitor frames for the warp editor: relayed live, never persisted
-        // or stored in `state` — high-frequency and disposable by design.
+        // Confidence-monitor frames for the warp editor: relayed live to PANELS only
+        // (see broadcastToPanels), never persisted or stored in `state` —
+        // high-frequency and disposable by design.
         if (typeof message.screenId === "string" && typeof message.frame === "string") {
-          broadcast({ type: "preview", screenId: message.screenId, frame: message.frame }, socket);
+          broadcastToPanels({ type: "preview", screenId: message.screenId, frame: message.frame }, socket);
         }
         return;
       case "transportStatus":
-        // Playback-position telemetry: relay-only, never persisted, mirroring the
+        // Playback-position telemetry: panel-only relay, never persisted, mirroring the
         // `preview` pattern exactly — see docs/superpowers/specs/2026-07-08-parity-
         // finish-line-design.md Section 3 for why this is NOT part of `state`.
         if (typeof message.layerId === "string" && typeof message.position === "number") {
-          broadcast({ type: "transportStatus", layerId: message.layerId, position: message.position }, socket);
+          broadcastToPanels({ type: "transportStatus", layerId: message.layerId, position: message.position }, socket);
         }
         return;
       case "clipEnded":
@@ -361,8 +403,13 @@ function handleOscMessage(address, args) {
   }
 
   const path = address.replace(/^\//, "").replaceAll("/", ".");
-  const value = args[0];
+  let value = args[0];
   if (value === undefined) return;
+  // OSC toggles overwhelmingly send numeric 0/1 (`i`/`f` tags), but state pins `blind`
+  // to a strict boolean — normalize here so `/blind 1` from TouchOSC/QLab actually
+  // engages blind instead of being silently refused by applyUpdate.
+  if (path === "blind" && typeof value === "number") value = value !== 0;
+  blindSession.noteUpdate(path, value); // an OSC /blind write opens/commits a session too
   if (applyUpdate(state, path, value)) {
     scheduleSave();
     broadcast({ type: "update", path, value });

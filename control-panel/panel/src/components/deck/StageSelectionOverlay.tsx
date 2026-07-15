@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { WarpHandle } from "../WarpHandle";
 import { MaskShapeOverlay } from "../MaskShapeOverlay";
+import { arrowNudge, isEditableTarget } from "../nudge";
 import { layerQuad, warpQuad, type Quad } from "./layerGeometry";
 import type { Layer, Mask, Screen, Warp } from "../types";
 
@@ -111,6 +113,41 @@ function WarpHandles({
   const isMesh = warp.mode === "mesh";
   const points = isMesh ? warp.mesh.points : warp.corners;
   const size = warp.mesh?.size ?? 4;
+
+  // Tap a handle to select it, then arrow-key it into exact registration (fine step;
+  // Shift = coarse; Escape deselects) — the MadMapper/Resolume "mouse for placement,
+  // keyboard for precision" pattern, essential when aligning a projector corner alone
+  // at the venue. Selection is per-overlay-instance, cleared when the point count
+  // changes (mode/mesh-size switch reshapes the array under the same indices).
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  useEffect(() => {
+    setSelectedIndex(null);
+  }, [isMesh, points.length]);
+
+  useEffect(() => {
+    if (selectedIndex == null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (isEditableTarget(event)) return;
+      if (event.key === "Escape") {
+        setSelectedIndex(null);
+        return;
+      }
+      const nudge = arrowNudge(event);
+      if (!nudge) return;
+      const current = points[selectedIndex];
+      if (!current) return;
+      onPoint?.(
+        selectedIndex,
+        Math.min(1, Math.max(0, current.x + nudge.dx)),
+        Math.min(1, Math.max(0, current.y + nudge.dy)),
+      );
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedIndex, points, onPoint]);
+
   return (
     <>
       {points.map((p, i) => (
@@ -118,9 +155,11 @@ function WarpHandles({
           key={i}
           x={p.x}
           y={p.y}
+          selected={selectedIndex === i}
           className={isMesh ? undefined : CORNER_CLASSES[i]}
           cornerTag={isMesh ? undefined : CORNER_TAGS[i]}
           coordTag={isMesh ? `R${Math.floor(i / size) + 1}·C${(i % size) + 1}` : undefined}
+          onSelect={() => setSelectedIndex(i)}
           onDragStart={onDragStart}
           onDragTo={(x, y) => onPoint?.(i, x, y)}
           onDragEnd={onDragEnd}
@@ -152,7 +191,11 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
     return (
       <>
         <SelLabel x={anchor.x} y={anchor.y} text={`${screen.name || screen.id} · screen warp`} />
-        <WarpHandles warp={screen.warp} onPoint={onScreenWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+        {/* key: switching target must reset the tap-to-select point index — layer and
+         *  screen branches render WarpHandles at the same tree position, so without a
+         *  key the old selectedIndex survives and the next arrow-press nudges a point
+         *  the operator never armed on the NEW target. */}
+        <WarpHandles key={`screen-${screen.id}`} warp={screen.warp} onPoint={onScreenWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
       </>
     );
   }
@@ -176,7 +219,10 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
     return (
       <>
         <SelLabel x={anchor.x} y={anchor.y} text={`${layer.name || layer.id} · mask`} />
-        <MaskShapeOverlay mask={mask} onDragStart={onDragStart} onDragEnd={onDragEnd} onChange={onMask} />
+        {/* key: reset the polygon vertex selection when the selected LAYER changes —
+         *  without it, Delete/arrows after switching layers act on the new layer's
+         *  same-numbered vertex the operator never tapped. */}
+        <MaskShapeOverlay key={layer.id} mask={mask} onDragStart={onDragStart} onDragEnd={onDragEnd} onChange={onMask} />
       </>
     );
   }
@@ -204,7 +250,8 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
   return (
     <>
       <SelLabel x={anchor.x} y={anchor.y} text={`${layer.name || layer.id} · warp`} />
-      <WarpHandles warp={layer.warp} onPoint={onWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+      {/* key: see the screen branch — reset point selection when the target changes. */}
+      <WarpHandles key={`layer-${layer.id}`} warp={layer.warp} onPoint={onWarpCorner} onDragStart={onDragStart} onDragEnd={onDragEnd} />
     </>
   );
 }

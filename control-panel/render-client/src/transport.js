@@ -38,11 +38,25 @@ export function clearTransportState(entry, video) {
 
 function startPalindromeReverse(entry, transport) {
   const video = entry.videoEl;
-  const step = () => {
+  let last = performance.now();
+  const step = (now) => {
     if (entry._loopDir !== -1 || !video) return;
-    const dt = (1 / 60) * Math.abs(transport.rate ?? 1);
-    video.currentTime = Math.max(transport.loopIn, video.currentTime - dt);
-    if (video.currentTime <= transport.loopIn) {
+    // Read the CURRENT transport each frame (entry._latestTransport is refreshed by
+    // applyVideoTransport) so a pause or rate change mid-reverse takes effect — the old
+    // closure-captured transport kept rewinding a paused palindrome layer forever.
+    const t = entry._latestTransport ?? transport;
+    if (t.playing === false) {
+      // Hold position while paused, keep the reverse leg armed for resume.
+      last = now;
+      requestAnimationFrame(step);
+      return;
+    }
+    // Real elapsed time, not an assumed 60 Hz tick — on 120/144 Hz displays the fixed
+    // 1/60 step made the reverse leg run 2-2.4x too fast, breaking the ping-pong symmetry.
+    const dt = Math.min(0.25, (now - last) / 1000) * Math.abs(t.rate ?? 1);
+    last = now;
+    video.currentTime = Math.max(t.loopIn, video.currentTime - dt);
+    if (video.currentTime <= t.loopIn) {
       entry._loopDir = 1;
       video.play().catch(() => {});
       return;

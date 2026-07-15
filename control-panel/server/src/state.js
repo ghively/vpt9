@@ -265,12 +265,23 @@ export function defaultLfoFields() {
 }
 
 export function ensureLayerDefaults(layer) {
+  // fillMissing only backfills ABSENT keys — a layer created with an explicit
+  // `fx: null` / `mask: null` (the repo's own e2e fixtures do this) would keep the null,
+  // which the panel Inspector then dereferences (mask.feather.toFixed → crash) and every
+  // later `layers.<id>.fx.*` update silently no-ops against. Normalize explicit nulls to
+  // "absent" so they pick up full defaults like any older-client create.
+  for (const key of ["mask", "fx", "warp", "transport", "playlist"]) {
+    if (layer[key] === null) delete layer[key];
+  }
   fillMissing(layer, {
     mask: defaultMask(),
     fx: defaultFx(),
     warp: defaultWarp(),
     transport: defaultTransport(),
     sourceMode: "single",
+    // The layer visibility eye (GIMP convention): true = composited. Backfilled so the
+    // leaf exists for applyUpdate on layers saved before the eye existed.
+    visible: true,
     playlist: { items: [], cursor: -1 },
     // Per-source render downscale (task A15 — VPT8's `p adapt`): 1 = full res. Owned as an
     // explicit leaf (not left undefined) so the Inspector's downscale select can patch it —
@@ -312,6 +323,11 @@ export function ensureStateDefaults(state) {
     for (const layer of Object.values(preset?.snapshot?.layers ?? {})) ensureLayerDefaults(layer);
   }
   state.automation.running = false;
+  // Same boot-reset policy as automation.running: a power-cycled installation must not
+  // come back with the wall frozen. The blind snapshot lives only in server memory
+  // (server/src/blind.js), so a persisted blind:true after a restart would be a stuck
+  // freeze with nothing to discard-restore.
+  state.blind = false;
   return state;
 }
 
@@ -332,7 +348,11 @@ export function loadState(filePath) {
       }
     }
   }
-  return structuredClone(DEFAULT_STATE);
+  // The fresh-boot path runs through the SAME backfill as a loaded file: DEFAULT_STATE's
+  // seeded demo layers predate several later per-layer fields (visible, downscale, …),
+  // and applyUpdate only ever patches an EXISTING leaf — without this, a control for any
+  // newer field was dead on the seeded layers until the first save/reload cycle.
+  return ensureStateDefaults(structuredClone(DEFAULT_STATE));
 }
 
 // Write-to-temp-then-rename so a process kill mid-write never leaves state.json
@@ -417,6 +437,9 @@ function corruptsStructure(keys, last, value) {
   // to null-or-source-ref. Keyed on the immediate parent, so a layer's OWN top-level
   // `source` (parent = the layer id, not "mask") stays unrestricted and freely swappable.
   if (last === "source" && keys[keys.length - 1] === "mask") return !isValidMaskSource(value);
+  // A layer's visibility eye (layers.<id>.visible): every render client reads it per
+  // frame to decide whether to composite the layer — pin it to a boolean like `blind`.
+  if (last === "visible" && keys.length === 2 && keys[0] === "layers") return typeof value !== "boolean";
   return false;
 }
 
@@ -535,6 +558,11 @@ export function applyCreate(state, containerPath, value) {
   // second, differently-shaped write primitive — see
   // docs/superpowers/plans/2026-07-08-parity-finish-line-plan.md Task 7.
   if (containerPath === "sourceBank" || containerPath.startsWith("sourceBank.")) return null;
+  // Creates are only meaningful in the known keyed collections. Without this pin a
+  // client could inject arbitrary keys into structural singletons ("automation",
+  // "oscOut", a layer object, …) — junk the applyUpdate structural pins never allowed
+  // and nothing ever reads, but which persists to disk and rides every snapshot.
+  if (!CREATABLE_CONTAINERS.has(containerPath)) return null;
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object") return null;
   const key = value?.id;
@@ -542,6 +570,20 @@ export function applyCreate(state, containerPath, value) {
   node[key] = value;
   return key;
 }
+
+// The only container paths applyCreate may write into — every keyed collection a client
+// (or the server's own preset/source-bank-preset save paths) legitimately appends to.
+const CREATABLE_CONTAINERS = new Set([
+  "layers",
+  "screens",
+  "pip",
+  "presets",
+  "sourceBankPresets",
+  "lfos",
+  "midiMap",
+  "media", // the upload endpoint's own applyCreate("media", …) in media.js
+  "automation.timers",
+]);
 
 // Deletes an entry at an exact path ("layers.layer-2"). Returns true if it existed.
 export function applyDelete(state, path) {
@@ -558,7 +600,10 @@ export function applyDelete(state, path) {
 // it rather than leaving a dangling id. A slot referencing deleted media becomes empty
 // (content: null). A mix slot whose a/b referenced a deleted media/slot passes the
 // other input through at full weight rather than rendering black — matches how the
-// design spec defines "missing input" behavior for a mix.
+// design spec defines "missing input" behavior for a mix. Layers are swept too: a
+// layer's own media source falls back to a neutral color fill, a matte ref clears back
+// to the geometric shape, and playlist items pointing at the deleted media are removed
+// — previously only the source bank was swept, leaving layers silently blank.
 export function resolveDanglingSourceRefs(state, kind, id) {
   const refMatches = (ref) => (kind === "media" ? ref?.type === "media" && ref.mediaId === id : ref?.type === "slot" && ref.slotId === id);
   // Tolerate a hand-corrupted state.json (sourceBank not an array, or holding null/sparse
@@ -571,6 +616,25 @@ export function resolveDanglingSourceRefs(state, kind, id) {
     } else if (slot.content.type === "mix") {
       if (refMatches(slot.content.a)) slot.content = { ...slot.content, a: null };
       if (refMatches(slot.content.b)) slot.content = { ...slot.content, b: null };
+    }
+  }
+  for (const layer of Object.values(isPlainObject(state.layers) ? state.layers : {})) {
+    if (!layer || typeof layer !== "object") continue;
+    const src = layer.source;
+    if (kind === "media" && src?.type === "media" && src.mediaId === id) {
+      layer.source = { type: "color", color: [0.2, 0.2, 0.2] };
+    }
+    if (kind === "slot" && src?.type === "slot" && src.slotId === id) {
+      layer.source = { type: "color", color: [0.2, 0.2, 0.2] };
+    }
+    if (layer.mask && refMatches(layer.mask.source)) layer.mask.source = null;
+    const items = layer.playlist?.items;
+    if (Array.isArray(items)) {
+      const kept = items.filter((item) => !refMatches(item?.ref));
+      if (kept.length !== items.length) {
+        layer.playlist.items = kept;
+        if ((layer.playlist.cursor ?? -1) >= kept.length) layer.playlist.cursor = kept.length - 1;
+      }
     }
   }
 }

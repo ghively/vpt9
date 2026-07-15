@@ -1,6 +1,9 @@
-import { forwardRef, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { ConfidenceMonitorHandle } from "../ConfidenceMonitor";
 import { pointInQuad, type Quad } from "./layerGeometry";
+import { hasMediaDrag, getMediaDrag, type MediaDragPayload } from "./dnd";
+import { useContextMenu, type MenuItem } from "./ContextMenu";
+import type { EditMode } from "./Inspector";
 
 export interface StageProps {
   /** Selected screen id (e.g. "screen-1") — shown in the LIVE badge. Display only; Stage
@@ -9,10 +12,11 @@ export interface StageProps {
   /** Latest preview JPEG data-URL for this screen, or `null` before any frame has
    *  arrived — renders the NO-SIGNAL placeholder in that case. */
   frame: string | null;
-  /** Intended internal render size (e.g. 1280×720) for the resolution readout in the
-   *  corner badge. Display only — Stage doesn't measure or affect the actual render. */
-  width: number;
-  height: number;
+  /** Blind (task A20) — the projector wall is FROZEN while this preview keeps showing
+   *  the live off-air look. Flips the stage chrome from the red LIVE tally to an amber
+   *  BLIND state so it's unmistakable whether edits are touching what the audience sees
+   *  (the grandMA-Blind / QLab-audition convention). */
+  blind?: boolean;
   /** Selection/warp/mask handles (Tasks 5 & 6), absolutely positioned over the frame. */
   overlay: ReactNode;
   /** Every layer's on-screen quad, topmost first — used ONLY to draw a faint hover
@@ -26,7 +30,23 @@ export interface StageProps {
    *  `target.closest`), so grabbing a handle never also triggers a background/select
    *  action underneath it. */
   onBackgroundPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  /** On-stage Warp · Mask · FX chips (top-center) — the same mode state the Inspector's
+   *  sections drive, surfaced where the operator is already looking. Omit (screen-warp
+   *  target, no selection) to hide them. */
+  modeChips?: { mode: EditMode; onChange: (mode: EditMode) => void } | null;
+  /** A MediaBin item dropped onto the stage: `point` is the normalized 0..1 drop
+   *  position, so the container can assign to whichever layer's quad is under it. */
+  onDropMedia?: (point: { x: number; y: number }, payload: MediaDragPayload) => void;
+  /** Right-click menu entries for the stage (mode switches, reset warp, …) — built by
+   *  the container from the current selection. Omit/empty = browser default menu. */
+  contextItems?: MenuItem[];
 }
+
+const MODE_CHIPS: Array<{ key: EditMode; label: string }> = [
+  { key: "warp", label: "Warp" },
+  { key: "mask", label: "Mask" },
+  { key: "fx", label: "FX" },
+];
 
 /** The dominant live-preview at the center of the deck: the render-client's low-res
  *  preview frame framed in the confidence-monitor's registration chrome (faint grid,
@@ -51,12 +71,16 @@ export interface StageProps {
  *  drive the `<img>` directly at the render-client's ~250ms cadence, without a
  *  React re-render (mirrors `ConfidenceMonitor.tsx`'s own `setFrame` contract). */
 export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function Stage(
-  { screenId, frame, width, height, overlay, hitLayers, onBackgroundPointerDown },
+  { screenId, frame, blind = false, overlay, hitLayers, onBackgroundPointerDown, modeChips, onDropMedia, contextItems },
   ref,
 ) {
+  const ctx = useContextMenu();
   const imgRef = useRef<HTMLImageElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const resRef = useRef<HTMLDivElement>(null);
+  const resTextRef = useRef("");
   const [hoverQuad, setHoverQuad] = useState<Quad | null>(null);
+  const [dropArmed, setDropArmed] = useState(false);
 
   useImperativeHandle(
     ref,
@@ -68,6 +92,40 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
     }),
     [],
   );
+
+  // Reconcile the imperative frame path with React's props: setFrame writes img.src and
+  // data-live outside the vDOM, so React's diff still believes src is whatever the last
+  // render set — switching to a screen with NO cached frame diffs undefined→undefined
+  // and changes nothing, leaving the previous screen's frozen frame under the new
+  // screen's badge. This effect re-asserts the prop truth whenever the screen (or its
+  // cached frame) changes; live pushes keep flowing through setFrame in between.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    if (frame) {
+      img.src = frame;
+      stageRef.current?.setAttribute("data-live", "true");
+    } else {
+      img.removeAttribute("src");
+      stageRef.current?.setAttribute("data-live", "false");
+      resTextRef.current = "";
+      if (resRef.current) resRef.current.textContent = "";
+    }
+  }, [screenId, frame]);
+
+  // Honest resolution readout: the ACTUAL preview frame size, measured off the decoded
+  // image (its predecessor showed a hardcoded "1280×720" while displaying a 320px-wide
+  // JPEG). Imperative like setFrame itself — frames arrive outside the React render loop,
+  // so the badge updates the same way, and only when the size actually changes.
+  const onFrameLoad = () => {
+    const img = imgRef.current;
+    const res = resRef.current;
+    if (!img || !res || !img.naturalWidth) return;
+    const text = `preview ${img.naturalWidth}×${img.naturalHeight}`;
+    if (resTextRef.current === text) return;
+    resTextRef.current = text;
+    res.textContent = text;
+  };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -97,13 +155,36 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       className="deck-stage"
       ref={stageRef}
       data-live={!!frame}
+      data-blind={blind}
+      data-drop={dropArmed}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
+      onContextMenu={(e) => {
+        if (contextItems?.length) ctx.open(e, contextItems);
+      }}
+      onDragOver={(e: DragEvent) => {
+        if (!onDropMedia || !hasMediaDrag(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDropArmed(true);
+      }}
+      onDragLeave={() => setDropArmed(false)}
+      onDrop={(e: DragEvent) => {
+        setDropArmed(false);
+        const payload = getMediaDrag(e);
+        if (!payload || !onDropMedia) return;
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        onDropMedia(
+          { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height },
+          payload,
+        );
+      }}
     >
       {/* src omitted when there's no frame so panel.css's `.preview-img:not([src])` rule
        *  hides the broken-image glyph instead of showing one. */}
-      <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" />
+      <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" onLoad={onFrameLoad} />
       <div className="deck-stage__nosignal" aria-hidden="true">
         <span className="mono">NO SIGNAL</span>
         <span className="deck-stage__nosignal-sub mono">awaiting render-client preview</span>
@@ -114,11 +195,26 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       <span className="tick bl" aria-hidden="true" />
       <span className="tick br" aria-hidden="true" />
       <div className="stage-badge">
-        <span className="dot" /> LIVE · {screenId.replace(/-/g, " ").toUpperCase()}
+        <span className="dot" /> {blind ? "BLIND" : "LIVE"} · {screenId.replace(/-/g, " ").toUpperCase()}
       </div>
-      <div className="stage-fps mono">
-        {width}×{height}
-      </div>
+      <div ref={resRef} className="stage-fps mono" />
+      {modeChips && (
+        <div className="stage-modes" role="group" aria-label="Stage edit mode">
+          {MODE_CHIPS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              className="stage-mode-chip"
+              aria-pressed={modeChips.mode === c.key}
+              onClick={() => modeChips.onChange(c.key)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {blind && <div className="stage-blind-note mono">wall frozen · edits off-air · go live commits · discard reverts</div>}
+      {ctx.menu}
       <div className="stage-overlay">
         {hoverQuad && (
           <svg className="deck-hover-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">

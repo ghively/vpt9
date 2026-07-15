@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Select } from "../primitives/Select";
 import { Fader } from "../primitives/Fader";
 import { TextField } from "../primitives/TextField";
@@ -21,22 +21,15 @@ export type EditMode = "warp" | "mask" | "fx";
  *  same decoupling reason as `EditMode` above. */
 export type EditTarget = "layer" | "screen";
 
-interface InspectorSharedProps {
-  /** Fired when the Layer/Screen toggle at the top is clicked. The container binds
-   *  this to the SAME `selection.editTarget` setter that drives StageSelectionOverlay,
-   *  so one click swaps both the inspector body and which handles show on the stage. */
-  onSetEditTarget: (target: EditTarget) => void;
-}
-
-export interface InspectorLayerProps extends InspectorSharedProps {
+export interface InspectorLayerProps {
   /** Shows the selected LAYER's controls (default, pre-Task-12 behavior below). */
   editTarget: "layer";
   /** The selected layer, or `null` when nothing is selected (empty state). */
   layer: Layer | null;
   mode: EditMode;
-  /** Fired when the Warp/Mask/FX segment is clicked. The container binds this to the
-   *  SAME `selection.stageEditMode` setter that drives StageSelectionOverlay, so one
-   *  click swaps both the inspector body and the on-stage handles at once. */
+  /** Fired when a Warp/Mask/FX section header is clicked. The container binds this to
+   *  the SAME `selection.stageEditMode` setter that drives StageSelectionOverlay, so one
+   *  click both expands the section and swaps the on-stage handles at once. */
   onModeChange: (mode: EditMode) => void;
   /** Library items offered in the source picker when the layer source is a URL/slot. */
   media?: MediaItem[];
@@ -71,8 +64,9 @@ export interface InspectorLayerProps extends InspectorSharedProps {
   onResetWarp?: () => void;
 }
 
-export interface InspectorScreenProps extends InspectorSharedProps {
-  /** Shows the active SCREEN's warp controls instead (Task 12). */
+export interface InspectorScreenProps {
+  /** Shows the active SCREEN's warp controls instead (Task 12). Selected via the
+   *  LayerStack's pinned OUTPUT row — the old in-Inspector Layer/Screen toggle is gone. */
   editTarget: "screen";
   /** The active screen, or `null`/undefined before the first screen snapshot arrives. */
   screen?: Screen | null;
@@ -134,23 +128,55 @@ function TogglePill({
   );
 }
 
-/** The Warp · Mask · FX segment. Highlights `mode` and calls `onModeChange` — the
- *  container binds this straight to `selection.setStageEditMode`. */
-function ModeSegment({ mode, onModeChange }: { mode: EditMode; onModeChange: (mode: EditMode) => void }) {
-  const options: { key: EditMode; label: string }[] = [
-    { key: "warp", label: "Warp" },
-    { key: "mask", label: "Mask" },
-    { key: "fx", label: "FX" },
-  ];
+/** One always-visible Warp/Mask/FX section: a header row (title + live summary +
+ *  chevron) that is ALWAYS on screen, with the body expanded only while active. This
+ *  replaces the old exclusive Warp·Mask·FX segment — every capability now announces
+ *  itself (with its current state) instead of hiding behind an unselected toggle, and
+ *  activating a section still drives the same `selection.stageEditMode`, so the on-stage
+ *  handles follow the expanded section exactly as they followed the segment. */
+function InspectorSection({
+  title,
+  summary,
+  active,
+  onActivate,
+  children,
+}: {
+  title: string;
+  summary: string;
+  active: boolean;
+  onActivate: () => void;
+  children: ReactNode;
+}) {
   return (
-    <div className="modes" role="group" aria-label="Edit mode">
-      {options.map((o) => (
-        <button key={o.key} type="button" aria-pressed={mode === o.key} onClick={() => onModeChange(o.key)}>
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <section className="insp-sec" data-active={active}>
+      <button type="button" className="insp-sec__head" aria-label={title} aria-expanded={active} onClick={onActivate}>
+        <span className="insp-sec__title">{title}</span>
+        <span className="insp-sec__sum mono">{summary}</span>
+        <span className="insp-sec__chev" aria-hidden="true">
+          {active ? "▾" : "▸"}
+        </span>
+      </button>
+      {active && <div className="insp-sec__body ctx">{children}</div>}
+    </section>
   );
+}
+
+/** Header-summary helpers — one glance tells the operator each section's state without
+ *  expanding it (HeavyM's consolidated-effects lesson: browsable, not buried). */
+function warpSummary(warp: Warp | undefined): string {
+  if (!warp) return "corner";
+  return warp.mode === "mesh" ? `mesh ${warp.mesh?.size ?? 4}×${warp.mesh?.size ?? 4}` : "corner";
+}
+function maskSummary(layer: Layer): string {
+  if (!layer.mask?.enabled) return "off";
+  const shape = layer.mask.source ? "matte" : layer.mask.shape;
+  return layer.mask.invert ? `${shape} · inverted` : shape;
+}
+function fxSummary(layer: Layer): string {
+  const enabled = layer.fx?.enabled;
+  if (!enabled) return "";
+  const groups = [enabled.transform && "transform", enabled.color && "color", enabled.edgeBlend && "edge"].filter(Boolean);
+  return groups.length === 3 ? "all on" : groups.length ? groups.join(" · ") : "bypassed";
 }
 
 /** The Source field: type select + per-type detail control. Mirrors LayerStrip's
@@ -479,33 +505,19 @@ function MaskBody({
   );
 }
 
-/** The Layer/Screen toggle (Task 12) shown at the top of the Inspector regardless of
- *  which target is active — lets the operator switch between editing the selected
- *  layer's own warp/mask/fx and the active screen's projector warp. */
-function TargetSegment({ target, onChange }: { target: EditTarget; onChange: (target: EditTarget) => void }) {
-  return (
-    <div className="insp-target">
-      <TogglePill
-        options={[
-          { value: "layer", label: "Layer" },
-          { value: "screen", label: "Screen" },
-        ]}
-        value={target}
-        onChange={(v) => onChange(v as EditTarget)}
-      />
-    </div>
-  );
-}
-
 /** The contextual right-rail Inspector (Task 7; Task 12 adds the screen-warp target):
  *  shows the selected LAYER's controls — header (swatch/name/index/source line), the
- *  common Source/Opacity/Blend fields every layer has, the Warp · Mask · FX segment,
- *  and a body that swaps with the segment — OR, when `editTarget === "screen"`, the
- *  active SCREEN's warp controls (name, corner/mesh mode, mesh size, reset, coord
- *  readout). The layer segment's `onModeChange` is bound (by the container) to the
- *  SAME `selection.stageEditMode` state that drives StageSelectionOverlay, so
- *  switching it swaps both the inspector body and which handles show on the stage at
- *  once; `onSetEditTarget` does the analogous thing for `selection.editTarget`.
+ *  common Source/Opacity/Blend fields every layer has, and the always-visible
+ *  Warp/Mask/FX sections (expanded one at a time; every header shows a live summary) —
+ *  OR, when `editTarget === "screen"`, the active SCREEN's warp controls (name,
+ *  corner/mesh mode, mesh size, reset, coord readout). The screen target is selected
+ *  via the LayerStack's pinned OUTPUT row, not an in-Inspector toggle — the old
+ *  two-level Layer/Screen → Warp/Mask/FX modality is flattened to a single visible
+ *  list of things (output + layers) and a single visible list of capabilities.
+ *
+ *  The section headers' `onModeChange` is bound (by the container) to the SAME
+ *  `selection.stageEditMode` state that drives StageSelectionOverlay, so expanding a
+ *  section also swaps which handles show on the stage.
  *
  *  Presentational/decoupled: no `src/app/` import. Every write goes out through a narrow
  *  callback prop, the same "container maps callback -> real action" pattern
@@ -513,27 +525,19 @@ function TargetSegment({ target, onChange }: { target: EditTarget; onChange: (ta
  *  `actions.updateLayer` / the layer-warp actions / the SCREEN warp actions unchanged,
  *  no new WS message types. */
 export function Inspector(props: InspectorProps) {
-  // Common to both union members — safe to pull out before narrowing.
-  const { editTarget, onSetEditTarget } = props;
-  const targetSegment = <TargetSegment target={editTarget} onChange={onSetEditTarget} />;
-
   // Narrow on `props.editTarget` directly (not a destructured copy) so TS actually
   // narrows the union.
   if (props.editTarget === "screen") {
     const { screen, onRenameScreen, onSetScreenWarpMode, onSetScreenMeshSize, onResetScreenWarp } = props;
     if (!screen) {
       return (
-        <>
-          {targetSegment}
-          <div className="insp-empty">
-            <span className="mono">Select a screen</span>
-          </div>
-        </>
+        <div className="insp-empty">
+          <span className="mono">Select a screen</span>
+        </div>
       );
     }
     return (
       <>
-        {targetSegment}
         <div className="insp-head">
           <div className="insp-title">
             <TextField
@@ -575,12 +579,9 @@ export function Inspector(props: InspectorProps) {
 
   if (!layer) {
     return (
-      <>
-        {targetSegment}
-        <div className="insp-empty">
-          <span className="mono">Select a layer</span>
-        </div>
-      </>
+      <div className="insp-empty">
+        <span className="mono">Select a layer — or the OUTPUT row to warp the projector</span>
+      </div>
     );
   }
 
@@ -590,7 +591,6 @@ export function Inspector(props: InspectorProps) {
 
   return (
     <>
-      {targetSegment}
       <div className="insp-head">
         <div className="insp-title">
           <span className="insp-swatch" style={{ background: swatchBg }} />
@@ -602,7 +602,10 @@ export function Inspector(props: InspectorProps) {
       <div className="insp-body">
         <div className="field">
           <span className="label">Source</span>
-          <SourceControl layer={layer} media={media} sourceBank={sourceBank} cameraDevices={cameraDevices} onUpdate={onUpdate} />
+          {/* key: SourceControl holds per-layer UI state (externalMode) — remount it on
+           *  selection change so layer A's "External URL…" choice can't leak onto layer
+           *  B's library-sourced picker. */}
+          <SourceControl key={layer.id} layer={layer} media={media} sourceBank={sourceBank} cameraDevices={cameraDevices} onUpdate={onUpdate} />
         </div>
         <div className="field">
           <span className="label">Opacity</span>
@@ -621,17 +624,14 @@ export function Inspector(props: InspectorProps) {
           />
         </div>
 
-        <div className="field">
-          <span className="label">Edit on stage</span>
-          <ModeSegment mode={mode} onModeChange={onModeChange} />
-        </div>
-
-        <div className="ctx">
-          {mode === "warp" && (
+        <div className="insp-sections">
+          <InspectorSection title="Warp" summary={warpSummary(layer.warp)} active={mode === "warp"} onActivate={() => onModeChange("warp")}>
             <WarpBody warp={layer.warp} onSetWarpMode={onSetWarpMode} onSetMeshSize={onSetMeshSize} onResetWarp={onResetWarp} />
-          )}
-          {mode === "mask" && <MaskBody layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} />}
-          {mode === "fx" && (
+          </InspectorSection>
+          <InspectorSection title="Mask" summary={maskSummary(layer)} active={mode === "mask"} onActivate={() => onModeChange("mask")}>
+            <MaskBody layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} />
+          </InspectorSection>
+          <InspectorSection title="FX" summary={fxSummary(layer)} active={mode === "fx"} onActivate={() => onModeChange("fx")}>
             <FxDrawer
               fx={layer.fx}
               mask={layer.mask}
@@ -651,7 +651,7 @@ export function Inspector(props: InspectorProps) {
               onSetPlaylist={onSetPlaylist}
               onTriggerClip={onTriggerClip}
             />
-          )}
+          </InspectorSection>
         </div>
       </div>
     </>

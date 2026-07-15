@@ -15,7 +15,9 @@ import {
   Inspector,
   LayerStack,
   LfoRack,
+  LookBar,
   MasterControl,
+  MediaBin,
   MediaLibrary,
   MidiMapPanel,
   MobileTabBar,
@@ -36,7 +38,8 @@ import {
   type TargetOption,
 } from "../components";
 import { layerQuad, pickTopLayer } from "../components/deck/layerGeometry";
-import type { Layer } from "../components/types";
+import { mediaSourceUrl, type MediaDragPayload } from "../components/deck/dnd";
+import type { Layer, MediaItem } from "../components/types";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
@@ -116,6 +119,10 @@ export function App() {
   // overrides key off the `data-mobile` attribute that mirrors this same boolean, so the
   // CSS and the actual rendered tree can never disagree about which layout is showing.
   const isMobile = useIsMobile();
+  // Focus mode (VDMX's closable-inspectors pattern): hide the rails + Show drawer so the
+  // stage and look bar are the entire surface during the show. Desktop-only — the mobile
+  // layout already shows one surface at a time.
+  const [focusMode, setFocusMode] = useState(false);
   // Video-input devices for the camera pickers (task A14) — the panel enumerates them
   // (it's already in a browser) and threads the list to the Inspector + SlotGrid editors.
   const cameraDevices = useCameraDevices();
@@ -143,6 +150,11 @@ export function App() {
 
   const preview = usePreviewBus(() => selectedRef.current);
 
+  // Import-by-link progress, keyed by URL: "requesting" is set locally the moment the
+  // POST goes out; the server's mediaImportStatus relays take over (downloading → done/
+  // error). "done" clears the entry — the library's own create broadcast adds the item.
+  const [mediaImports, setMediaImports] = useState<Record<string, { status: string; error?: string }>>({});
+
   const wsUrl = useMemo(
     () => new URLSearchParams(location.search).get("ws") || `ws://${location.hostname}:8080`,
     [],
@@ -163,8 +175,19 @@ export function App() {
 
   // Socket-driven store patches re-render unless a drag is in progress (the isDragging
   // guard), so an echoed update never yanks the DOM out from under an active gesture.
+  // Coalesced through requestAnimationFrame: a 30 Hz LFO/fade batch (or any message
+  // burst) previously forced a full-tree re-render PER MESSAGE on every connected panel;
+  // now at most one render lands per displayed frame no matter the inbound rate. The
+  // drag guard is re-checked at flush time — a gesture that started after scheduling
+  // still suppresses the render, and endDrag's own forceRender reconciles afterward.
+  const renderQueuedRef = useRef(false);
   const rerender = useCallback(() => {
-    if (!isDraggingRef.current) forceRender();
+    if (isDraggingRef.current || renderQueuedRef.current) return;
+    renderQueuedRef.current = true;
+    requestAnimationFrame(() => {
+      renderQueuedRef.current = false;
+      if (!isDraggingRef.current) forceRender();
+    });
   }, []);
 
   const { send: rawSend } = useSocket(wsUrl, {
@@ -172,10 +195,16 @@ export function App() {
       stateRef.current = next;
       const screenIds = Object.keys(next.screens ?? {});
       if (!selectedRef.current || !next.screens?.[selectedRef.current]) {
-        setSelectedScreenId(screenIds[0] ?? null); // triggers a render itself
-      } else {
-        forceRender();
+        const nextId = screenIds[0] ?? null;
+        if (nextId !== selectedRef.current) {
+          setSelectedScreenId(nextId); // triggers a render itself
+          return;
+        }
       }
+      // Route through the drag-guarded, coalesced rerender — a reconnect snapshot
+      // landing mid-gesture must not yank the DOM out from under an active drag (the
+      // same rule every other message type follows); endDrag reconciles afterward.
+      rerender();
     },
     onUpdate(path, value) {
       if (applyUpdate(stateRef.current, path, value)) rerender();
@@ -192,10 +221,22 @@ export function App() {
     onPreview(screenId, frame) {
       preview.push(screenId, frame);
     },
+    onMediaImportStatus(url, importStatus, error) {
+      setMediaImports((prev) => {
+        if (importStatus === "done") {
+          const next = { ...prev };
+          delete next[url];
+          return next;
+        }
+        return { ...prev, [url]: { status: importStatus, error } };
+      });
+    },
     onTransportStatus(layerId, position) {
-      // No forceRender here on purpose — this ticks at playback frame rate and is read
-      // directly off the ref by the (future) Transport scrub readout, not the store.
       transportPositionsRef.current[layerId] = position;
+      // The Inspector's Transport scrub readout renders this value, so an otherwise-idle
+      // panel needs a repaint or the seconds counter freezes. rerender() is rAF-coalesced
+      // and drag-guarded, so this ~2 Hz telemetry costs at most one render per frame.
+      rerender();
     },
     onStatus(state, url) {
       setStatus({ state, label: `${state} · ${url}` });
@@ -214,11 +255,16 @@ export function App() {
       // it would show a change the server never received, which the reconnect snapshot then
       // silently reverts — the StatusLamp already signals the disconnect instead.
       if (sent && message.type === "update" && typeof message.path === "string") {
-        applyUpdate(stateRef.current, message.path, message.value);
+        // Re-render when the local apply changed something: the server echo will no-op
+        // (applyUpdate's value-identity check) and so can never trigger the render
+        // itself — without this, a scalar write like `blind` or `master` mutated the
+        // mirror but left the UI stale until the next unrelated message. Coalesced and
+        // drag-guarded by `rerender`, so pointer-rate writes stay cheap.
+        if (applyUpdate(stateRef.current, message.path, message.value)) rerender();
       }
       return sent;
     },
-    [rawSend],
+    [rawSend, rerender],
   );
   const getState = useCallback(() => stateRef.current, []);
   const actions = useMemo(() => createActions(send, getState), [send, getState]);
@@ -237,10 +283,98 @@ export function App() {
     }
   }, [actions]);
 
-  // Task A20: toggle blind (preview) mode — freeze the projector, keep building off-air.
+  // Task A20 + true blind editing: toggle blind (preview) mode — freeze the projector,
+  // keep building off-air. Toggling OFF is the COMMIT (the server drops its pre-blind
+  // snapshot); discardBlind reverts to that snapshot instead.
   const toggleBlind = useCallback(() => {
     actions.setBlind(!(stateRef.current.blind ?? false));
   }, [actions]);
+  const discardBlind = useCallback(() => {
+    actions.blindDiscard();
+  }, [actions]);
+
+  // Import-by-link: POST the URL; all progress comes back over the WS as
+  // mediaImportStatus relays (see the socket handler above).
+  const importMediaUrl = useCallback(
+    (url: string) => {
+      const trimmed = url.trim();
+      if (!/^https?:\/\/\S+$/i.test(trimmed)) return;
+      setMediaImports((prev) => ({ ...prev, [trimmed]: { status: "requesting" } }));
+      fetch(`${httpBase}/api/media/import`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: trimmed }),
+      }).catch(() => {
+        setMediaImports((prev) => ({ ...prev, [trimmed]: { status: "error", error: "could not reach the server" } }));
+      });
+    },
+    [httpBase],
+  );
+  const dismissMediaImport = useCallback((url: string) => {
+    setMediaImports((prev) => {
+      const next = { ...prev };
+      delete next[url];
+      return next;
+    });
+  }, []);
+
+  // Paste a link ANYWHERE (outside a text field) and it imports — the "just paste a
+  // YouTube link" flow. The media bin's own link field remains the discoverable path.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      const text = e.clipboardData?.getData("text")?.trim() ?? "";
+      if (/^https?:\/\/\S+$/i.test(text)) {
+        importMediaUrl(text);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [importMediaUrl]);
+
+  // Look bar save: snapshot the current scene under an auto-name. Renaming/deleting
+  // stays in the Show drawer's Presets tab — the bar itself is trigger-only.
+  const saveLook = useCallback(() => {
+    const n = Object.keys(stateRef.current.presets ?? {}).length + 1;
+    actions.savePreset(`Look ${n}`);
+  }, [actions]);
+
+  // Show-control keyboard shortcuts: 1-9 fire looks, B toggles blind, F toggles focus.
+  // Guarded off anything editable (typing a preset name must not fire look 1); arrows
+  // are deliberately NOT handled here — the stage overlay owns point nudging. Blackout
+  // has NO shortcut on purpose: a destructive full-output cut stays a deliberate click.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      // No auto-repeat: a held B would machine-gun blind toggles, and every OFF edge is
+      // a COMMIT that destroys the server's pre-blind snapshot.
+      if (e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (e.key >= "1" && e.key <= "9") {
+        const looks = Object.values(stateRef.current.presets ?? {});
+        const look = looks[Number(e.key) - 1];
+        if (look) {
+          actions.recallPreset(look.id);
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === "b" || e.key === "B") {
+        toggleBlind();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "f" || e.key === "F") {
+        setFocusMode((f) => !f);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [actions, toggleBlind]);
 
   // Task A14b: camera record-to-disk. The render-client owning the camera stream does the
   // actual MediaRecorder capture + upload; this only fires the relay trigger and tracks the
@@ -322,6 +456,7 @@ export function App() {
             onToggleBlackout={toggleBlackout}
             blind={state.blind ?? false}
             onToggleBlind={toggleBlind}
+            onDiscardBlind={discardBlind}
           />
         </div>
       }
@@ -384,6 +519,76 @@ export function App() {
   const hitLayers = selection.editTarget === "screen" ? [] : layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }));
   const selectedLayer = layersTopFirst.find((l) => l.id === selection.selectedLayerId) ?? null;
   const selectedScreen = (selectedScreenId && state.screens?.[selectedScreenId]) || null;
+
+  // Direct manipulation (the MadMapper/Resolume pattern): media thumbnails drag out of
+  // the MediaBin onto a layer row, a source-bank slot, or the stage itself — all landing
+  // on the SAME source write path the Inspector's picker uses. Double-click in the bin
+  // assigns to the selected layer (the pointer-only/touch fallback).
+  const assignMediaToLayer = useCallback(
+    (layerId: string, payload: { filename: string }) => {
+      actions.updateLayer(layerId, "source", { type: "video", url: mediaSourceUrl(payload) });
+    },
+    [actions],
+  );
+  const onStageDropMedia = useCallback(
+    (point: { x: number; y: number }, payload: MediaDragPayload) => {
+      // Prefer the layer whose warped quad is under the drop point (topmost wins),
+      // falling back to the current selection for drops on empty background.
+      const topFirst = Object.values(stateRef.current.layers).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+      const hitId = pickTopLayer(topFirst, point);
+      const targetId = hitId ?? selection.selectedLayerId;
+      if (targetId) assignMediaToLayer(targetId, payload);
+    },
+    [assignMediaToLayer, selection],
+  );
+  const useMediaOnSelected = useCallback(
+    (item: MediaItem) => {
+      if (selection.selectedLayerId) assignMediaToLayer(selection.selectedLayerId, item);
+    },
+    [assignMediaToLayer, selection],
+  );
+  const renameLayer = useCallback(
+    (id: string, name: string) => {
+      actions.updateLayer(id, "name", name);
+    },
+    [actions],
+  );
+  // The visibility eye + drag-to-reorder (GIMP layer-panel conventions) — both plain
+  // leaf writes on the existing update path. Reorder uses fractional orders so a drop
+  // between two rows is one write, no stack renumbering.
+  const toggleLayerVisible = useCallback(
+    (id: string, visible: boolean) => {
+      actions.updateLayer(id, "visible", visible);
+    },
+    [actions],
+  );
+  const setLayerOrder = useCallback(
+    (id: string, order: number) => {
+      actions.updateLayer(id, "order", order);
+    },
+    [actions],
+  );
+  const duplicateLayer = useCallback(
+    (id: string) => {
+      actions.duplicateLayer(id);
+    },
+    [actions],
+  );
+
+  // Flattened selection model: the LayerStack's pinned OUTPUT row selects the screen
+  // target; selecting any layer row (or clicking a layer on the stage) returns to the
+  // layer target. Replaces the old Inspector-buried Layer/Screen toggle — the stack now
+  // lists everything selectable in one place: the output, then the layers inside it.
+  const selectLayer = useCallback(
+    (id: string) => {
+      selection.setSelectedLayerId(id);
+      selection.setEditTarget("layer");
+    },
+    [selection],
+  );
+  const selectOutput = useCallback(() => {
+    selection.setEditTarget("screen");
+  }, [selection]);
 
   // Task 6: on-stage warp/mask handles (StageSelectionOverlay) drag imperatively via
   // WarpHandle/MaskShapeOverlay's own pointer machinery, the same way the rail-side
@@ -650,14 +855,36 @@ export function App() {
   const layerStackEl = (
     <LayerStack
       layers={layersTopFirst}
-      selectedId={selection.selectedLayerId}
-      onSelect={selection.setSelectedLayerId}
+      selectedId={selection.editTarget === "screen" ? null : selection.selectedLayerId}
+      onSelect={selectLayer}
       onAddLayer={actions.addLayer}
       onMoveLayer={actions.moveLayer}
       onRemoveLayer={actions.removeLayer}
       onCopyLayer={copyLayer}
       onPasteLayer={pasteLayer}
       hasClipboard={hasClipboard}
+      onRenameLayer={renameLayer}
+      onDropMedia={assignMediaToLayer}
+      onToggleVisible={toggleLayerVisible}
+      onSetLayerOrder={setLayerOrder}
+      onDuplicateLayer={duplicateLayer}
+      media={media}
+      mediaBase={httpBase}
+      outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}
+      outputSelected={selection.editTarget === "screen"}
+      onSelectOutput={selectOutput}
+    />
+  );
+  const mediaBinEl = (
+    <MediaBin
+      media={media}
+      mediaBase={httpBase}
+      uploadUrl={`${httpBase}/api/media`}
+      onUseOnSelected={useMediaOnSelected}
+      onRemove={removeMedia}
+      onImportUrl={importMediaUrl}
+      imports={Object.entries(mediaImports).map(([url, s]) => ({ url, ...s }))}
+      onDismissImport={dismissMediaImport}
     />
   );
   const slotGridEl = (
@@ -665,9 +892,24 @@ export function App() {
       slots={state.sourceBank}
       media={Object.values(state.media)}
       cameraDevices={cameraDevices}
+      mediaBase={httpBase}
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
       onSetTransport={actions.setSourceBankSlotTransport}
+    />
+  );
+  // The look bar rides directly above the stage in both layouts — firing a look and
+  // watching it land are one glance. Trigger-only by design (see LookBar's module doc).
+  const lookBarEl = (
+    <LookBar
+      looks={presets}
+      onRecall={actions.recallPreset}
+      onSave={saveLook}
+      onRename={actions.renamePreset}
+      onRemove={actions.removePreset}
+      focus={focusMode}
+      onToggleFocus={() => setFocusMode((f) => !f)}
+      blind={state.blind ?? false}
     />
   );
   const stageEl = selectedScreenId && (
@@ -675,8 +917,7 @@ export function App() {
       ref={preview.warpMonitor}
       screenId={selectedScreenId}
       frame={preview.frameFor(selectedScreenId) ?? null}
-      width={1280}
-      height={720}
+      blind={state.blind ?? false}
       overlay={
         // Task 12: screen edit target shows ONLY the active screen's warp handles — no
         // layer overlay renders alongside it, even if a layer is also selected.
@@ -704,6 +945,31 @@ export function App() {
       }
       hitLayers={hitLayers}
       onBackgroundPointerDown={onBackgroundPointerDown}
+      modeChips={
+        selection.editTarget === "layer" && selectedLayer
+          ? { mode: selection.stageEditMode, onChange: selection.setStageEditMode }
+          : null
+      }
+      onDropMedia={onStageDropMedia}
+      contextItems={
+        selection.editTarget === "screen"
+          ? selectedScreen
+            ? [{ label: "Reset screen warp", onSelect: onInspectorResetScreenWarp }]
+            : []
+          : selectedLayer
+            ? [
+                { label: "Edit warp", onSelect: () => selection.setStageEditMode("warp") },
+                { label: "Edit mask", onSelect: () => selection.setStageEditMode("mask") },
+                { label: "Edit FX", onSelect: () => selection.setStageEditMode("fx") },
+                "separator",
+                { label: "Reset layer warp", onSelect: onInspectorResetWarp },
+                {
+                  label: selectedLayer.visible === false ? "Show layer" : "Hide layer",
+                  onSelect: () => toggleLayerVisible(selectedLayer.id, selectedLayer.visible === false),
+                },
+              ]
+            : []
+      }
     />
   );
   // Task-12-final type-tighten: Inspector's props are now a discriminated union keyed
@@ -716,7 +982,6 @@ export function App() {
     selection.editTarget === "screen" ? (
       <Inspector
         editTarget="screen"
-        onSetEditTarget={selection.setEditTarget}
         screen={selectedScreen}
         onRenameScreen={onInspectorRenameScreen}
         onSetScreenWarpMode={onInspectorSetScreenWarpMode}
@@ -726,7 +991,6 @@ export function App() {
     ) : (
       <Inspector
         editTarget="layer"
-        onSetEditTarget={selection.setEditTarget}
         layer={selectedLayer}
         mode={selection.stageEditMode}
         onModeChange={selection.setStageEditMode}
@@ -751,7 +1015,7 @@ export function App() {
   );
 
   return (
-    <div className="deck" data-mobile={isMobile}>
+    <div className="deck" data-mobile={isMobile} data-focus={!isMobile && focusMode}>
       {/* Faceplate already renders its own <header> (wordmark, AudioOwner, MasterControl
           w/ blackout, StatusLamp); a plain div carries the .cmd shell/grid-row styling so
           we don't nest <header> inside <header>. */}
@@ -764,10 +1028,18 @@ export function App() {
               variant) so deck-panel.spec.js's selection assertions keep working
               unchanged if it's ever run at a narrow viewport. */}
           <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
-            <main className="stage-wrap">{stageEl}</main>
+            <main className="stage-wrap">
+              {lookBarEl}
+              {stageEl}
+            </main>
             <div className="sheet">
               {mobileTab === "layers" && <aside className="rail rail-l">{layerStackEl}</aside>}
-              {mobileTab === "slots" && <aside className="rail rail-l">{slotGridEl}</aside>}
+              {mobileTab === "slots" && (
+                <aside className="rail rail-l">
+                  {mediaBinEl}
+                  {slotGridEl}
+                </aside>
+              )}
               {mobileTab === "inspector" && <aside className="rail rail-r insp">{inspectorEl}</aside>}
               {mobileTab === "show" && showDrawerEl}
             </div>
@@ -781,9 +1053,13 @@ export function App() {
           <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
             <aside className="rail rail-l">
               {layerStackEl}
+              {mediaBinEl}
               {slotGridEl}
             </aside>
-            <main className="stage-wrap">{stageEl}</main>
+            <main className="stage-wrap">
+              {lookBarEl}
+              {stageEl}
+            </main>
             <aside className="rail rail-r insp">{inspectorEl}</aside>
           </div>
           {showDrawerEl}

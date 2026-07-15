@@ -116,8 +116,10 @@ web codec instead), and reverse/negative playback rate (no browser exposes a neg
   (one shared composited scene, sliced/warped per output) without needing a server-side
   GPU video-encoding pipeline this scope doesn't call for.
 - **Warping never touches the projector screen directly.** The panel drags handles
-  against a small, throttled JPEG preview pushed by the render client over the same
-  WebSocket (`{"type":"preview", screenId, frame}`) — never the full-res output, and
+  against a downsampled JPEG preview pushed by the render client over the same
+  WebSocket (`{"type":"preview", screenId, frame}`; 640px wide, with an adaptive
+  cadence — ~10 fps while control-plane writes are landing, ~2.5 fps idle — see
+  `render-client/src/main.js`) — never the full-res output, and
   never requiring the operator to be standing in front of that screen. The Stage's
   click-to-select hit-tests the same normalized warp-corner geometry already in state, so
   no image analysis is needed to know what you clicked.
@@ -272,10 +274,19 @@ web codec instead), and reverse/negative playback rate (no browser exposes a neg
   `presets`).
 - `{"type":"presetRecall","presetId":"preset-1"}` → server replaces those same fields
   from the preset snapshot and broadcasts a full `{"type":"state",...}`.
+- `{"type":"blindDiscard"}` — client → server; abandons the current blind session:
+  restores the layers/screens/pip/sourceBank snapshot the server captured when `blind`
+  was last set true, clears `blind`, and broadcasts a full `{"type":"state",...}`.
+  (Committing a blind session is just an ordinary `update` setting `blind` to false —
+  see `server/src/blind.js`.)
+- `{"type":"hello","role":"render","screenId":"screen-1"}` — client → server on every
+  (re)connect; a render client identifying itself so the server skips it when relaying
+  panel-only telemetry (`preview`/`transportStatus`). Clients that never send it
+  (panels, scripts, older render clients) receive everything.
 - `{"type":"preview","screenId":"screen-1","frame":"data:image/jpeg;base64,..."}` — a
-  render client's live low-res confidence-monitor frame, relayed to every *other*
-  connected client (never persisted, never sent back to its own sender) — this is what
-  the Stage renders and hit-tests for click-to-select.
+  render client's live confidence-monitor frame, relayed to every connected *panel*
+  (never persisted, never sent back to its own sender or to other render clients) —
+  this is what the Stage renders and hit-tests for click-to-select.
 - `{"type":"batch","updates":[{"path":"...","value":...},...]}` — server → clients;
   one message per 30 Hz engine tick carrying every fade/LFO value change at once.
   Clients apply all patches, then re-derive once.
@@ -284,6 +295,12 @@ web codec instead), and reverse/negative playback rate (no browser exposes a neg
   fade completes instantly first); STOP halts where it is; JUMP arms the cursor so the
   next GO runs `cues[index]`. A cue with `autoContinue: false` (the default) holds at its
   end for the next GO rather than chaining automatically.
+
+- `{"type":"mediaImportStatus","url":"…","status":"downloading|done|error","error":"…"}` —
+  server → clients; progress relay for import-by-link (`POST /api/media/import` with
+  `{"url": "…"}` — direct media links download straight in, streaming sites go through
+  `yt-dlp` when installed on the server). Never persisted; the finished file arrives as
+  a normal `create` on `media`.
 
 `GET /state` returns the current state as JSON; `GET /health` is a liveness check;
 `POST /api/pip/:pipId/cast` with `{"videoId": "...", "title": "..."}` is the hook the
@@ -366,7 +383,8 @@ see below).
 
 Open the panel and a render client side by side — dragging a warp handle or an opacity
 slider in the panel should visibly change the render client's output live, and the
-render client's preview should appear on the panel's Stage within ~250ms.
+render client's preview should appear on the panel's Stage within ~0.5s (the preview
+cadence tightens to ~10 fps while you're actively adjusting).
 
 ## Fullscreen kiosk
 

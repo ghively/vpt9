@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import http from "node:http";
 import os from "node:os";
 import { rmSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import handler from "serve-handler";
 import WebSocket from "ws";
 
@@ -210,12 +211,12 @@ test("switching to Screen edit target and dragging a corner handle sends the SCR
   await expect(stage).toBeVisible();
   const box = await stage.boundingBox();
 
-  // useSelection.ts defaults editTarget to "layer" — flip the Inspector's Layer/Screen
-  // toggle (scoped to ".insp-target" so this can't collide with any other togglepill,
-  // e.g. the warp corner/mesh toggle which also renders a pill in the same panel).
-  const targetToggle = page.locator(".insp-target");
-  await expect(targetToggle).toBeVisible();
-  await targetToggle.getByRole("button", { name: "Screen", exact: true }).click();
+  // useSelection.ts defaults editTarget to "layer" — select the LayerStack's pinned
+  // OUTPUT row (the flattened replacement for the old Inspector Layer/Screen toggle):
+  // it represents the active screen's projector warp target.
+  const outputRow = page.locator(".layer-output .layer-hit");
+  await expect(outputRow).toBeVisible();
+  await outputRow.click();
 
   // Selecting screen mode should render the ACTIVE SCREEN's corner-pin handles
   // directly on the stage — no layer overlay — including ".deck-handle.tl", the handle
@@ -243,6 +244,106 @@ test("switching to Screen edit target and dragging a corner handle sends the SCR
   // "screens.screen-1.warp.corners.0" update over the socket (the EXISTING screen warp
   // action/path — no new WS message type), not just a local-only DOM change.
   await expect.poll(async () => (await readScreenCorners())[0]).not.toEqual({ x: 0, y: 0 });
+});
+
+test("media bin: uploaded media renders as a thumbnail and drags onto a layer row as its source", async ({ page }) => {
+  // Upload the red jpg fixture over the same HTTP endpoint the bin's +add uses.
+  const jpg = await readFile(path.join(__dirname, "fixtures", "media-fixture-red.jpg"));
+  const res = await fetch(`http://localhost:${WS_PORT}/api/media`, {
+    method: "POST",
+    headers: { "X-File-Name": "drag-fixture.jpg" },
+    body: jpg,
+  });
+  expect(res.ok).toBe(true);
+
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+
+  // The bin shows the item as a real thumbnail cell.
+  const cell = page.locator(".media-cell", { hasText: "drag-fixture" });
+  await expect(cell).toBeVisible();
+
+  // Drag it onto layer-1's row — the layer's source must become the library url,
+  // through the SAME layers.<id>.source write path the Inspector picker uses.
+  await cell.dragTo(page.locator('.layer[data-id="layer-1"] .layer-hit'));
+  await expect
+    .poll(async () => {
+      const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+      return state.layers["layer-1"].source;
+    })
+    .toMatchObject({ type: "video", url: expect.stringMatching(/^\/media\/media-.*\.jpg$/) });
+});
+
+test("the visibility eye toggles layers.<id>.visible through the normal update path", async ({ page }) => {
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  const eye = page.locator('.layer[data-id="layer-1"] .layer-eye');
+  await expect(eye).toBeVisible();
+
+  const readVisible = async () => {
+    const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+    return state.layers["layer-1"].visible;
+  };
+  await eye.click();
+  await expect.poll(readVisible).toBe(false);
+  await expect(page.locator('.layer[data-id="layer-1"]')).toHaveAttribute("data-hidden", "true");
+  await eye.click();
+  await expect.poll(readVisible).toBe(true);
+});
+
+test("import-by-link: a media URL entered in the bin downloads server-side into the library", async ({ page }) => {
+  // A tiny file server standing in for "somewhere on the internet".
+  const fileServer = http.createServer((req, res) =>
+    handler(req, res, { public: path.join(__dirname, "fixtures"), cleanUrls: false }),
+  );
+  await new Promise((r) => fileServer.listen(8199, r));
+  try {
+    await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+    const link = page.locator(".media-bin__link");
+    await expect(link).toBeVisible();
+    await link.fill("http://localhost:8199/media-fixture-clip.mp4");
+    await link.press("Enter");
+
+    // The SERVER downloads it and it enters the library via the normal create path.
+    await expect
+      .poll(async () => {
+        const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+        return Object.values(state.media).find((m) => m.name === "media-fixture-clip.mp4")?.kind;
+      })
+      .toBe("video");
+    // …and the bin shows it as a real cell (create broadcast → thumbnail).
+    await expect(page.locator(".media-cell", { hasText: "media-fixture-clip" })).toBeVisible();
+  } finally {
+    fileServer.close();
+  }
+});
+
+test("layer context menu: right-click offers Hide and Duplicate through the normal write paths", async ({ page }) => {
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  const row = page.locator('.layer[data-id="layer-2"] .layer-hit');
+  await expect(row).toBeVisible();
+
+  const readState = async () => (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+  const visibleBefore = (await readState()).layers["layer-2"].visible;
+
+  // Hide via the menu.
+  await row.click({ button: "right" });
+  await page.locator(".ctx-menu").getByRole("menuitem", { name: visibleBefore === false ? "Show layer" : "Hide layer" }).click();
+  await expect.poll(async () => (await readState()).layers["layer-2"].visible).toBe(visibleBefore === false);
+
+  // Duplicate via the menu: a new layer appears carrying the source layer's blend mode.
+  const countBefore = Object.keys((await readState()).layers).length;
+  await row.click({ button: "right" });
+  await page.locator(".ctx-menu").getByRole("menuitem", { name: "Duplicate" }).click();
+  await expect.poll(async () => Object.keys((await readState()).layers).length).toBe(countBefore + 1);
+  const state = await readState();
+  const copy = Object.values(state.layers).find((l) => l.name?.endsWith(" copy"));
+  expect(copy).toBeTruthy();
+  expect(copy.blendMode).toBe(state.layers["layer-2"].blendMode);
+
+  // Escape closes an open menu without acting.
+  await row.click({ button: "right" });
+  await expect(page.locator(".ctx-menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ctx-menu")).toHaveCount(0);
 });
 
 test("polygon mask vertices are draggable on the stage and persist through the existing mask update path", async ({ page }) => {
@@ -294,10 +395,10 @@ test("polygon mask vertices are draggable on the stage and persist through the e
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-poly-ui");
 
-  const targetToggle = page.locator(".insp-target");
-  await expect(targetToggle).toBeVisible();
-  await targetToggle.getByRole("button", { name: "Layer", exact: true }).click();
-  await page.locator(".modes").getByRole("button", { name: "Mask", exact: true }).click();
+  // The stage click above already selected the layer target; expand the Mask section
+  // (the accordion header carries aria-label="Mask" — its visible text also includes a
+  // live summary like "polygon", so target the accessible name).
+  await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
   const vertex = page.locator(".mask-point").first();
@@ -364,8 +465,7 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
   const stage = page.locator(".deck-stage");
   const box = await stage.boundingBox();
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
-  await page.locator(".insp-target").getByRole("button", { name: "Layer", exact: true }).click();
-  await page.locator(".modes").getByRole("button", { name: "Mask", exact: true }).click();
+  await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
   const readMaskPoints = async () => {

@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { SourceBankSlotEditor } from "../SourceBankSlotEditor";
 import { otherSlotOptions } from "../sourceBank";
+import { MediaThumb } from "./MediaThumb";
+import { rgbToHex } from "../color";
+import { useContextMenu } from "./ContextMenu";
+import { hasMediaDrag, getMediaDrag } from "./dnd";
 import type { CameraDevice, MediaItem, SourceBankSlot } from "../types";
 
 export interface SlotGridProps {
@@ -17,6 +21,8 @@ export interface SlotGridProps {
   onSetContent?: (slotId: string, index: number, content: SourceBankSlot["content"]) => void;
   /** Per-slot transport write (task A9): `sourceBank.<index>.transport.<field>`. */
   onSetTransport?: (index: number, field: string, value: unknown) => void;
+  /** Library origin for rendering a filled media slot's REAL thumbnail. */
+  mediaBase?: string;
   /** Fired with the clicked slot's index whenever a cell is clicked (open or re-toggle),
    *  so a container can react (e.g. a future show drawer cross-highlighting the slot).
    *  The inline editor below the grid is opened/closed independently, from local state. */
@@ -40,19 +46,36 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
  *  editor inline below the grid — `SourceBankSlotEditor`, extracted from
  *  `SourceBankPanel` — so editing keeps using the existing `onRename`/`onSetContent`
  *  write paths unchanged rather than a second, drifting implementation. */
-export function SlotGrid({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot }: SlotGridProps) {
+export function SlotGrid({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot, mediaBase }: SlotGridProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
   const editingSlot = editingIndex != null ? slots[editingIndex] : undefined;
+  const ctx = useContextMenu();
 
   const handleClick = (index: number) => {
     setEditingIndex((current) => (current === index ? null : index));
     onEditSlot?.(index);
   };
 
+  // A filled slot shows what it actually HOLDS: the media's own thumbnail, the solid
+  // color, or a CAM/MIX badge — not just a name (media-first redesign).
+  const slotFace = (slot: SourceBankSlot) => {
+    const content = slot.content;
+    if (!content) return null;
+    if (content.type === "media" && mediaBase) {
+      const item = media.find((m) => m.id === content.mediaId);
+      if (item) return <MediaThumb item={item} mediaBase={mediaBase} className="slot__thumb" />;
+    }
+    if (content.type === "color") {
+      return <span className="slot__thumb" style={{ background: rgbToHex(content.color ?? [0.5, 0.5, 0.5]) }} />;
+    }
+    return null;
+  };
+
   return (
     <>
       <div className="sec-head label">
-        Source bank
+        Shared slots
         <span className="count mono">{slots.length}</span>
       </div>
       <div className="slots">
@@ -66,9 +89,34 @@ export function SlotGrid({ slots, media = [], cameraDevices = [], onRename, onSe
               className="slot"
               data-filled={summary != null}
               data-editing={isEditing}
+              data-drop={dropIndex === i}
               aria-expanded={isEditing}
+              title={summary ? `${slot.name} · ${summary}` : `${slot.name} — click to set up, or drop media here`}
               onClick={() => handleClick(i)}
+              onContextMenu={(e) =>
+                ctx.open(e, [
+                  { label: editingIndex === i ? "Close editor" : "Open editor", onSelect: () => handleClick(i) },
+                  ...(onSetContent && slot.content
+                    ? ["separator" as const, { label: "Clear slot", danger: true, onSelect: () => onSetContent(slot.id, i, null) }]
+                    : []),
+                ])
+              }
+              onDragOver={(e: DragEvent) => {
+                if (!onSetContent || !hasMediaDrag(e)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+                setDropIndex(i);
+              }}
+              onDragLeave={() => setDropIndex((cur) => (cur === i ? null : cur))}
+              onDrop={(e: DragEvent) => {
+                const payload = getMediaDrag(e);
+                setDropIndex(null);
+                if (!payload || !onSetContent) return;
+                e.preventDefault();
+                onSetContent(slot.id, i, { type: "media", mediaId: payload.mediaId });
+              }}
             >
+              {slotFace(slot)}
               <span className="n">{summary ?? `SLOT ${i + 1}`}</span>
             </button>
           );
@@ -88,6 +136,7 @@ export function SlotGrid({ slots, media = [], cameraDevices = [], onRename, onSe
           />
         </div>
       )}
+      {ctx.menu}
     </>
   );
 }

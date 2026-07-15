@@ -7,15 +7,18 @@ import { rgbToHex, hexToRgb } from "./color";
 import type { SourceBankSlot, MediaItem, SourceRef, Transport, CameraDevice } from "./types";
 import { BLEND_MODES } from "./types";
 
-/** Mirrors `server/src/state.js`'s `defaultTransport()` — used only as a display fallback
- *  for a slot whose `transport` hasn't been backfilled yet (the server always sends one).
+/** Mirrors `server/src/state.js`'s `defaultSlotTransport()` — used only as a display
+ *  fallback for a slot whose `transport` hasn't been backfilled yet (the server always
+ *  sends one). Slots default to PLAYING + LOOP (unlike a layer's own transport) so a
+ *  freshly-assigned clip runs without a per-slot play click — this fallback must agree,
+ *  or the panel would show "paused / no loop" for a slot the wall is actively looping.
  *  Edits still write per-field via `onSetTransport`, patching the real state leaf. */
 const DEFAULT_SLOT_TRANSPORT: Transport = {
-  playing: false,
+  playing: true,
   rate: 1,
   loopIn: null,
   loopOut: null,
-  loopMode: "off",
+  loopMode: "loop",
   pan: 0,
   vol: 1,
   seek: null,

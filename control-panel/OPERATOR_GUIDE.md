@@ -14,12 +14,27 @@ up right there.
 
 ```
  command bar:     wordmark | screen tabs | MASTER fader | BLACKOUT | BLIND | ●connected
- left rail:        the Stage:                              inspector:
-  layer stack       live low-res preview of the             the SELECTED layer's
-  slot grid          selected screen's output, with          controls only —
-                      click-to-select regions per layer      Warp · Mask · FX
- show drawer (bottom, collapsible): Presets · Cues · Timers · LFO · MIDI · Media · PiP
+ left rail:        look bar: numbered look chips · +save · focus
+  OUTPUT row       the Stage:                              inspector:
+  layer stack       live preview of the selected            the SELECTED thing's
+  media bin          screen's output — click-to-select       controls — Warp / Mask /
+  shared slots       regions per layer, Warp·Mask·FX         FX sections, always listed
+                      chips, drag-media-to-assign
+ show drawer (bottom, collapsible): Looks · Source sets · Cues · Timers · Motion · MIDI · Media · Cast
 ```
+
+**Right-click anything.** Layer rows (rename, hide/show, duplicate, copy/paste look,
+remove), media-bin items (use on selected layer, delete from library), shared slots
+(open editor, clear), look chips (recall, rename, delete), and the Stage itself (switch
+Warp/Mask/FX, reset warp, hide layer) all carry context menus — every verb where the
+pointer already is, like any desktop graphics tool.
+
+**Drag and drop is the fast path.** Every thumbnail in the left rail's **media bin** drags
+onto a layer row, a shared slot, or straight onto the Stage (the layer whose picture is
+under the drop point gets it). Drop video/gif/jpg files from your computer onto the bin
+to upload them. Double-click a bin item to put it on the selected layer. Every one of
+these lands on the same source controls the Inspector offers — the pickers remain for
+touch and precision.
 
 On a phone or anything under 720px wide, the left rail and inspector collapse into
 bottom-sheet tabs instead — the Stage stays dominant either way. A status lamp in the
@@ -38,13 +53,15 @@ This is the pattern you'll use for almost everything:
 2. Once selected, its **warp corners or mask shape appear as draggable handles directly
    on the Stage** — you're editing the actual picture, not a separate diagram of it.
 3. The **Inspector** on the right fills in with that layer's controls: source, opacity,
-   blend mode, and a **Warp · Mask · FX** switch. Which switch position you're on decides
-   what's drawn on the Stage:
+   blend mode, and three **always-visible sections — Warp, Mask, FX** — each header
+   showing its live state at a glance (`corner`, `ellipse · inverted`, `all on`, …).
+   Click a header to expand that section; the expanded section also decides what's
+   drawn on the Stage:
    - **Warp** → corner-pin handles (or a mesh grid, if you've switched the layer to mesh
      mode) for that layer's own warp.
    - **Mask** → the mask's shape (rectangle, ellipse, or a polygon's vertices) drawn over
      the preview, draggable.
-   - **FX** → no handles on the Stage (just a faint bounding box); the Inspector shows
+   - **FX** → no handles on the Stage (just a faint bounding box); the section shows
      the full effects chain instead.
 
 Dragging a handle updates state immediately and every connected render client follows
@@ -65,11 +82,29 @@ pointing at a deleted file just loses its picture.
 Anything in the library becomes available in every layer's and every source-bank slot's
 source picker.
 
+**Import by link.** Paste a URL — anywhere in the panel (outside a text field), or into
+the media bin's "paste a link" field — and the **server** downloads it into the library:
+a direct `.mp4`/`.webm`/`.gif`/`.jpg` link streams straight in; a YouTube/Vimeo/other
+streaming-site link is fetched with `yt-dlp`. The Docker image includes yt-dlp + ffmpeg
+already; if you run the server bare, install yt-dlp yourself (`pip install yt-dlp` or
+your package manager) or those links will report an error — direct file links work
+either way. Streaming sites change constantly and old yt-dlp versions stop working
+against them: if YouTube imports start failing, update yt-dlp (rebuild the image, or
+`yt-dlp -U` on a bare install). Progress shows as a dashed cell in the bin; a failed
+import shows its reason — click it to dismiss.
+
 ## Layer stack (left rail)
 
 The layer stack is your stack of video sources, shown top-of-stack-first — the top row
 draws over the ones below it, same as VPT8.
 
+- The pinned, cyan-tinted **OUTPUT row at the very top is the projector itself** — the
+  thing every layer below composites into. Select it to put the Stage and Inspector in
+  screen-warp mode (see "Screens and screen/output warp" below); select any layer row to
+  come back to layer editing.
+- Each row's thumbnail shows the layer's **actual content** (its color, its media's own
+  picture, or a CAM/slot tag). **Double-click the name to rename** it in place, and
+  **drop a media-bin thumbnail on a row** to make it that layer's source.
 - Click a row to select that layer (same as clicking it on the Stage).
 - Drag a row to reorder it, or use its **▲ / ▼**.
 - **⧉ / ⇩** on a selected layer's Inspector header copies its whole "look" (opacity,
@@ -163,14 +198,15 @@ opposed to warping one clip within the scene.
   id>`, shown next to the name field).
 - The screen's display name is editable inline; the id next to it (e.g. `screen-1`) is
   what a render client's URL actually needs and never changes.
-- With no layer selected, the Stage's handles belong to the **screen's** warp instead of
-  a layer's — the same corner-pin/mesh toggle, density selector, drag-to-warp, and Reset
-  described above under the Inspector's Warp section apply here too.
+- Select the **OUTPUT row** at the top of the layer stack and the Stage's handles belong
+  to the **screen's** warp instead of a layer's — the same corner-pin/mesh toggle,
+  density selector, drag-to-warp, and Reset described above under the Inspector's Warp
+  section apply here too. Selecting any layer row returns to layer editing.
 - Each handle is tagged so you always know which point you're touching — corners show
   `TL`/`TR`/`BR`/`BL`; mesh points show their row·column (`R2·C3`). Tap or click a handle
-  to select it (it highlights) and a pair of X/Y number fields appears so you can type an
-  exact coordinate instead of dragging, useful when you need a precise keystone value
-  rather than an eyeballed one.
+  to select it (it highlights), then **nudge it with the arrow keys** — ~1 pixel per
+  press, hold Shift for ~10px — for exact registration no drag can hit; Escape deselects.
+  Hold **Ctrl while dragging** to snap the handle to a coarse alignment grid.
 
 ## Cast windows (PiP)
 
@@ -188,10 +224,17 @@ actual video content on the Stage, only an empty box — that's expected, not br
   window automatically.
 - **+ Add window** creates a new one on the currently selected screen.
 
-## Presets
+## Presets and the look bar
 
 The Show drawer's **Presets** tab captures your current scene — every layer, every
 screen's warp, every cast window, and the audio owner — as one named snapshot.
+
+The same presets also appear as numbered chips in the **look bar directly above the
+Stage** — that strip is your live triggering surface: click a chip (or press its number
+key, **1–9**) to fire that look mid-show, and **+ save** to snapshot the current scene
+under an auto-name. The bar is deliberately trigger-only — renaming and deleting stay in
+the Presets tab, so nothing on the live surface can destroy a look. Build each look in
+rehearsal (or behind BLIND), save it, and run the show from the chips.
 
 - Type a name and hit **+ Save current** to capture the current look.
 - Click a preset chip to recall it instantly.
@@ -298,11 +341,45 @@ The command bar has three house-level controls that live outside every preset an
 - **BLIND** freezes each screen's last committed live frame in place — the audience sees
   a still image of whatever was on screen the instant you hit it — while the deck keeps
   compositing and pushing the preview underneath, so you can build and check the *next*
-  look on the Stage without any of it hitting the live output. Toggle BLIND off to bring
-  the frozen frame back to life exactly where the composited scene currently is.
+  look on the Stage without any of it hitting the live output. The whole Stage frame
+  turns **amber** while blind (red LIVE tally otherwise) so there's never a doubt about
+  whether your edits are touching the audience.
+
+  Engaging BLIND also **snapshots the live look**, and the button splits in two:
+
+  - **GO LIVE** — commit: the wall unfreezes onto everything you built while blind.
+  - **DISCARD** — abandon: the pre-blind look is restored wholesale (layers, screen
+    warps, cast windows, source bank) and the wall unfreezes onto exactly what the
+    audience was already seeing. Uploads made while blind survive; only their *use* in
+    the scene is reverted. Master/blackout are never touched by a discard.
+
+  This is the lighting-console Blind / broadcast preview-program workflow: prepare the
+  next look in safety, then either take it or throw it away.
+
+  **Audio while blind** holds like the picture does: clips you load while blind stay
+  muted until GO LIVE, volume/pan faders hold at their pre-blind levels, and PiP
+  windows hold their pre-blind arrangement. Whatever was already playing keeps playing
+  — blind freezes the show, it doesn't cut it. One documented limit: pausing or
+  scrubbing a clip that was *already audible* before you went blind is still audible
+  (one decoder can't play two positions at once) — leave the live clip's transport
+  alone while blind.
 
 None of the three can be moved or undone by a preset recall, a cue fade, or any
 automation step — they're the controls that are yours alone, always.
+
+## Keyboard shortcuts
+
+Active anywhere except while typing in a field:
+
+- **1–9** — fire that look-bar chip (scene preset recall).
+- **B** — toggle BLIND. (There is deliberately no blackout key — a hard cut to black
+  stays a deliberate click.)
+- **F** — focus mode: hide the rails and Show drawer so the Stage and look bar are the
+  entire surface; press again (or the bar's `focus` button) to bring them back.
+- **Arrow keys / Shift+arrows** — nudge the selected warp handle or polygon-mask vertex
+  ~1px / ~10px; **Escape** deselects it.
+- **Ctrl while dragging a handle** — snap to a coarse alignment grid.
+- **Delete / Backspace** — remove the selected polygon-mask vertex.
 
 ## If something looks wrong
 

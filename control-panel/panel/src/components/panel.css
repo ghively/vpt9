@@ -51,10 +51,12 @@ html, body { height: 100%; }
   #master-control[data-blackout="true"] .label,
   #master-control[data-blackout="true"] .master-val { color: var(--live); }
   /* BLIND (preview) is amber, distinct from BLACKOUT's live-red — it holds the wall, it
-     doesn't kill it. Active state floods the toggle with the caution tone. */
+     doesn't kill it. Active state floods the toggle with the caution tone. While blind
+     the toggle splits into GO LIVE (commit, amber-lit) and DISCARD (revert, outlined). */
   #master-control .blind-btn[data-active="true"] {
     border-color: var(--warn); color: var(--warn); background: rgba(232, 178, 61, 0.16);
   }
+  #master-control .discard-btn { border-color: var(--warn); color: var(--warn); }
   #master-control[data-blind="true"] .label { color: var(--warn); }
 
   /* Status readout — mono, with a lamp that tells the truth about the socket. */

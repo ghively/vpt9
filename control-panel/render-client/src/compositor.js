@@ -8,9 +8,10 @@ const INTERNAL_HEIGHT = 720;
 export class Compositor {
   constructor(canvas) {
     this.canvas = canvas;
-    // preserveDrawingBuffer: capturePreview() reads the canvas back via drawImage on a
-    // ~250ms interval, outside the rAF that drew the frame — without preservation the
-    // buffer contents are undefined after compositing and the preview goes blank.
+    // preserveDrawingBuffer: capturePreview() reads the canvas back via drawImage on its
+    // own adaptive interval (~100-400ms, see main.js), outside the rAF that drew the
+    // frame — without preservation the buffer contents are undefined after compositing
+    // and the preview goes blank.
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true });
     if (!gl) throw new Error("WebGL2 is not available in this browser");
     this.gl = gl;
@@ -77,6 +78,7 @@ export class Compositor {
     this._heldFbo = null;
     this._liveScene = null;
     this._blindNeedsSnapshot = this.blind;
+    this.layerStack.setBlindHold(this.blind); // the fresh LayerStack must inherit the hold
   }
 
   _resize() {
@@ -124,11 +126,15 @@ export class Compositor {
 
   // Task A20: enter/leave blind (preview) mode. On the false→true edge, arm a one-shot
   // snapshot so the NEXT rendered frame freezes into the held FBO; while blind the canvas
-  // keeps showing that frozen frame. Leaving blind just resumes live drawing.
+  // keeps showing that frozen frame. Leaving blind resumes live drawing AND releases the
+  // layer stack's audio hold (clips cued while blind un-mute per the owner policy).
   setBlind(blind) {
     const next = !!blind;
-    if (next && !this.blind) this._blindNeedsSnapshot = true;
+    if (next === this.blind) return;
+    if (next) this._blindNeedsSnapshot = true;
     this.blind = next;
+    this.layerStack.setBlindHold(next);
+    if (!next) this._applyMute(); // re-apply the audio-owner policy to the born-blind elements
   }
 
   // Copies the just-composited `scene` (plus the warp/master in effect right now) into the
@@ -202,7 +208,7 @@ export class Compositor {
   // the browser can never paint the live frame to the display (it only composites at frame
   // boundaries, and we've already redrawn the frozen frame before yielding). This reuses the
   // proven, correctly-oriented drawImage path instead of a separate GL readback.
-  capturePreview(maxWidth = 320) {
+  capturePreview(maxWidth = 640) {
     // Only draw the live frame if we can immediately restore the frozen one afterward
     // (_heldFbo ready). On the very first preview tick after engaging blind — before the
     // next rAF has snapshotted the held frame — _heldFbo is still null; drawing the live
@@ -228,6 +234,9 @@ export class Compositor {
     this._previewCanvas.width = width;
     this._previewCanvas.height = height;
     this._previewCtx.drawImage(this.canvas, 0, 0, width, height);
-    return this._previewCanvas.toDataURL("image/jpeg", 0.6);
+    // 0.78: high enough that JPEG blocking stops being visible on the panel's dominant
+    // stage (0.6 read as "super compressed" once stretched), low enough that a 640px
+    // frame stays a few tens of KB at the interactive ~10 fps cadence (see main.js).
+    return this._previewCanvas.toDataURL("image/jpeg", 0.78);
   }
 }

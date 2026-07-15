@@ -27,7 +27,9 @@ function mediaKindFromUrl(url) {
   const dot = clean.lastIndexOf(".");
   const ext = dot < 0 ? "" : clean.slice(dot + 1).toLowerCase();
   if (ext === "gif") return "gif";
-  if (ext === "jpg" || ext === "jpeg") return "image";
+  // Library uploads only allow jpg/jpeg, but external URLs can be any still format —
+  // routing e.g. a .png through the <video> path renders an opaque black layer.
+  if (ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp" || ext === "bmp") return "image";
   return "video";
 }
 
@@ -281,6 +283,9 @@ export class LayerStack {
           if (this.onClipEnded) this.onClipEnded(id);
         });
         video.play().catch((err) => console.warn(`[layers] could not play "${url}":`, err.message));
+        // Born while blind (see setBlindHold): stays muted until the session commits,
+        // so cueing a new clip off-air is never audible to the audience.
+        entry._bornBlind = this.blindHold;
         entry.videoEl = video;
       } else {
         // Still image (jpg) or animated gif: sample an <img> into the texture. A gif
@@ -335,7 +340,25 @@ export class LayerStack {
 
   setLayerMuted(id, muted) {
     const entry = this.entries.get(id);
-    if (entry?.videoEl) entry.videoEl.muted = muted;
+    // The blind audio hold overrides the audio-owner policy for elements created during
+    // the blind session — they stay muted until commit no matter who owns audio.
+    if (entry?.videoEl) entry.videoEl.muted = muted || (this.blindHold && !!entry._bornBlind);
+  }
+
+  // Blind audio hold (the audible face of task A20's frozen wall): while the wall is
+  // frozen, what the audience HEARS must hold like what they see. Video elements created
+  // while blind start and stay muted (a clip cued off-air must not play out loud), and
+  // applyTransport freezes vol/pan gains at their pre-blind levels. Elements that were
+  // already playing keep their audio running — blind freezes the show, it doesn't cut it.
+  // Committing (blind off) clears the tags; the compositor then re-applies the normal
+  // audio-owner mute policy, bringing the new clips' audio up. Known limit, documented in
+  // the operator guide: pausing/scrubbing a clip that was ALREADY audible before blind is
+  // still audible — one decode pipeline can't play two positions at once.
+  setBlindHold(on) {
+    this.blindHold = !!on;
+    if (!this.blindHold) {
+      for (const entry of this.entries.values()) entry._bornBlind = false;
+    }
   }
 
   // Applies transport control (play/pause, rate, loop in/out via manual seek, palindrome
@@ -346,6 +369,14 @@ export class LayerStack {
   applyTransport(layer, entry) {
     const video = entry.videoEl;
     if (!video) return;
+    // Resync native `loop` from the layer's CURRENT loopMode every frame (the slot path
+    // does the same in source-bank.js). setLayerSource sets it too, but a bare
+    // `layers.<id>.transport.loopMode` update takes main.js's render-time-leaf fast path,
+    // which skips setLayers()/setLayerSource entirely — without this per-frame resync,
+    // toggling Loop off left the wall's <video> looping forever (and off->loop froze on
+    // the clip's last frame instead of looping).
+    const loop = this.shouldLoop(layer);
+    if (video.loop !== loop) video.loop = loop;
     const t = layer.transport;
     if (!t) return;
 
@@ -380,6 +411,16 @@ export class LayerStack {
         entry._audioNodesFor = video; // still mark as "attempted for this element" so we don't retry every frame
       }
     }
+    // Autoplay policy: a context created before any user gesture starts "suspended" and
+    // outputs SILENCE — and createMediaElementSource has already rerouted the element's
+    // audio into it, so the audio-owner screen would stay mute forever. Retry resume()
+    // each frame: it succeeds immediately under kiosk autoplay flags, or on the first
+    // frame after any user gesture (click/fullscreen dblclick) otherwise.
+    if (this.audioCtx && this.audioCtx.state === "suspended") this.audioCtx.resume().catch(() => {});
+    // Blind audio hold: vol/pan freeze at their pre-blind levels while the wall is
+    // frozen — an off-air fader move must not be audible. Values resume tracking the
+    // live state on the first frame after commit/discard.
+    if (this.blindHold) return;
     if (entry._audioNodes) {
       entry._audioNodes.gainNode.gain.value = t.vol ?? 1;
       if (entry._audioNodes.pannerNode) entry._audioNodes.pannerNode.pan.value = t.pan ?? 0;
@@ -561,6 +602,14 @@ export class LayerStack {
       // effective source), not layer.source — for playlist layers the two can differ, and
       // entry is the single source of truth for what's actually currently loaded.
       const isSlot = entry.sourceType === "slot";
+      // The visibility eye (layers.<id>.visible === false): skip compositing entirely —
+      // no texture upload, no fx chain, no blend — but keep the transport ticking so
+      // playback continues underneath and re-showing the layer is seamless (identical
+      // semantics to opacity 0, minus the per-frame GPU cost).
+      if (layer.visible === false) {
+        if (!isColor && !isSlot) this.applyTransport(layer, entry);
+        continue;
+      }
       // Per-source downscale (task A15): applies only to a layer's DIRECT video/image/
       // camera upload, not a shared-slot source (whose texture is shared across layers).
       // Reset imgUploaded when it changes so a static image re-uploads at the new size.

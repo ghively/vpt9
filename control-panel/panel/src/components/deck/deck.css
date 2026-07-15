@@ -88,7 +88,7 @@
 /* ---------------- body columns ---------------- */
 .body {
   display: grid;
-  grid-template-columns: 232px 1fr 288px;
+  grid-template-columns: 276px 1fr 288px; /* left rail widened for the MediaBin thumbnails */
   min-height: 0;
 }
 .rail {
@@ -97,7 +97,13 @@
   min-height: 0;
   background: var(--panel);
 }
-.rail-l { border-right: 1px solid var(--hairline); }
+/* The left rail scrolls as ONE surface (layer stack + media bin + slots in natural
+ * height) — inner per-section scrollboxes silently hid rows once the bin landed, and
+ * flex-shrink let sections paint over each other; pin every section to natural height. */
+.rail-l { border-right: 1px solid var(--hairline); overflow-y: auto; }
+.rail-l > * { flex: none; }
+.rail-l .layers { overflow-y: visible; }
+.rail-l .media-bin__grid { max-height: none; overflow-y: visible; }
 .rail-r { border-left: 1px solid var(--hairline); }
 
 .sec-head {
@@ -136,7 +142,29 @@
   text-align: left;
   transition: border-color .12s, background .12s;
 }
+.layer-hit { user-select: none; } /* rows are draggable (reorder) — no accidental text drags */
 .layer-hit:hover { border-color: var(--muted-dim); }
+/* Variant with the visibility eye as a slim leading column (the OUTPUT row has no eye). */
+.layer-hit--eye { grid-template-columns: 18px 44px 1fr auto; gap: 8px; }
+.layer-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 25px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .12s;
+}
+.layer-eye:hover { color: var(--text); }
+/* Hidden layer: the eye goes caution-amber and the row content dims — GIMP's closed eye. */
+.layer[data-hidden="true"] .layer-eye { color: var(--warn); }
+.layer[data-hidden="true"] .thumb,
+.layer[data-hidden="true"] .layer-info,
+.layer[data-hidden="true"] .layer-op { opacity: .4; }
 .layer-hit[aria-selected="true"] { border-color: var(--beam-line); background: var(--deck-selected-surface); }
 .layer-hit[aria-selected="true"]::before {
   content: "";
@@ -149,6 +177,7 @@
   box-shadow: 0 0 8px var(--beam-line);
 }
 .thumb {
+  position: relative; /* anchors the absolute .media-thumb content inside the box */
   flex: none;
   width: 44px;
   height: 25px;
@@ -171,6 +200,24 @@
 .layer .op { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
 .layer .opbar { width: 34px; height: 3px; background: var(--panel-sunken); border-radius: 2px; overflow: hidden; }
 .layer .opbar > i { display: block; height: 100%; background: var(--beam); opacity: .8; }
+
+/* The pinned OUTPUT row — the active screen as the topmost item of the stack (what
+ * everything below composites INTO). Cyan-accented: screens are render/machine data
+ * (see tokens.css), unlike the operator-amber layer selection. */
+.layer-output .layer-hit[aria-selected="true"] { border-color: var(--cool-line); background: rgba(75, 214, 226, 0.07); }
+.layer-output .layer-hit[aria-selected="true"]::before { background: var(--cool); box-shadow: 0 0 8px var(--cool); }
+.layer-output .meta { color: var(--cool); opacity: .8; }
+.thumb-output {
+  flex: none;
+  width: 44px;
+  height: 25px;
+  border-radius: 2px;
+  border: 1px solid var(--cool-line);
+  background:
+    linear-gradient(var(--cool-line) 1px, transparent 1px) 0 0 / 8px 8px,
+    linear-gradient(90deg, var(--cool-line) 1px, transparent 1px) 0 0 / 8px 8px,
+    var(--panel-sunken);
+}
 
 .layer-ops { display: flex; align-items: center; gap: 4px; padding-left: 54px; }
 .layer-ops .move-btn { width: 22px; height: 16px; font-size: 8px; }
@@ -200,6 +247,8 @@
 
 .slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 0 10px 12px; }
 .slot {
+  position: relative;
+  overflow: hidden;
   aspect-ratio: 16 / 10;
   display: flex;
   align-items: flex-end;
@@ -212,10 +261,168 @@
   transition: border-color .12s;
 }
 .slot:hover { border-color: var(--muted-dim); }
-.slot .n { font-family: var(--font-mono); font-size: 9px; color: var(--muted-dim); letter-spacing: .1em; }
+.slot .n {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted-dim);
+  letter-spacing: .1em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
+}
 .slot[data-filled="true"] { border-color: var(--cool-line); }
 .slot[data-filled="true"] .n { color: var(--cool); }
 .slot[data-editing="true"] { border-color: var(--beam-line); background: var(--deck-selected-surface); }
+/* A filled slot shows its actual content behind the label (media thumb / color fill). */
+.slot__thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .85; }
+
+/* ---------------- media bin (the visual library) ----------------
+ * MadMapper's Media Panel, sized for the rail: real thumbnails, draggable onto layer
+ * rows / slots / the stage; OS files dropped on the bin upload straight into the
+ * library. Management (rename/delete) stays in the Show drawer's Media tab. */
+.media-bin { display: flex; flex-direction: column; min-height: 96px; }
+.media-bin[data-drop="true"] { outline: 1px dashed var(--beam); outline-offset: -4px; }
+.media-bin__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 0 10px;
+  overflow-y: auto;
+  max-height: 300px;
+}
+.media-cell {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel-sunken);
+  cursor: grab;
+  transition: border-color .12s;
+}
+.media-cell:hover { border-color: var(--beam-line); }
+.media-cell:active { cursor: grabbing; }
+.media-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.media-cell__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  font-size: 10px;
+  color: var(--text);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.media-cell__kind {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 4px;
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--cool);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.media-bin__empty {
+  grid-column: 1 / -1;
+  padding: 14px 8px;
+  border: 1px dashed var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  letter-spacing: .08em;
+  color: var(--muted-dim);
+  text-align: center;
+}
+.media-bin__foot { display: flex; flex-direction: column; gap: 4px; }
+.media-bin__add { margin-bottom: 0; }
+.media-bin__link {
+  margin: 0 10px 6px;
+  padding: 6px 8px;
+  font-size: 10px;
+  min-width: 0;
+}
+.media-bin__error { padding: 0 12px 6px; font-size: 9px; color: var(--live); }
+/* In-flight / failed import-by-link cells: same footprint as a media cell so the grid
+ * doesn't jump when the finished item replaces them. */
+.media-cell--import { cursor: default; border-style: dashed; }
+.media-cell--import[data-error] { cursor: pointer; border-color: var(--live); }
+.media-cell__import {
+  position: absolute;
+  inset: 0 0 14px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-align: center;
+  color: var(--cool);
+  overflow: hidden;
+}
+.media-cell--import[data-error] .media-cell__import { color: var(--live); }
+
+/* ---------------- drag-and-drop affordances ----------------
+ * Anything armed as a drop target glows tungsten — layer rows, slots, the stage. */
+.layer[data-drop="true"] .layer-hit,
+.slot[data-drop="true"] { border-color: var(--beam); background: var(--beam-soft); }
+.deck-stage[data-drop="true"] { border-color: var(--beam); box-shadow: inset 0 0 0 1px var(--beam), 0 20px 60px -20px #000; }
+
+/* Inline layer rename (double-click the name). */
+.layer-rename-input { width: 100%; min-width: 0; font-size: 12px; padding: 1px 4px; }
+.look-rename-input { flex: none; width: 120px; font-size: 11px; padding: 3px 6px; }
+
+/* ---------------- context menus (right-click) ----------------
+ * The GIMP/desktop-app convention: every object offers its verbs where the pointer
+ * already is. Fixed-positioned at the cursor, clamped to the viewport (ContextMenu.tsx). */
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  box-shadow: 0 12px 32px -8px #000, inset 0 0 0 1px #00000066;
+}
+.ctx-menu__item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.ctx-menu__item:hover:not(:disabled) { background: var(--beam-soft); color: var(--beam); }
+.ctx-menu__item:disabled { color: var(--muted-dim); cursor: default; }
+.ctx-menu__item[data-danger] { color: var(--live); opacity: .85; }
+.ctx-menu__item[data-danger]:hover:not(:disabled) { background: rgba(255, 70, 88, 0.14); color: var(--live); opacity: 1; }
+.ctx-menu__sep { height: 1px; margin: 4px 6px; background: var(--hairline-soft); }
+
+/* Non-visual source tags (camera / shared slot / external URL) on a layer thumb. */
+.thumb--tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  letter-spacing: .1em;
+  color: var(--cool);
+}
+.thumb__media { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* Inline per-slot editor (SourceBankSlotEditor, shared with the full-width
  * SourceBankPanel) revealed below the grid when a cell is clicked. Its `.media-row`
@@ -256,6 +463,79 @@
   flex-direction: column;
   gap: 10px;
 }
+
+/* ── The look bar — trigger-only scene recall riding directly above the stage.
+ * Chips show their 1-9 shortcut key; +save snapshots the current scene; focus (F)
+ * collapses the rails/drawer for a clean show surface. Amber-tinted while blind:
+ * recalls/saves land off-air. ── */
+.lookbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+.lookbar__label { flex: none; }
+.lookbar__chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.lookbar__empty { font-size: 9px; color: var(--muted-dim); letter-spacing: .08em; white-space: nowrap; }
+.look-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 160px;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.look-chip:hover { border-color: var(--beam-line); background: var(--beam-soft); }
+.look-chip__key {
+  flex: none;
+  font-size: 9px;
+  color: var(--beam);
+  border: 1px solid var(--beam-line);
+  border-radius: 2px;
+  padding: 0 3px;
+  line-height: 1.4;
+}
+.look-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.look-save,
+.look-focus {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.look-save:hover,
+.look-focus:hover { color: var(--text); border-color: var(--muted-dim); }
+.look-focus[aria-pressed="true"] { color: var(--beam); border-color: var(--beam-line); background: var(--beam-soft); }
+.lookbar[data-blind="true"] .lookbar__label,
+.lookbar[data-blind="true"] .look-chip__key { color: var(--warn); border-color: var(--warn); }
+
+/* ── Focus mode (VDMX's closable-inspectors pattern): stage + look bar ARE the surface.
+ * Desktop-only (App never sets data-focus with the mobile layout active). ── */
+.deck[data-focus="true"] .body { grid-template-columns: 1fr; }
+.deck[data-focus="true"] .rail { display: none; }
+.deck[data-focus="true"] .show-drawer { display: none; }
 .deck-stage {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -296,6 +576,10 @@
 .tick.bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
 .tick.br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
 
+/* The LIVE/BLIND tally. LIVE is the broadcast red tally — this stage mirrors what the
+ * audience is seeing, so edits here land on the wall. BLIND (task A20) flips the whole
+ * stage chrome amber: the wall is frozen, the preview shows the off-air look, edits are
+ * safe — the grandMA-Blind / program-vs-preview convention, made unmissable at a glance. */
 .stage-badge {
   position: absolute;
   top: 12px;
@@ -305,12 +589,57 @@
   gap: 8px;
   font-family: var(--font-mono);
   font-size: 9.5px;
+  font-weight: 700;
   letter-spacing: .12em;
-  color: var(--cool);
+  color: var(--live);
   text-transform: uppercase;
   pointer-events: none;
 }
-.stage-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cool); box-shadow: 0 0 8px var(--cool); }
+.stage-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); box-shadow: 0 0 8px var(--live); }
+.deck-stage[data-blind="true"] { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn), 0 20px 60px -20px #000; }
+.deck-stage[data-blind="true"] .stage-badge { color: var(--warn); }
+.deck-stage[data-blind="true"] .stage-badge .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+/* On-stage Warp · Mask · FX chips (top-center): the SAME selection.stageEditMode the
+ * Inspector sections drive, surfaced on the surface the operator is already watching —
+ * switching what the handles edit no longer requires a trip to the right rail. */
+.stage-modes {
+  position: absolute;
+  bottom: 10px; /* bottom-center: top-center belongs to the selection label */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(10, 12, 17, 0.82);
+}
+.stage-mode-chip {
+  padding: 5px 14px;
+  border: none;
+  border-right: 1px solid var(--hairline);
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.stage-mode-chip:last-child { border-right: none; }
+.stage-mode-chip:hover { color: var(--text); }
+.stage-mode-chip[aria-pressed="true"] { color: var(--beam); background: var(--beam-soft); }
+
+.stage-blind-note {
+  position: absolute;
+  bottom: 10px;
+  left: 32px;
+  font-size: 9px;
+  letter-spacing: .14em;
+  color: var(--warn);
+  text-transform: uppercase;
+  pointer-events: none;
+}
 .stage-fps {
   position: absolute;
   top: 12px;
@@ -319,6 +648,7 @@
   font-size: 9.5px;
   color: var(--muted);
   letter-spacing: .1em;
+  text-transform: uppercase;
   pointer-events: none;
 }
 
@@ -376,15 +706,6 @@
  * The mockup's own `.select`/`.fader` div mockups are NOT ported — the real Select/Fader
  * primitives (native <select>/<input type=range>) are already themed globally in
  * tokens/base.css, so Inspector.tsx uses those directly instead of redrawing them. */
-/* Layer/Screen edit-target toggle (Task 12) — always the first thing in the Inspector,
- * above .insp-head, regardless of which target is active. Same .togglepill shape the
- * warp corner/mesh toggle uses. */
-.insp-target {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--hairline-soft);
-  flex: none;
-}
-
 .insp-head {
   padding: 14px 14px 10px;
   border-bottom: 1px solid var(--hairline-soft);
@@ -424,13 +745,18 @@
 .field .row { display: flex; align-items: center; gap: 8px; }
 .field .row input[type="range"] { flex: 1; min-width: 60px; }
 
-/* Warp · Mask · FX segmented control — drives both this panel's contextual body AND
- * (via the container's onModeChange -> selection.setStageEditMode) the Stage's
- * StageSelectionOverlay mode. */
-.modes { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
-.modes button {
-  padding: 9px 4px;
-  border-right: 1px solid var(--hairline);
+/* Warp / Mask / FX sections — the flattened replacement for the old exclusive segment:
+ * every section header is ALWAYS visible (title + live summary + chevron), only the
+ * active section's body expands, and activating one drives the Stage overlay via the
+ * container's onModeChange -> selection.setStageEditMode, same as the segment did. */
+.insp-sections { display: flex; flex-direction: column; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+.insp-sec { display: flex; flex-direction: column; border-bottom: 1px solid var(--hairline); }
+.insp-sec:last-child { border-bottom: none; }
+.insp-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
   background: var(--panel-raised);
   color: var(--muted);
   font-family: var(--font-mono);
@@ -438,14 +764,30 @@
   letter-spacing: .1em;
   text-transform: uppercase;
   cursor: pointer;
+  text-align: left;
   transition: color 120ms ease, background 120ms ease;
 }
-.modes button:last-child { border-right: none; }
-.modes button:hover { color: var(--text); }
-.modes button[aria-pressed="true"] { color: var(--beam); background: var(--beam-soft); }
+.insp-sec__head:hover { color: var(--text); }
+.insp-sec[data-active="true"] .insp-sec__head { color: var(--beam); background: var(--beam-soft); }
+.insp-sec__title { flex: none; }
+.insp-sec__sum {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 9px;
+  color: var(--muted-dim);
+  text-transform: lowercase;
+  letter-spacing: .06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.insp-sec[data-active="true"] .insp-sec__sum { color: var(--beam); opacity: .75; }
+.insp-sec__chev { flex: none; font-size: 8px; opacity: .7; }
+.insp-sec__body { padding: 11px 10px 13px; }
 
-/* Contextual body (warp / mask / fx), swapped by the segment above. */
-.ctx { display: flex; flex-direction: column; gap: 13px; border-top: 1px solid var(--hairline-soft); padding-top: 13px; }
+/* Contextual body (warp / mask / fx) inside the active section. */
+.ctx { display: flex; flex-direction: column; gap: 13px; }
 .subhead {
   display: flex;
   align-items: center;
@@ -668,8 +1010,13 @@
   .layer-hit { min-height: var(--tap-min); }
   .slot { min-height: var(--tap-min); }
   .addbtn { min-height: var(--tap-min); }
-  .modes button,
+  .insp-sec__head,
   .togglepill button { min-height: var(--tap-min); }
+  .look-chip,
+  .look-save,
+  .look-focus { min-height: var(--tap-min); }
+  .stage-mode-chip { min-height: var(--tap-min); }
+  .media-cell { min-height: var(--tap-min); }
   .screen-select .seg button,
   .screen-select-add { min-height: var(--tap-min); }
   .show-drawer-tab,

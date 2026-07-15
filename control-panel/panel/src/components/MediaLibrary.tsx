@@ -37,6 +37,10 @@ export function MediaLibrary({ media, uploadUrl, onRename, onRemove, recording =
   // XMLHttpRequest (not fetch) specifically for upload.onprogress on large files.
   const upload = (file: File) => {
     setError(null);
+    // Mark the upload in-flight IMMEDIATELY — the `progress === null` guards on the
+    // button/input otherwise allow a second concurrent upload during the window before
+    // the first onprogress event (or forever, when length isn't computable).
+    setProgress(0);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", uploadUrl);
     xhr.setRequestHeader("X-File-Name", file.name);
