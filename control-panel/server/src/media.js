@@ -37,7 +37,7 @@ const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
 // Three HTTP endpoints on the existing hand-rolled server (no multipart lib): raw body +
 // X-File-Name, mirroring how readJsonBody is hand-rolled in index.js. Factored out as a
 // router so it's testable without index.js's top-level listen().
-export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, maxBytes = DEFAULT_MAX_BYTES }) {
+export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, maxBytes = DEFAULT_MAX_BYTES, importer = null }) {
   // The panel itself (a separate origin from this server, e.g. :8082 vs :8080) calls
   // upload/delete directly via fetch(), so every JSON response needs the same wildcard
   // CORS policy the GET/serve path already carries for the render-client.
@@ -167,6 +167,41 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     sendJson(res, 200, { ok: true });
   }
 
+  // POST /api/media/import { url }: kick off an import-by-link (media-import.js) and
+  // return 202 immediately — progress and the final library entry arrive over the WS
+  // (mediaImportStatus relays + the normal media create broadcast), so a slow yt-dlp
+  // pull never holds an HTTP request open.
+  function handleImport(req, res) {
+    if (!importer) { sendJson(res, 501, { error: "import-by-link is not enabled" }); return; }
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      let body;
+      try {
+        body = JSON.parse(raw || "{}");
+      } catch {
+        sendJson(res, 400, { error: "invalid JSON body" });
+        return;
+      }
+      if (typeof body.url !== "string" || !body.url) {
+        sendJson(res, 400, { error: "body.url (string) is required" });
+        return;
+      }
+      // Validate the URL shape synchronously so the caller gets a real 400 for garbage;
+      // the download itself runs detached (errors surface as mediaImportStatus events).
+      try {
+        const parsed = new URL(body.url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("bad protocol");
+      } catch {
+        sendJson(res, 400, { error: "only http(s) links can be imported" });
+        return;
+      }
+      importer.importUrl(body.url).catch((err) => console.warn("[media-import] failed:", err?.message));
+      sendJson(res, 202, { ok: true });
+    });
+    req.on("error", () => sendJson(res, 400, { error: "request stream error" }));
+  }
+
   return {
     async handle(req, res) {
       const url = req.url || "";
@@ -174,6 +209,7 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
         handlePreflight(res);
         return true;
       }
+      if (req.method === "POST" && url === "/api/media/import") { handleImport(req, res); return true; }
       if (req.method === "POST" && url === "/api/media") { handleUpload(req, res); return true; }
       const serve = req.method === "GET" && /^\/media\/([^/?]+)/.exec(url);
       if (serve) { handleServe(req, res, decodeURIComponent(serve[1])); return true; }

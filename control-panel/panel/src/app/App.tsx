@@ -150,6 +150,11 @@ export function App() {
 
   const preview = usePreviewBus(() => selectedRef.current);
 
+  // Import-by-link progress, keyed by URL: "requesting" is set locally the moment the
+  // POST goes out; the server's mediaImportStatus relays take over (downloading → done/
+  // error). "done" clears the entry — the library's own create broadcast adds the item.
+  const [mediaImports, setMediaImports] = useState<Record<string, { status: string; error?: string }>>({});
+
   const wsUrl = useMemo(
     () => new URLSearchParams(location.search).get("ws") || `ws://${location.hostname}:8080`,
     [],
@@ -216,6 +221,16 @@ export function App() {
     onPreview(screenId, frame) {
       preview.push(screenId, frame);
     },
+    onMediaImportStatus(url, importStatus, error) {
+      setMediaImports((prev) => {
+        if (importStatus === "done") {
+          const next = { ...prev };
+          delete next[url];
+          return next;
+        }
+        return { ...prev, [url]: { status: importStatus, error } };
+      });
+    },
     onTransportStatus(layerId, position) {
       transportPositionsRef.current[layerId] = position;
       // The Inspector's Transport scrub readout renders this value, so an otherwise-idle
@@ -277,6 +292,47 @@ export function App() {
   const discardBlind = useCallback(() => {
     actions.blindDiscard();
   }, [actions]);
+
+  // Import-by-link: POST the URL; all progress comes back over the WS as
+  // mediaImportStatus relays (see the socket handler above).
+  const importMediaUrl = useCallback(
+    (url: string) => {
+      const trimmed = url.trim();
+      if (!/^https?:\/\/\S+$/i.test(trimmed)) return;
+      setMediaImports((prev) => ({ ...prev, [trimmed]: { status: "requesting" } }));
+      fetch(`${httpBase}/api/media/import`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: trimmed }),
+      }).catch(() => {
+        setMediaImports((prev) => ({ ...prev, [trimmed]: { status: "error", error: "could not reach the server" } }));
+      });
+    },
+    [httpBase],
+  );
+  const dismissMediaImport = useCallback((url: string) => {
+    setMediaImports((prev) => {
+      const next = { ...prev };
+      delete next[url];
+      return next;
+    });
+  }, []);
+
+  // Paste a link ANYWHERE (outside a text field) and it imports — the "just paste a
+  // YouTube link" flow. The media bin's own link field remains the discoverable path.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      const text = e.clipboardData?.getData("text")?.trim() ?? "";
+      if (/^https?:\/\/\S+$/i.test(text)) {
+        importMediaUrl(text);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [importMediaUrl]);
 
   // Look bar save: snapshot the current scene under an auto-name. Renaming/deleting
   // stays in the Show drawer's Presets tab — the bar itself is trigger-only.
@@ -826,6 +882,9 @@ export function App() {
       uploadUrl={`${httpBase}/api/media`}
       onUseOnSelected={useMediaOnSelected}
       onRemove={removeMedia}
+      onImportUrl={importMediaUrl}
+      imports={Object.entries(mediaImports).map(([url, s]) => ({ url, ...s }))}
+      onDismissImport={dismissMediaImport}
     />
   );
   const slotGridEl = (

@@ -289,6 +289,33 @@ test("the visibility eye toggles layers.<id>.visible through the normal update p
   await expect.poll(readVisible).toBe(true);
 });
 
+test("import-by-link: a media URL entered in the bin downloads server-side into the library", async ({ page }) => {
+  // A tiny file server standing in for "somewhere on the internet".
+  const fileServer = http.createServer((req, res) =>
+    handler(req, res, { public: path.join(__dirname, "fixtures"), cleanUrls: false }),
+  );
+  await new Promise((r) => fileServer.listen(8199, r));
+  try {
+    await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+    const link = page.locator(".media-bin__link");
+    await expect(link).toBeVisible();
+    await link.fill("http://localhost:8199/media-fixture-clip.mp4");
+    await link.press("Enter");
+
+    // The SERVER downloads it and it enters the library via the normal create path.
+    await expect
+      .poll(async () => {
+        const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+        return Object.values(state.media).find((m) => m.name === "media-fixture-clip.mp4")?.kind;
+      })
+      .toBe("video");
+    // …and the bin shows it as a real cell (create broadcast → thumbnail).
+    await expect(page.locator(".media-cell", { hasText: "media-fixture-clip" })).toBeVisible();
+  } finally {
+    fileServer.close();
+  }
+});
+
 test("layer context menu: right-click offers Hide and Duplicate through the normal write paths", async ({ page }) => {
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
   const row = page.locator('.layer[data-id="layer-2"] .layer-hit');

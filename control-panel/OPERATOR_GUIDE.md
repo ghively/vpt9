@@ -82,6 +82,14 @@ pointing at a deleted file just loses its picture.
 Anything in the library becomes available in every layer's and every source-bank slot's
 source picker.
 
+**Import by link.** Paste a URL — anywhere in the panel (outside a text field), or into
+the media bin's "paste a link" field — and the **server** downloads it into the library:
+a direct `.mp4`/`.webm`/`.gif`/`.jpg` link streams straight in; a YouTube/Vimeo/other
+streaming-site link is fetched with `yt-dlp` (install it on the server machine —
+`pip install yt-dlp` or your package manager — or those links will report an error;
+direct file links work either way). Progress shows as a dashed cell in the bin;
+a failed import shows its reason — click it to dismiss.
+
 ## Layer stack (left rail)
 
 The layer stack is your stack of video sources, shown top-of-stack-first — the top row

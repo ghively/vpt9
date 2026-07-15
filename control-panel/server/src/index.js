@@ -6,6 +6,7 @@ import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
 import { createOscOut } from "./osc-out.js";
 import { createMediaRouter } from "./media.js";
+import { createMediaImporter } from "./media-import.js";
 import { createSourceBankPresets } from "./source-bank-presets.js";
 import { createBlindSession } from "./blind.js";
 
@@ -197,7 +198,10 @@ function broadcastToPanels(message, exclude) {
   }
 }
 
-const mediaRouter = createMediaRouter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES });
+// Import-by-link (paste a URL on the panel): direct media files download straight in;
+// streaming sites go through yt-dlp when installed. See server/src/media-import.js.
+const mediaImporter = createMediaImporter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES });
+const mediaRouter = createMediaRouter({ mediaDir: MEDIA_DIR, state, broadcast, scheduleSave, maxBytes: MEDIA_MAX_BYTES, importer: mediaImporter });
 
 function handleCreate(socket, message) {
   const value = message.value ?? {};

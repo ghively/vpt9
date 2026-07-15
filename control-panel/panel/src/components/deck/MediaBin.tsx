@@ -16,6 +16,15 @@ export interface MediaBinProps {
   /** Context menu "Delete from library" — removes the file server-side (layers/slots
    *  referencing it are swept to safe fallbacks by the server). */
   onRemove?: (id: string) => void;
+  /** Import-by-link: a pasted/typed URL the SERVER downloads into the library (direct
+   *  media files immediately; YouTube & co. via yt-dlp). Also fired by App's global
+   *  paste handler — this field is the discoverable path. */
+  onImportUrl?: (url: string) => void;
+  /** In-flight/failed imports (from mediaImportStatus relays), rendered as status cells
+   *  in the grid until the finished item's create broadcast replaces them. */
+  imports?: Array<{ url: string; status: string; error?: string }>;
+  /** Clicking a failed import's cell dismisses it. */
+  onDismissImport?: (url: string) => void;
 }
 
 /** The visual media bin (MadMapper's Media Panel / Resolume's file browser, sized for
@@ -23,12 +32,20 @@ export interface MediaBinProps {
  *  source-bank slot, or the stage itself. Files can be dropped straight onto the bin
  *  (or picked via + add) to upload. Renaming/deleting stays in the Show drawer's Media
  *  tab — the bin is the fast path, not the manager. */
-export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove }: MediaBinProps) {
+export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dropArmed, setDropArmed] = useState(false);
+  const [linkDraft, setLinkDraft] = useState("");
   const ctx = useContextMenu();
+
+  const submitLink = () => {
+    const url = linkDraft.trim();
+    if (!url) return;
+    onImportUrl?.(url);
+    setLinkDraft("");
+  };
 
   const upload = async (files: FileList | File[]) => {
     setError(null);
@@ -100,8 +117,24 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
             <span className="media-cell__kind mono">{item.kind}</span>
           </div>
         ))}
-        {media.length === 0 && !uploading && (
-          <div className="media-bin__empty mono">drop video / gif / jpg files here, or + add</div>
+        {imports.map((imp) => (
+          <div
+            key={imp.url}
+            className="media-cell media-cell--import"
+            data-error={imp.status === "error" || undefined}
+            title={imp.status === "error" ? `${imp.error ?? "import failed"} — click to dismiss` : imp.url}
+            onClick={() => {
+              if (imp.status === "error") onDismissImport?.(imp.url);
+            }}
+          >
+            <span className="media-cell__import mono">
+              {imp.status === "error" ? (imp.error ?? "import failed") : "importing…"}
+            </span>
+            <span className="media-cell__name">{imp.url.replace(/^https?:\/\//, "")}</span>
+          </div>
+        ))}
+        {media.length === 0 && imports.length === 0 && !uploading && (
+          <div className="media-bin__empty mono">drop video / gif / jpg files here, + add, or paste a link</div>
         )}
       </div>
       <div className="media-bin__foot">
@@ -119,6 +152,27 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
         <button type="button" className="addbtn media-bin__add" disabled={uploading != null} onClick={() => fileRef.current?.click()}>
           {uploading ? `Uploading ${uploading}…` : "+ Add media"}
         </button>
+        {onImportUrl && (
+          <input
+            type="text"
+            className="media-bin__link"
+            placeholder="paste a link — YouTube, .mp4, .gif…"
+            value={linkDraft}
+            onChange={(e) => setLinkDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitLink();
+            }}
+            onPaste={(e) => {
+              // Pasting straight into the field imports immediately — no Enter needed.
+              const text = e.clipboardData.getData("text").trim();
+              if (/^https?:\/\/\S+$/i.test(text)) {
+                e.preventDefault();
+                onImportUrl(text);
+                setLinkDraft("");
+              }
+            }}
+          />
+        )}
         {error && <span className="media-bin__error mono">{error}</span>}
       </div>
       {ctx.menu}

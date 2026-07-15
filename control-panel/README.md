@@ -296,6 +296,12 @@ web codec instead), and reverse/negative playback rate (no browser exposes a neg
   next GO runs `cues[index]`. A cue with `autoContinue: false` (the default) holds at its
   end for the next GO rather than chaining automatically.
 
+- `{"type":"mediaImportStatus","url":"…","status":"downloading|done|error","error":"…"}` —
+  server → clients; progress relay for import-by-link (`POST /api/media/import` with
+  `{"url": "…"}` — direct media links download straight in, streaming sites go through
+  `yt-dlp` when installed on the server). Never persisted; the finished file arrives as
+  a normal `create` on `media`.
+
 `GET /state` returns the current state as JSON; `GET /health` is a liveness check;
 `POST /api/pip/:pipId/cast` with `{"videoId": "...", "title": "..."}` is the hook the
 cast-receiver (or anything else outside the WS protocol) uses to push a video into a PiP
