@@ -40,3 +40,20 @@ export function getMediaDrag(e: React.DragEvent): MediaDragPayload | null {
 export function mediaSourceUrl(payload: { filename: string }): string {
   return `/media/${payload.filename}`;
 }
+
+/** Layer-row reorder drag (the GIMP drag-a-layer-in-the-stack convention). Distinct
+ *  MIME from media drags so the two drop behaviors never cross. */
+export const LAYER_DRAG_TYPE = "application/x-vpt-layer";
+
+export function setLayerDrag(e: React.DragEvent, layerId: string) {
+  e.dataTransfer.setData(LAYER_DRAG_TYPE, layerId);
+  e.dataTransfer.effectAllowed = "move";
+}
+
+export function hasLayerDrag(e: React.DragEvent): boolean {
+  return Array.from(e.dataTransfer.types).includes(LAYER_DRAG_TYPE);
+}
+
+export function getLayerDrag(e: React.DragEvent): string | null {
+  return e.dataTransfer.getData(LAYER_DRAG_TYPE) || null;
+}

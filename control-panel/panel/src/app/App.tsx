@@ -497,6 +497,21 @@ export function App() {
     },
     [actions],
   );
+  // The visibility eye + drag-to-reorder (GIMP layer-panel conventions) — both plain
+  // leaf writes on the existing update path. Reorder uses fractional orders so a drop
+  // between two rows is one write, no stack renumbering.
+  const toggleLayerVisible = useCallback(
+    (id: string, visible: boolean) => {
+      actions.updateLayer(id, "visible", visible);
+    },
+    [actions],
+  );
+  const setLayerOrder = useCallback(
+    (id: string, order: number) => {
+      actions.updateLayer(id, "order", order);
+    },
+    [actions],
+  );
 
   // Flattened selection model: the LayerStack's pinned OUTPUT row selects the screen
   // target; selecting any layer row (or clicking a layer on the stage) returns to the
@@ -788,6 +803,8 @@ export function App() {
       hasClipboard={hasClipboard}
       onRenameLayer={renameLayer}
       onDropMedia={assignMediaToLayer}
+      onToggleVisible={toggleLayerVisible}
+      onSetLayerOrder={setLayerOrder}
       media={media}
       mediaBase={httpBase}
       outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}

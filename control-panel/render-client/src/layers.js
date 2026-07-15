@@ -602,6 +602,14 @@ export class LayerStack {
       // effective source), not layer.source — for playlist layers the two can differ, and
       // entry is the single source of truth for what's actually currently loaded.
       const isSlot = entry.sourceType === "slot";
+      // The visibility eye (layers.<id>.visible === false): skip compositing entirely —
+      // no texture upload, no fx chain, no blend — but keep the transport ticking so
+      // playback continues underneath and re-showing the layer is seamless (identical
+      // semantics to opacity 0, minus the per-frame GPU cost).
+      if (layer.visible === false) {
+        if (!isColor && !isSlot) this.applyTransport(layer, entry);
+        continue;
+      }
       // Per-source downscale (task A15): applies only to a layer's DIRECT video/image/
       // camera upload, not a shared-slot source (whose texture is shared across layers).
       // Reset imgUploaded when it changes so a static image re-uploads at the new size.

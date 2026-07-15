@@ -97,7 +97,13 @@
   min-height: 0;
   background: var(--panel);
 }
-.rail-l { border-right: 1px solid var(--hairline); }
+/* The left rail scrolls as ONE surface (layer stack + media bin + slots in natural
+ * height) — inner per-section scrollboxes silently hid rows once the bin landed, and
+ * flex-shrink let sections paint over each other; pin every section to natural height. */
+.rail-l { border-right: 1px solid var(--hairline); overflow-y: auto; }
+.rail-l > * { flex: none; }
+.rail-l .layers { overflow-y: visible; }
+.rail-l .media-bin__grid { max-height: none; overflow-y: visible; }
 .rail-r { border-left: 1px solid var(--hairline); }
 
 .sec-head {
@@ -136,7 +142,29 @@
   text-align: left;
   transition: border-color .12s, background .12s;
 }
+.layer-hit { user-select: none; } /* rows are draggable (reorder) — no accidental text drags */
 .layer-hit:hover { border-color: var(--muted-dim); }
+/* Variant with the visibility eye as a slim leading column (the OUTPUT row has no eye). */
+.layer-hit--eye { grid-template-columns: 18px 44px 1fr auto; gap: 8px; }
+.layer-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 25px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .12s;
+}
+.layer-eye:hover { color: var(--text); }
+/* Hidden layer: the eye goes caution-amber and the row content dims — GIMP's closed eye. */
+.layer[data-hidden="true"] .layer-eye { color: var(--warn); }
+.layer[data-hidden="true"] .thumb,
+.layer[data-hidden="true"] .layer-info,
+.layer[data-hidden="true"] .layer-op { opacity: .4; }
 .layer-hit[aria-selected="true"] { border-color: var(--beam-line); background: var(--deck-selected-surface); }
 .layer-hit[aria-selected="true"]::before {
   content: "";

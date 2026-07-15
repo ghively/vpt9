@@ -559,3 +559,18 @@ test("resolveDanglingSourceRefs sweeps layer sources, mattes, and playlist items
   assert.equal(state.layers["layer-1"].playlist.items.length, 1, "dead playlist item removed");
   assert.equal(state.layers["layer-1"].playlist.cursor, 0, "cursor clamped into the shrunk list");
 });
+
+test("layers.<id>.visible: backfilled true, pinned to boolean", () => {
+  const layer = { id: "l" };
+  ensureLayerDefaults(layer);
+  assert.equal(layer.visible, true, "eye defaults open");
+
+  const state = sampleState();
+  ensureLayerDefaults(state.layers["layer-1"]);
+  assert.equal(applyUpdate(state, "layers.layer-1.visible", false), true);
+  assert.equal(state.layers["layer-1"].visible, false);
+  for (const bad of [0, "off", null, {}]) {
+    assert.equal(applyUpdate(state, "layers.layer-1.visible", bad), false, `rejects ${JSON.stringify(bad)}`);
+  }
+  assert.equal(state.layers["layer-1"].visible, false, "bad writes never landed");
+});

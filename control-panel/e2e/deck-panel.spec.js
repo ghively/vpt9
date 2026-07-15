@@ -273,6 +273,22 @@ test("media bin: uploaded media renders as a thumbnail and drags onto a layer ro
     .toMatchObject({ type: "video", url: expect.stringMatching(/^\/media\/media-.*\.jpg$/) });
 });
 
+test("the visibility eye toggles layers.<id>.visible through the normal update path", async ({ page }) => {
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  const eye = page.locator('.layer[data-id="layer-1"] .layer-eye');
+  await expect(eye).toBeVisible();
+
+  const readVisible = async () => {
+    const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+    return state.layers["layer-1"].visible;
+  };
+  await eye.click();
+  await expect.poll(readVisible).toBe(false);
+  await expect(page.locator('.layer[data-id="layer-1"]')).toHaveAttribute("data-hidden", "true");
+  await eye.click();
+  await expect.poll(readVisible).toBe(true);
+});
+
 test("polygon mask vertices are draggable on the stage and persist through the existing mask update path", async ({ page }) => {
   const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
   await new Promise((resolve) => socket.once("open", resolve));

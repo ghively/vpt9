@@ -279,6 +279,9 @@ export function ensureLayerDefaults(layer) {
     warp: defaultWarp(),
     transport: defaultTransport(),
     sourceMode: "single",
+    // The layer visibility eye (GIMP convention): true = composited. Backfilled so the
+    // leaf exists for applyUpdate on layers saved before the eye existed.
+    visible: true,
     playlist: { items: [], cursor: -1 },
     // Per-source render downscale (task A15 — VPT8's `p adapt`): 1 = full res. Owned as an
     // explicit leaf (not left undefined) so the Inspector's downscale select can patch it —
@@ -345,7 +348,11 @@ export function loadState(filePath) {
       }
     }
   }
-  return structuredClone(DEFAULT_STATE);
+  // The fresh-boot path runs through the SAME backfill as a loaded file: DEFAULT_STATE's
+  // seeded demo layers predate several later per-layer fields (visible, downscale, …),
+  // and applyUpdate only ever patches an EXISTING leaf — without this, a control for any
+  // newer field was dead on the seeded layers until the first save/reload cycle.
+  return ensureStateDefaults(structuredClone(DEFAULT_STATE));
 }
 
 // Write-to-temp-then-rename so a process kill mid-write never leaves state.json
@@ -430,6 +437,9 @@ function corruptsStructure(keys, last, value) {
   // to null-or-source-ref. Keyed on the immediate parent, so a layer's OWN top-level
   // `source` (parent = the layer id, not "mask") stays unrestricted and freely swappable.
   if (last === "source" && keys[keys.length - 1] === "mask") return !isValidMaskSource(value);
+  // A layer's visibility eye (layers.<id>.visible): every render client reads it per
+  // frame to decide whether to composite the layer — pin it to a boolean like `blind`.
+  if (last === "visible" && keys.length === 2 && keys[0] === "layers") return typeof value !== "boolean";
   return false;
 }
 

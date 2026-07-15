@@ -85,7 +85,7 @@ function applyDerivedStateLight() {
 // playlist changes, sourceBank content, media, pip, audio owner — still takes the full
 // applyDerivedState() so sources re-resolve exactly as before.
 const RENDER_TIME_LEAF =
-  /^(?:master$|blind$|tempoBpm$|layers\.[^.]+\.(?:warp|mask|fx|opacity|blendMode|transport|downscale|name)(?:\.|$)|screens\.[^.]+\.(?:warp|name)(?:\.|$)|sourceBank\.\d+\.transport(?:\.|$))/;
+  /^(?:master$|blind$|tempoBpm$|layers\.[^.]+\.(?:warp|mask|fx|opacity|blendMode|transport|downscale|name|visible)(?:\.|$)|screens\.[^.]+\.(?:warp|name)(?:\.|$)|sourceBank\.\d+\.transport(?:\.|$))/;
 
 // The confidence-monitor preview switches to its faster "interactive" cadence for a
 // short window after any control-plane write lands (see the preview pusher below).

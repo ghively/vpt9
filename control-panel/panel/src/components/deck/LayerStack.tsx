@@ -1,9 +1,21 @@
-import { useState, type DragEvent } from "react";
+import { useState, type DragEvent, type KeyboardEvent } from "react";
 import { ToggleSquare } from "../primitives/ToggleSquare";
 import { rgbToHex } from "../color";
 import { MediaThumb } from "./MediaThumb";
-import { hasMediaDrag, getMediaDrag, type MediaDragPayload } from "./dnd";
+import { hasMediaDrag, getMediaDrag, hasLayerDrag, getLayerDrag, setLayerDrag, type MediaDragPayload } from "./dnd";
 import type { Layer, MediaItem } from "../types";
+
+/** The visibility eye — inline SVG (an emoji eye would break the instrument voice).
+ *  Open = composited; slashed = hidden (playback continues underneath). */
+function EyeIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+      <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" opacity={open ? 1 : 0} />
+      {!open && <line x1="4" y1="20" x2="20" y2="4" />}
+    </svg>
+  );
+}
 
 export interface LayerStackProps {
   /** Pre-sorted top-of-stack-first by the caller (App) — index 0 renders first/topmost. */
@@ -23,6 +35,10 @@ export interface LayerStackProps {
   onRenameLayer?: (id: string, name: string) => void;
   /** A MediaBin item dropped onto a layer row — assign it as that layer's source. */
   onDropMedia?: (id: string, payload: MediaDragPayload) => void;
+  /** The visibility eye: toggle whether the layer is composited at all. */
+  onToggleVisible?: (id: string, visible: boolean) => void;
+  /** Drag-to-reorder (rows are draggable): writes the dragged layer's new `order`. */
+  onSetLayerOrder?: (id: string, order: number) => void;
   /** Library items + serving origin, for rendering each layer's REAL content thumbnail. */
   media?: MediaItem[];
   mediaBase?: string;
@@ -120,6 +136,8 @@ export function LayerStack({
   hasClipboard,
   onRenameLayer,
   onDropMedia,
+  onToggleVisible,
+  onSetLayerOrder,
   media = [],
   mediaBase,
   outputName,
@@ -128,25 +146,51 @@ export function LayerStack({
 }: LayerStackProps) {
   const [dropId, setDropId] = useState<string | null>(null);
 
-  const dragProps = (layerId: string) =>
-    onDropMedia
-      ? {
-          onDragOver: (e: DragEvent) => {
-            if (!hasMediaDrag(e)) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "copy";
-            setDropId(layerId);
-          },
-          onDragLeave: () => setDropId((cur) => (cur === layerId ? null : cur)),
-          onDrop: (e: DragEvent) => {
-            const payload = getMediaDrag(e);
-            setDropId(null);
-            if (!payload) return;
-            e.preventDefault();
-            onDropMedia(layerId, payload);
-          },
-        }
-      : {};
+  // Drag a row onto another row to move it ABOVE that row (GIMP's reorder gesture).
+  // Fractional orders keep it a single leaf write — no renumbering of the whole stack.
+  const reorderOnto = (draggedId: string, targetId: string) => {
+    if (!onSetLayerOrder || draggedId === targetId) return;
+    const idx = layers.findIndex((l) => l.id === targetId);
+    if (idx < 0) return;
+    const target = layers[idx];
+    const above = layers[idx - 1]; // visually above = higher order (top-first list)
+    if (above?.id === draggedId) return; // already directly above the target
+    const newOrder = above ? ((target.order ?? 0) + (above.order ?? 0)) / 2 : (target.order ?? 0) + 1;
+    onSetLayerOrder(draggedId, newOrder);
+  };
+
+  const dragProps = (layerId: string) => ({
+    draggable: !!onSetLayerOrder,
+    onDragStart: (e: DragEvent) => {
+      // Don't hijack a text-selection drag inside the inline rename input.
+      if ((e.target as HTMLElement).closest("input")) {
+        e.preventDefault();
+        return;
+      }
+      setLayerDrag(e, layerId);
+    },
+    onDragOver: (e: DragEvent) => {
+      if (!(onDropMedia && hasMediaDrag(e)) && !(onSetLayerOrder && hasLayerDrag(e))) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = hasLayerDrag(e) ? "move" : "copy";
+      setDropId(layerId);
+    },
+    onDragLeave: () => setDropId((cur) => (cur === layerId ? null : cur)),
+    onDrop: (e: DragEvent) => {
+      setDropId(null);
+      const mediaPayload = getMediaDrag(e);
+      if (mediaPayload && onDropMedia) {
+        e.preventDefault();
+        onDropMedia(layerId, mediaPayload);
+        return;
+      }
+      const draggedLayerId = getLayerDrag(e);
+      if (draggedLayerId) {
+        e.preventDefault();
+        reorderOnto(draggedLayerId, layerId);
+      }
+    },
+  });
 
   return (
     <>
@@ -170,15 +214,48 @@ export function LayerStack({
           const opacityPct = Math.round((layer.opacity ?? 1) * 100);
           const stackIndex = layers.length - i;
           const isSelected = layer.id === selectedId;
+          const isVisible = layer.visible !== false;
+          const onRowKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect(layer.id);
+            }
+          };
 
           return (
-            <div key={layer.id} className="layer" data-id={layer.id} data-selected={isSelected} data-drop={dropId === layer.id} {...dragProps(layer.id)}>
-              <button
-                type="button"
-                className="layer-hit"
+            <div
+              key={layer.id}
+              className="layer"
+              data-id={layer.id}
+              data-selected={isSelected}
+              data-hidden={!isVisible}
+              data-drop={dropId === layer.id}
+              {...dragProps(layer.id)}
+            >
+              {/* A div-with-button-role, not a <button>: the visibility eye nests inside
+               *  the hit area (nested <button>s are invalid HTML). */}
+              <div
+                className={onToggleVisible ? "layer-hit layer-hit--eye" : "layer-hit"}
+                role="button"
+                tabIndex={0}
                 aria-selected={isSelected}
                 onClick={() => onSelect(layer.id)}
+                onKeyDown={onRowKeyDown}
               >
+                {onToggleVisible && (
+                  <button
+                    type="button"
+                    className="layer-eye"
+                    aria-pressed={isVisible}
+                    title={isVisible ? "Hide layer (playback continues underneath)" : "Show layer"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleVisible(layer.id, !isVisible);
+                    }}
+                  >
+                    <EyeIcon open={isVisible} />
+                  </button>
+                )}
                 <LayerThumb layer={layer} media={media} mediaBase={mediaBase} />
                 <span className="layer-info">
                   <LayerName layer={layer} onRename={onRenameLayer} />
@@ -192,40 +269,44 @@ export function LayerStack({
                     <i style={{ width: `${opacityPct}%` }} />
                   </span>
                 </span>
-              </button>
-              <div className="layer-ops">
-                <ToggleSquare
-                  className="move-btn"
-                  label="▲"
-                  title="Move toward front"
-                  disabled={i === 0}
-                  onClick={() => onMoveLayer(layer.id, "up")}
-                />
-                <ToggleSquare
-                  className="move-btn"
-                  label="▼"
-                  title="Move toward back"
-                  disabled={i === layers.length - 1}
-                  onClick={() => onMoveLayer(layer.id, "down")}
-                />
-                <ToggleSquare
-                  label="⧉"
-                  title="Copy layer look (opacity, blend, mask, FX)"
-                  onClick={() => onCopyLayer(layer.id)}
-                />
-                <ToggleSquare
-                  label="⇩"
-                  title="Paste copied look onto this layer"
-                  disabled={!hasClipboard}
-                  onClick={() => onPasteLayer(layer.id)}
-                />
-                <ToggleSquare
-                  className="remove-btn"
-                  label="×"
-                  title="Remove layer"
-                  onClick={() => onRemoveLayer(layer.id)}
-                />
               </div>
+              {/* Controls for the SELECTED layer only (GIMP shows tools for the active
+               *  layer, not five buttons on every row) — selection is one click away. */}
+              {isSelected && (
+                <div className="layer-ops">
+                  <ToggleSquare
+                    className="move-btn"
+                    label="▲"
+                    title="Move toward front (or drag the row)"
+                    disabled={i === 0}
+                    onClick={() => onMoveLayer(layer.id, "up")}
+                  />
+                  <ToggleSquare
+                    className="move-btn"
+                    label="▼"
+                    title="Move toward back (or drag the row)"
+                    disabled={i === layers.length - 1}
+                    onClick={() => onMoveLayer(layer.id, "down")}
+                  />
+                  <ToggleSquare
+                    label="⧉"
+                    title="Copy layer look (opacity, blend, mask, FX)"
+                    onClick={() => onCopyLayer(layer.id)}
+                  />
+                  <ToggleSquare
+                    label="⇩"
+                    title="Paste copied look onto this layer"
+                    disabled={!hasClipboard}
+                    onClick={() => onPasteLayer(layer.id)}
+                  />
+                  <ToggleSquare
+                    className="remove-btn"
+                    label="×"
+                    title="Remove layer"
+                    onClick={() => onRemoveLayer(layer.id)}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
