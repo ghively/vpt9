@@ -88,7 +88,7 @@
 /* ---------------- body columns ---------------- */
 .body {
   display: grid;
-  grid-template-columns: 232px 1fr 288px;
+  grid-template-columns: 276px 1fr 288px; /* left rail widened for the MediaBin thumbnails */
   min-height: 0;
 }
 .rail {
@@ -149,6 +149,7 @@
   box-shadow: 0 0 8px var(--beam-line);
 }
 .thumb {
+  position: relative; /* anchors the absolute .media-thumb content inside the box */
   flex: none;
   width: 44px;
   height: 25px;
@@ -218,6 +219,8 @@
 
 .slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 0 10px 12px; }
 .slot {
+  position: relative;
+  overflow: hidden;
   aspect-ratio: 16 / 10;
   display: flex;
   align-items: flex-end;
@@ -230,10 +233,111 @@
   transition: border-color .12s;
 }
 .slot:hover { border-color: var(--muted-dim); }
-.slot .n { font-family: var(--font-mono); font-size: 9px; color: var(--muted-dim); letter-spacing: .1em; }
+.slot .n {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted-dim);
+  letter-spacing: .1em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
+}
 .slot[data-filled="true"] { border-color: var(--cool-line); }
 .slot[data-filled="true"] .n { color: var(--cool); }
 .slot[data-editing="true"] { border-color: var(--beam-line); background: var(--deck-selected-surface); }
+/* A filled slot shows its actual content behind the label (media thumb / color fill). */
+.slot__thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .85; }
+
+/* ---------------- media bin (the visual library) ----------------
+ * MadMapper's Media Panel, sized for the rail: real thumbnails, draggable onto layer
+ * rows / slots / the stage; OS files dropped on the bin upload straight into the
+ * library. Management (rename/delete) stays in the Show drawer's Media tab. */
+.media-bin { display: flex; flex-direction: column; min-height: 96px; }
+.media-bin[data-drop="true"] { outline: 1px dashed var(--beam); outline-offset: -4px; }
+.media-bin__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 0 10px;
+  overflow-y: auto;
+  max-height: 300px;
+}
+.media-cell {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel-sunken);
+  cursor: grab;
+  transition: border-color .12s;
+}
+.media-cell:hover { border-color: var(--beam-line); }
+.media-cell:active { cursor: grabbing; }
+.media-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.media-cell__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  font-size: 10px;
+  color: var(--text);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.media-cell__kind {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 4px;
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--cool);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.media-bin__empty {
+  grid-column: 1 / -1;
+  padding: 14px 8px;
+  border: 1px dashed var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  letter-spacing: .08em;
+  color: var(--muted-dim);
+  text-align: center;
+}
+.media-bin__foot { display: flex; flex-direction: column; gap: 4px; }
+.media-bin__add { margin-bottom: 4px; }
+.media-bin__error { padding: 0 12px 6px; font-size: 9px; color: var(--live); }
+
+/* ---------------- drag-and-drop affordances ----------------
+ * Anything armed as a drop target glows tungsten — layer rows, slots, the stage. */
+.layer[data-drop="true"] .layer-hit,
+.slot[data-drop="true"] { border-color: var(--beam); background: var(--beam-soft); }
+.deck-stage[data-drop="true"] { border-color: var(--beam); box-shadow: inset 0 0 0 1px var(--beam), 0 20px 60px -20px #000; }
+
+/* Inline layer rename (double-click the name). */
+.layer-rename-input { width: 100%; min-width: 0; font-size: 12px; padding: 1px 4px; }
+
+/* Non-visual source tags (camera / shared slot / external URL) on a layer thumb. */
+.thumb--tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  letter-spacing: .1em;
+  color: var(--cool);
+}
+.thumb__media { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* Inline per-slot editor (SourceBankSlotEditor, shared with the full-width
  * SourceBankPanel) revealed below the grid when a cell is clicked. Its `.media-row`
@@ -410,6 +514,37 @@
 .deck-stage[data-blind="true"] { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn), 0 20px 60px -20px #000; }
 .deck-stage[data-blind="true"] .stage-badge { color: var(--warn); }
 .deck-stage[data-blind="true"] .stage-badge .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+/* On-stage Warp · Mask · FX chips (top-center): the SAME selection.stageEditMode the
+ * Inspector sections drive, surfaced on the surface the operator is already watching —
+ * switching what the handles edit no longer requires a trip to the right rail. */
+.stage-modes {
+  position: absolute;
+  bottom: 10px; /* bottom-center: top-center belongs to the selection label */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(10, 12, 17, 0.82);
+}
+.stage-mode-chip {
+  padding: 5px 14px;
+  border: none;
+  border-right: 1px solid var(--hairline);
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.stage-mode-chip:last-child { border-right: none; }
+.stage-mode-chip:hover { color: var(--text); }
+.stage-mode-chip[aria-pressed="true"] { color: var(--beam); background: var(--beam-soft); }
+
 .stage-blind-note {
   position: absolute;
   bottom: 10px;
@@ -795,6 +930,8 @@
   .look-chip,
   .look-save,
   .look-focus { min-height: var(--tap-min); }
+  .stage-mode-chip { min-height: var(--tap-min); }
+  .media-cell { min-height: var(--tap-min); }
   .screen-select .seg button,
   .screen-select-add { min-height: var(--tap-min); }
   .show-drawer-tab,

@@ -1,6 +1,8 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { ConfidenceMonitorHandle } from "../ConfidenceMonitor";
 import { pointInQuad, type Quad } from "./layerGeometry";
+import { hasMediaDrag, getMediaDrag, type MediaDragPayload } from "./dnd";
+import type { EditMode } from "./Inspector";
 
 export interface StageProps {
   /** Selected screen id (e.g. "screen-1") — shown in the LIVE badge. Display only; Stage
@@ -27,7 +29,20 @@ export interface StageProps {
    *  `target.closest`), so grabbing a handle never also triggers a background/select
    *  action underneath it. */
   onBackgroundPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  /** On-stage Warp · Mask · FX chips (top-center) — the same mode state the Inspector's
+   *  sections drive, surfaced where the operator is already looking. Omit (screen-warp
+   *  target, no selection) to hide them. */
+  modeChips?: { mode: EditMode; onChange: (mode: EditMode) => void } | null;
+  /** A MediaBin item dropped onto the stage: `point` is the normalized 0..1 drop
+   *  position, so the container can assign to whichever layer's quad is under it. */
+  onDropMedia?: (point: { x: number; y: number }, payload: MediaDragPayload) => void;
 }
+
+const MODE_CHIPS: Array<{ key: EditMode; label: string }> = [
+  { key: "warp", label: "Warp" },
+  { key: "mask", label: "Mask" },
+  { key: "fx", label: "FX" },
+];
 
 /** The dominant live-preview at the center of the deck: the render-client's low-res
  *  preview frame framed in the confidence-monitor's registration chrome (faint grid,
@@ -52,7 +67,7 @@ export interface StageProps {
  *  drive the `<img>` directly at the render-client's ~250ms cadence, without a
  *  React re-render (mirrors `ConfidenceMonitor.tsx`'s own `setFrame` contract). */
 export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function Stage(
-  { screenId, frame, blind = false, overlay, hitLayers, onBackgroundPointerDown },
+  { screenId, frame, blind = false, overlay, hitLayers, onBackgroundPointerDown, modeChips, onDropMedia },
   ref,
 ) {
   const imgRef = useRef<HTMLImageElement>(null);
@@ -60,6 +75,7 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
   const resRef = useRef<HTMLDivElement>(null);
   const resTextRef = useRef("");
   const [hoverQuad, setHoverQuad] = useState<Quad | null>(null);
+  const [dropArmed, setDropArmed] = useState(false);
 
   useImperativeHandle(
     ref,
@@ -135,9 +151,28 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       ref={stageRef}
       data-live={!!frame}
       data-blind={blind}
+      data-drop={dropArmed}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
+      onDragOver={(e: DragEvent) => {
+        if (!onDropMedia || !hasMediaDrag(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDropArmed(true);
+      }}
+      onDragLeave={() => setDropArmed(false)}
+      onDrop={(e: DragEvent) => {
+        setDropArmed(false);
+        const payload = getMediaDrag(e);
+        if (!payload || !onDropMedia) return;
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        onDropMedia(
+          { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height },
+          payload,
+        );
+      }}
     >
       {/* src omitted when there's no frame so panel.css's `.preview-img:not([src])` rule
        *  hides the broken-image glyph instead of showing one. */}
@@ -155,6 +190,21 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
         <span className="dot" /> {blind ? "BLIND" : "LIVE"} · {screenId.replace(/-/g, " ").toUpperCase()}
       </div>
       <div ref={resRef} className="stage-fps mono" />
+      {modeChips && (
+        <div className="stage-modes" role="group" aria-label="Stage edit mode">
+          {MODE_CHIPS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              className="stage-mode-chip"
+              aria-pressed={modeChips.mode === c.key}
+              onClick={() => modeChips.onChange(c.key)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
       {blind && <div className="stage-blind-note mono">wall frozen · edits off-air · go live commits · discard reverts</div>}
       <div className="stage-overlay">
         {hoverQuad && (

@@ -17,6 +17,7 @@ import {
   LfoRack,
   LookBar,
   MasterControl,
+  MediaBin,
   MediaLibrary,
   MidiMapPanel,
   MobileTabBar,
@@ -37,7 +38,8 @@ import {
   type TargetOption,
 } from "../components";
 import { layerQuad, pickTopLayer } from "../components/deck/layerGeometry";
-import type { Layer } from "../components/types";
+import { mediaSourceUrl, type MediaDragPayload } from "../components/deck/dnd";
+import type { Layer, MediaItem } from "../components/types";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
@@ -462,6 +464,40 @@ export function App() {
   const selectedLayer = layersTopFirst.find((l) => l.id === selection.selectedLayerId) ?? null;
   const selectedScreen = (selectedScreenId && state.screens?.[selectedScreenId]) || null;
 
+  // Direct manipulation (the MadMapper/Resolume pattern): media thumbnails drag out of
+  // the MediaBin onto a layer row, a source-bank slot, or the stage itself — all landing
+  // on the SAME source write path the Inspector's picker uses. Double-click in the bin
+  // assigns to the selected layer (the pointer-only/touch fallback).
+  const assignMediaToLayer = useCallback(
+    (layerId: string, payload: { filename: string }) => {
+      actions.updateLayer(layerId, "source", { type: "video", url: mediaSourceUrl(payload) });
+    },
+    [actions],
+  );
+  const onStageDropMedia = useCallback(
+    (point: { x: number; y: number }, payload: MediaDragPayload) => {
+      // Prefer the layer whose warped quad is under the drop point (topmost wins),
+      // falling back to the current selection for drops on empty background.
+      const topFirst = Object.values(stateRef.current.layers).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+      const hitId = pickTopLayer(topFirst, point);
+      const targetId = hitId ?? selection.selectedLayerId;
+      if (targetId) assignMediaToLayer(targetId, payload);
+    },
+    [assignMediaToLayer, selection],
+  );
+  const useMediaOnSelected = useCallback(
+    (item: MediaItem) => {
+      if (selection.selectedLayerId) assignMediaToLayer(selection.selectedLayerId, item);
+    },
+    [assignMediaToLayer, selection],
+  );
+  const renameLayer = useCallback(
+    (id: string, name: string) => {
+      actions.updateLayer(id, "name", name);
+    },
+    [actions],
+  );
+
   // Flattened selection model: the LayerStack's pinned OUTPUT row selects the screen
   // target; selecting any layer row (or clicking a layer on the stage) returns to the
   // layer target. Replaces the old Inspector-buried Layer/Screen toggle — the stack now
@@ -750,16 +786,24 @@ export function App() {
       onCopyLayer={copyLayer}
       onPasteLayer={pasteLayer}
       hasClipboard={hasClipboard}
+      onRenameLayer={renameLayer}
+      onDropMedia={assignMediaToLayer}
+      media={media}
+      mediaBase={httpBase}
       outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}
       outputSelected={selection.editTarget === "screen"}
       onSelectOutput={selectOutput}
     />
+  );
+  const mediaBinEl = (
+    <MediaBin media={media} mediaBase={httpBase} uploadUrl={`${httpBase}/api/media`} onUseOnSelected={useMediaOnSelected} />
   );
   const slotGridEl = (
     <SlotGrid
       slots={state.sourceBank}
       media={Object.values(state.media)}
       cameraDevices={cameraDevices}
+      mediaBase={httpBase}
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
       onSetTransport={actions.setSourceBankSlotTransport}
@@ -810,6 +854,12 @@ export function App() {
       }
       hitLayers={hitLayers}
       onBackgroundPointerDown={onBackgroundPointerDown}
+      modeChips={
+        selection.editTarget === "layer" && selectedLayer
+          ? { mode: selection.stageEditMode, onChange: selection.setStageEditMode }
+          : null
+      }
+      onDropMedia={onStageDropMedia}
     />
   );
   // Task-12-final type-tighten: Inspector's props are now a discriminated union keyed
@@ -874,7 +924,12 @@ export function App() {
             </main>
             <div className="sheet">
               {mobileTab === "layers" && <aside className="rail rail-l">{layerStackEl}</aside>}
-              {mobileTab === "slots" && <aside className="rail rail-l">{slotGridEl}</aside>}
+              {mobileTab === "slots" && (
+                <aside className="rail rail-l">
+                  {mediaBinEl}
+                  {slotGridEl}
+                </aside>
+              )}
               {mobileTab === "inspector" && <aside className="rail rail-r insp">{inspectorEl}</aside>}
               {mobileTab === "show" && showDrawerEl}
             </div>
@@ -888,6 +943,7 @@ export function App() {
           <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
             <aside className="rail rail-l">
               {layerStackEl}
+              {mediaBinEl}
               {slotGridEl}
             </aside>
             <main className="stage-wrap">

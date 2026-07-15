@@ -15,7 +15,9 @@ import { applyCreate } from "./state.js";
 export function createSourceBankPresets({ state, broadcast, scheduleSave }) {
   function save({ id, name } = {}) {
     const preset = {
-      id: id || `sbp-${Date.now()}`,
+      // Random suffix: two saves in the same millisecond must not collide (see
+      // handlePresetSave in index.js — a bare Date.now() id silently overwrote).
+      id: id || `sbp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
       name: name || "Sources",
       slots: structuredClone(state.sourceBank),
     };

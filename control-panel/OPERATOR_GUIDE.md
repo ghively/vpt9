@@ -17,10 +17,18 @@ up right there.
  left rail:        look bar: numbered look chips · +save · focus
   OUTPUT row       the Stage:                              inspector:
   layer stack       live preview of the selected            the SELECTED thing's
-  slot grid          screen's output, with                   controls — Warp / Mask /
-                      click-to-select regions per layer       FX sections, always listed
- show drawer (bottom, collapsible): Presets · Cues · Timers · LFO · MIDI · Media · PiP
+  media bin          screen's output — click-to-select       controls — Warp / Mask /
+  shared slots       regions per layer, Warp·Mask·FX         FX sections, always listed
+                      chips, drag-media-to-assign
+ show drawer (bottom, collapsible): Looks · Source sets · Cues · Timers · Motion · MIDI · Media · Cast
 ```
+
+**Drag and drop is the fast path.** Every thumbnail in the left rail's **media bin** drags
+onto a layer row, a shared slot, or straight onto the Stage (the layer whose picture is
+under the drop point gets it). Drop video/gif/jpg files from your computer onto the bin
+to upload them. Double-click a bin item to put it on the selected layer. Every one of
+these lands on the same source controls the Inspector offers — the pickers remain for
+touch and precision.
 
 On a phone or anything under 720px wide, the left rail and inspector collapse into
 bottom-sheet tabs instead — the Stage stays dominant either way. A status lamp in the
@@ -77,6 +85,9 @@ draws over the ones below it, same as VPT8.
   thing every layer below composites into. Select it to put the Stage and Inspector in
   screen-warp mode (see "Screens and screen/output warp" below); select any layer row to
   come back to layer editing.
+- Each row's thumbnail shows the layer's **actual content** (its color, its media's own
+  picture, or a CAM/slot tag). **Double-click the name to rename** it in place, and
+  **drop a media-bin thumbnail on a row** to make it that layer's source.
 - Click a row to select that layer (same as clicking it on the Stage).
 - Drag a row to reorder it, or use its **▲ / ▼**.
 - **⧉ / ⇩** on a selected layer's Inspector header copies its whole "look" (opacity,

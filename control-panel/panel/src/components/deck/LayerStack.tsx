@@ -1,6 +1,9 @@
+import { useState, type DragEvent } from "react";
 import { ToggleSquare } from "../primitives/ToggleSquare";
 import { rgbToHex } from "../color";
-import type { Layer } from "../types";
+import { MediaThumb } from "./MediaThumb";
+import { hasMediaDrag, getMediaDrag, type MediaDragPayload } from "./dnd";
+import type { Layer, MediaItem } from "../types";
 
 export interface LayerStackProps {
   /** Pre-sorted top-of-stack-first by the caller (App) — index 0 renders first/topmost. */
@@ -16,6 +19,13 @@ export interface LayerStackProps {
   onPasteLayer: (id: string) => void;
   /** Whether the clipboard currently holds a copied look — gates the paste button. */
   hasClipboard: boolean;
+  /** Double-click a layer's name to rename it inline. */
+  onRenameLayer?: (id: string, name: string) => void;
+  /** A MediaBin item dropped onto a layer row — assign it as that layer's source. */
+  onDropMedia?: (id: string, payload: MediaDragPayload) => void;
+  /** Library items + serving origin, for rendering each layer's REAL content thumbnail. */
+  media?: MediaItem[];
+  mediaBase?: string;
   /** The pinned projector OUTPUT row (replaces the old Inspector Layer/Screen toggle):
    *  the active screen appears at the top of the stack as the thing everything below
    *  composites INTO. Selecting it puts the stage + inspector in screen-warp mode.
@@ -25,10 +35,79 @@ export interface LayerStackProps {
   onSelectOutput?: () => void;
 }
 
-/** Compact left-rail layer list: a color swatch (or gradient placeholder) thumbnail,
- *  name, blend/index meta, and an opacity bar per layer. Rows are selectable (driving
- *  the stage handles + inspector in later tasks) and carry reorder/remove/copy/paste
- *  affordances that call straight into the existing write path — no new message types. */
+/** The layer's thumbnail: its ACTUAL content wherever possible — a color layer shows
+ *  its color, a library source shows the media's own thumbnail, camera/slot/external
+ *  sources show a labeled tile. Answering "what's on this layer?" by looking is the
+ *  media-first redesign's core move. */
+function LayerThumb({ layer, media, mediaBase }: { layer: Layer; media: MediaItem[]; mediaBase?: string }) {
+  const source = layer.source;
+  if (source?.type === "color") {
+    return <span className="thumb" style={{ background: rgbToHex(source.color ?? [0.5, 0.5, 0.5]) }} />;
+  }
+  if (source?.type === "video" && mediaBase) {
+    const item = media.find((m) => `/media/${m.filename}` === source.url);
+    if (item) {
+      return (
+        <span className="thumb">
+          <MediaThumb item={item} mediaBase={mediaBase} className="thumb__media" />
+        </span>
+      );
+    }
+    return <span className="thumb thumb--tag mono">URL</span>;
+  }
+  if (source?.type === "camera") return <span className="thumb thumb--tag mono">CAM</span>;
+  if (source?.type === "slot") return <span className="thumb thumb--tag mono">{source.slotId?.replace("slot-", "S") ?? "SLOT"}</span>;
+  return <span className="thumb" />;
+}
+
+/** The layer's display name, renamed inline on double-click (like every clip name in
+ *  Resolume/preset chip here) — no trip to a form field somewhere else. */
+function LayerName({ layer, onRename }: { layer: Layer; onRename?: (id: string, name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(layer.name ?? "");
+  if (!editing) {
+    return (
+      <span
+        className="nm"
+        title={onRename ? "Double-click to rename" : undefined}
+        onDoubleClick={(e) => {
+          if (!onRename) return;
+          e.stopPropagation();
+          setDraft(layer.name ?? "");
+          setEditing(true);
+        }}
+      >
+        {layer.name}
+      </span>
+    );
+  }
+  const commit = () => {
+    setEditing(false);
+    const name = draft.trim();
+    if (name && name !== layer.name) onRename?.(layer.id, name);
+  };
+  return (
+    <input
+      type="text"
+      className="layer-rename-input"
+      value={draft}
+      autoFocus
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") setEditing(false);
+      }}
+    />
+  );
+}
+
+/** Compact left-rail layer list: a real content thumbnail, name (double-click to
+ *  rename), blend/index meta, and an opacity bar per layer. Rows are selectable
+ *  (driving the stage handles + inspector), accept media drops as source assignment,
+ *  and carry reorder/remove/copy/paste affordances that call straight into the
+ *  existing write path — no new message types. */
 export function LayerStack({
   layers,
   selectedId,
@@ -39,10 +118,36 @@ export function LayerStack({
   onCopyLayer,
   onPasteLayer,
   hasClipboard,
+  onRenameLayer,
+  onDropMedia,
+  media = [],
+  mediaBase,
   outputName,
   outputSelected = false,
   onSelectOutput,
 }: LayerStackProps) {
+  const [dropId, setDropId] = useState<string | null>(null);
+
+  const dragProps = (layerId: string) =>
+    onDropMedia
+      ? {
+          onDragOver: (e: DragEvent) => {
+            if (!hasMediaDrag(e)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setDropId(layerId);
+          },
+          onDragLeave: () => setDropId((cur) => (cur === layerId ? null : cur)),
+          onDrop: (e: DragEvent) => {
+            const payload = getMediaDrag(e);
+            setDropId(null);
+            if (!payload) return;
+            e.preventDefault();
+            onDropMedia(layerId, payload);
+          },
+        }
+      : {};
+
   return (
     <>
       <div className="sec-head label">
@@ -62,25 +167,21 @@ export function LayerStack({
           </div>
         )}
         {layers.map((layer, i) => {
-          const isColor = layer.source?.type === "color";
-          const thumbBg = isColor
-            ? rgbToHex(layer.source?.color ?? [0.5, 0.5, 0.5])
-            : "linear-gradient(135deg,#12283b,#0c1620)";
           const opacityPct = Math.round((layer.opacity ?? 1) * 100);
           const stackIndex = layers.length - i;
           const isSelected = layer.id === selectedId;
 
           return (
-            <div key={layer.id} className="layer" data-id={layer.id} data-selected={isSelected}>
+            <div key={layer.id} className="layer" data-id={layer.id} data-selected={isSelected} data-drop={dropId === layer.id} {...dragProps(layer.id)}>
               <button
                 type="button"
                 className="layer-hit"
                 aria-selected={isSelected}
                 onClick={() => onSelect(layer.id)}
               >
-                <span className="thumb" style={{ background: thumbBg }} />
+                <LayerThumb layer={layer} media={media} mediaBase={mediaBase} />
                 <span className="layer-info">
-                  <span className="nm">{layer.name}</span>
+                  <LayerName layer={layer} onRename={onRenameLayer} />
                   <span className="meta">
                     {layer.blendMode ?? "normal"} · L{stackIndex}
                   </span>
@@ -109,12 +210,12 @@ export function LayerStack({
                 />
                 <ToggleSquare
                   label="⧉"
-                  title="Copy layer look"
+                  title="Copy layer look (opacity, blend, mask, FX)"
                   onClick={() => onCopyLayer(layer.id)}
                 />
                 <ToggleSquare
                   label="⇩"
-                  title="Paste layer look"
+                  title="Paste copied look onto this layer"
                   disabled={!hasClipboard}
                   onClick={() => onPasteLayer(layer.id)}
                 />

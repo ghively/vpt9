@@ -226,8 +226,13 @@ function handlePresetSave(message) {
   for (const field of PRESET_FIELDS) snapshot[field] = structuredClone(state[field]);
   // Coerce a non-string id to a generated one instead of letting applyCreate refuse it —
   // the old path broadcast a phantom {key:null} create that every client dropped, so the
-  // operator's "saved" look silently vanished.
-  const id = typeof message.id === "string" && message.id ? message.id : `preset-${Date.now()}`;
+  // operator's "saved" look silently vanished. The random suffix matters: two saves in
+  // the same millisecond (a double-clicked +save, a scripted setup) used to collide on
+  // a bare Date.now() id and the second silently overwrote the first.
+  const id =
+    typeof message.id === "string" && message.id
+      ? message.id
+      : `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   const preset = { id, name: typeof message.name === "string" && message.name ? message.name : "Untitled", snapshot };
   const key = applyCreate(state, "presets", preset);
   if (key == null) return;

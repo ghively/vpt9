@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import http from "node:http";
 import os from "node:os";
 import { rmSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import handler from "serve-handler";
 import WebSocket from "ws";
 
@@ -243,6 +244,33 @@ test("switching to Screen edit target and dragging a corner handle sends the SCR
   // "screens.screen-1.warp.corners.0" update over the socket (the EXISTING screen warp
   // action/path — no new WS message type), not just a local-only DOM change.
   await expect.poll(async () => (await readScreenCorners())[0]).not.toEqual({ x: 0, y: 0 });
+});
+
+test("media bin: uploaded media renders as a thumbnail and drags onto a layer row as its source", async ({ page }) => {
+  // Upload the red jpg fixture over the same HTTP endpoint the bin's +add uses.
+  const jpg = await readFile(path.join(__dirname, "fixtures", "media-fixture-red.jpg"));
+  const res = await fetch(`http://localhost:${WS_PORT}/api/media`, {
+    method: "POST",
+    headers: { "X-File-Name": "drag-fixture.jpg" },
+    body: jpg,
+  });
+  expect(res.ok).toBe(true);
+
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+
+  // The bin shows the item as a real thumbnail cell.
+  const cell = page.locator(".media-cell", { hasText: "drag-fixture" });
+  await expect(cell).toBeVisible();
+
+  // Drag it onto layer-1's row — the layer's source must become the library url,
+  // through the SAME layers.<id>.source write path the Inspector picker uses.
+  await cell.dragTo(page.locator('.layer[data-id="layer-1"] .layer-hit'));
+  await expect
+    .poll(async () => {
+      const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+      return state.layers["layer-1"].source;
+    })
+    .toMatchObject({ type: "video", url: expect.stringMatching(/^\/media\/media-.*\.jpg$/) });
 });
 
 test("polygon mask vertices are draggable on the stage and persist through the existing mask update path", async ({ page }) => {
