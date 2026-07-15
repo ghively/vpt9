@@ -116,8 +116,10 @@ web codec instead), and reverse/negative playback rate (no browser exposes a neg
   (one shared composited scene, sliced/warped per output) without needing a server-side
   GPU video-encoding pipeline this scope doesn't call for.
 - **Warping never touches the projector screen directly.** The panel drags handles
-  against a small, throttled JPEG preview pushed by the render client over the same
-  WebSocket (`{"type":"preview", screenId, frame}`) — never the full-res output, and
+  against a downsampled JPEG preview pushed by the render client over the same
+  WebSocket (`{"type":"preview", screenId, frame}`; 640px wide, with an adaptive
+  cadence — ~10 fps while control-plane writes are landing, ~2.5 fps idle — see
+  `render-client/src/main.js`) — never the full-res output, and
   never requiring the operator to be standing in front of that screen. The Stage's
   click-to-select hit-tests the same normalized warp-corner geometry already in state, so
   no image analysis is needed to know what you clicked.
@@ -366,7 +368,8 @@ see below).
 
 Open the panel and a render client side by side — dragging a warp handle or an opacity
 slider in the panel should visibly change the render client's output live, and the
-render client's preview should appear on the panel's Stage within ~250ms.
+render client's preview should appear on the panel's Stage within ~0.5s (the preview
+cadence tightens to ~10 fps while you're actively adjusting).
 
 ## Fullscreen kiosk
 

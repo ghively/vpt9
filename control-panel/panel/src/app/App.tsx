@@ -163,8 +163,19 @@ export function App() {
 
   // Socket-driven store patches re-render unless a drag is in progress (the isDragging
   // guard), so an echoed update never yanks the DOM out from under an active gesture.
+  // Coalesced through requestAnimationFrame: a 30 Hz LFO/fade batch (or any message
+  // burst) previously forced a full-tree re-render PER MESSAGE on every connected panel;
+  // now at most one render lands per displayed frame no matter the inbound rate. The
+  // drag guard is re-checked at flush time — a gesture that started after scheduling
+  // still suppresses the render, and endDrag's own forceRender reconciles afterward.
+  const renderQueuedRef = useRef(false);
   const rerender = useCallback(() => {
-    if (!isDraggingRef.current) forceRender();
+    if (isDraggingRef.current || renderQueuedRef.current) return;
+    renderQueuedRef.current = true;
+    requestAnimationFrame(() => {
+      renderQueuedRef.current = false;
+      if (!isDraggingRef.current) forceRender();
+    });
   }, []);
 
   const { send: rawSend } = useSocket(wsUrl, {
@@ -675,8 +686,7 @@ export function App() {
       ref={preview.warpMonitor}
       screenId={selectedScreenId}
       frame={preview.frameFor(selectedScreenId) ?? null}
-      width={1280}
-      height={720}
+      blind={state.blind ?? false}
       overlay={
         // Task 12: screen edit target shows ONLY the active screen's warp handles — no
         // layer overlay renders alongside it, even if a layer is also selected.

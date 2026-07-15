@@ -9,10 +9,11 @@ export interface StageProps {
   /** Latest preview JPEG data-URL for this screen, or `null` before any frame has
    *  arrived — renders the NO-SIGNAL placeholder in that case. */
   frame: string | null;
-  /** Intended internal render size (e.g. 1280×720) for the resolution readout in the
-   *  corner badge. Display only — Stage doesn't measure or affect the actual render. */
-  width: number;
-  height: number;
+  /** Blind (task A20) — the projector wall is FROZEN while this preview keeps showing
+   *  the live off-air look. Flips the stage chrome from the red LIVE tally to an amber
+   *  BLIND state so it's unmistakable whether edits are touching what the audience sees
+   *  (the grandMA-Blind / QLab-audition convention). */
+  blind?: boolean;
   /** Selection/warp/mask handles (Tasks 5 & 6), absolutely positioned over the frame. */
   overlay: ReactNode;
   /** Every layer's on-screen quad, topmost first — used ONLY to draw a faint hover
@@ -51,11 +52,13 @@ export interface StageProps {
  *  drive the `<img>` directly at the render-client's ~250ms cadence, without a
  *  React re-render (mirrors `ConfidenceMonitor.tsx`'s own `setFrame` contract). */
 export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function Stage(
-  { screenId, frame, width, height, overlay, hitLayers, onBackgroundPointerDown },
+  { screenId, frame, blind = false, overlay, hitLayers, onBackgroundPointerDown },
   ref,
 ) {
   const imgRef = useRef<HTMLImageElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const resRef = useRef<HTMLDivElement>(null);
+  const resTextRef = useRef("");
   const [hoverQuad, setHoverQuad] = useState<Quad | null>(null);
 
   useImperativeHandle(
@@ -68,6 +71,20 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
     }),
     [],
   );
+
+  // Honest resolution readout: the ACTUAL preview frame size, measured off the decoded
+  // image (its predecessor showed a hardcoded "1280×720" while displaying a 320px-wide
+  // JPEG). Imperative like setFrame itself — frames arrive outside the React render loop,
+  // so the badge updates the same way, and only when the size actually changes.
+  const onFrameLoad = () => {
+    const img = imgRef.current;
+    const res = resRef.current;
+    if (!img || !res || !img.naturalWidth) return;
+    const text = `preview ${img.naturalWidth}×${img.naturalHeight}`;
+    if (resTextRef.current === text) return;
+    resTextRef.current = text;
+    res.textContent = text;
+  };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -97,13 +114,14 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       className="deck-stage"
       ref={stageRef}
       data-live={!!frame}
+      data-blind={blind}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
     >
       {/* src omitted when there's no frame so panel.css's `.preview-img:not([src])` rule
        *  hides the broken-image glyph instead of showing one. */}
-      <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" />
+      <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" onLoad={onFrameLoad} />
       <div className="deck-stage__nosignal" aria-hidden="true">
         <span className="mono">NO SIGNAL</span>
         <span className="deck-stage__nosignal-sub mono">awaiting render-client preview</span>
@@ -114,11 +132,10 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       <span className="tick bl" aria-hidden="true" />
       <span className="tick br" aria-hidden="true" />
       <div className="stage-badge">
-        <span className="dot" /> LIVE · {screenId.replace(/-/g, " ").toUpperCase()}
+        <span className="dot" /> {blind ? "BLIND" : "LIVE"} · {screenId.replace(/-/g, " ").toUpperCase()}
       </div>
-      <div className="stage-fps mono">
-        {width}×{height}
-      </div>
+      <div ref={resRef} className="stage-fps mono" />
+      {blind && <div className="stage-blind-note mono">wall frozen · edits off-air</div>}
       <div className="stage-overlay">
         {hoverQuad && (
           <svg className="deck-hover-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">

@@ -8,9 +8,10 @@ const INTERNAL_HEIGHT = 720;
 export class Compositor {
   constructor(canvas) {
     this.canvas = canvas;
-    // preserveDrawingBuffer: capturePreview() reads the canvas back via drawImage on a
-    // ~250ms interval, outside the rAF that drew the frame — without preservation the
-    // buffer contents are undefined after compositing and the preview goes blank.
+    // preserveDrawingBuffer: capturePreview() reads the canvas back via drawImage on its
+    // own adaptive interval (~100-400ms, see main.js), outside the rAF that drew the
+    // frame — without preservation the buffer contents are undefined after compositing
+    // and the preview goes blank.
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true });
     if (!gl) throw new Error("WebGL2 is not available in this browser");
     this.gl = gl;
@@ -202,7 +203,7 @@ export class Compositor {
   // the browser can never paint the live frame to the display (it only composites at frame
   // boundaries, and we've already redrawn the frozen frame before yielding). This reuses the
   // proven, correctly-oriented drawImage path instead of a separate GL readback.
-  capturePreview(maxWidth = 320) {
+  capturePreview(maxWidth = 640) {
     // Only draw the live frame if we can immediately restore the frozen one afterward
     // (_heldFbo ready). On the very first preview tick after engaging blind — before the
     // next rAF has snapshotted the held frame — _heldFbo is still null; drawing the live
@@ -228,6 +229,9 @@ export class Compositor {
     this._previewCanvas.width = width;
     this._previewCanvas.height = height;
     this._previewCtx.drawImage(this.canvas, 0, 0, width, height);
-    return this._previewCanvas.toDataURL("image/jpeg", 0.6);
+    // 0.78: high enough that JPEG blocking stops being visible on the panel's dominant
+    // stage (0.6 read as "super compressed" once stretched), low enough that a 640px
+    // frame stays a few tens of KB at the interactive ~10 fps cadence (see main.js).
+    return this._previewCanvas.toDataURL("image/jpeg", 0.78);
   }
 }

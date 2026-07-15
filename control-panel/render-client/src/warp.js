@@ -192,6 +192,46 @@ export class ScreenWarp {
     this.indexBuffer = gl.createBuffer();
     this.gridSize = 0;
     this.indexCount = 0;
+    // Bicubic-subdivision memo, keyed by warp-object identity (stable across in-place
+    // applyUpdate mutations) and validated against a flat copy of the control points.
+    // Without it the ~3k-vertex Catmull-Rom surface recomputes EVERY rendered frame,
+    // warped or not — the dominant per-frame CPU cost while an operator adjusts a mesh.
+    this._meshMemo = new WeakMap(); // warp -> { size, renderSize, flat: Float64Array, dest: Float32Array }
+    this._uploadedDest = null; // last dest buffer actually uploaded to the GPU
+  }
+
+  // Returns the bicubic-subdivided destination buffer for `warp`, recomputing only when
+  // its control points actually changed. Keyed by the warp object's identity (applyUpdate
+  // mutates warps in place, so identity is stable across a drag) with the points flattened
+  // into a Float64Array for a cheap O(size²) value check — versus the O(renderSize²)
+  // Catmull-Rom evaluation a recompute costs. The WeakMap also keeps the memo correct when
+  // one ScreenWarp instance alternates warps (blind mode renders live + held each preview
+  // tick): each warp object carries its own entry, so alternation never thrashes.
+  _subdividedDest(warp, points, size, renderSize) {
+    const count = size * size;
+    const memo = warp ? this._meshMemo.get(warp) : null;
+    if (memo && memo.size === size && memo.renderSize === renderSize) {
+      let same = true;
+      for (let i = 0; i < count; i++) {
+        const p = points[i];
+        if (memo.flat[i * 2] !== (p?.x ?? 0) || memo.flat[i * 2 + 1] !== (p?.y ?? 0)) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return memo.dest;
+    }
+    const dest = subdivideMeshDest(points, size, renderSize);
+    if (warp) {
+      const flat = new Float64Array(count * 2);
+      for (let i = 0; i < count; i++) {
+        const p = points[i];
+        flat[i * 2] = p?.x ?? 0;
+        flat[i * 2 + 1] = p?.y ?? 0;
+      }
+      this._meshMemo.set(warp, { size, renderSize, flat, dest });
+    }
+    return dest;
   }
 
   _ensureGrid(size) {
@@ -244,7 +284,7 @@ export class ScreenWarp {
       // exactly `size`; only the tessellation the GPU draws gets finer.
       const renderSize = (size - 1) * MESH_SUBDIV + 1;
       this._ensureGrid(renderSize);
-      dest = subdivideMeshDest(points, size, renderSize);
+      dest = this._subdividedDest(warp, points, size, renderSize);
     } else {
       // Corner-pin (or an invalid/degenerate mesh falling back to it): unchanged —
       // draw the raw 2x2 (or otherwise raw) control grid directly, no subdivision. A
@@ -256,8 +296,14 @@ export class ScreenWarp {
         dest[i * 2 + 1] = points[i]?.y ?? 0;
       }
     }
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.destBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, dest, gl.DYNAMIC_DRAW);
+    // Re-upload only when the vertex data actually changed. A memo hit returns the same
+    // Float32Array instance frame after frame; the corner path always builds a fresh
+    // (tiny) array, so it re-uploads every call exactly as before.
+    if (this._uploadedDest !== dest) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.destBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, dest, gl.DYNAMIC_DRAW);
+      this._uploadedDest = dest;
+    }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.framebuffer : null);
     gl.viewport(0, 0, viewportWidth, viewportHeight);

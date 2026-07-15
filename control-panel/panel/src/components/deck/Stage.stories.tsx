@@ -30,8 +30,16 @@ export const Live: Story = {
   args: {
     screenId: "screen-1",
     frame: sampleFrame,
-    width: 1280,
-    height: 720,
+    overlay: null,
+    onBackgroundPointerDown: noop,
+  },
+};
+
+export const Blind: Story = {
+  args: {
+    screenId: "screen-1",
+    frame: sampleFrame,
+    blind: true,
     overlay: null,
     onBackgroundPointerDown: noop,
   },
@@ -41,8 +49,6 @@ export const NoSignal: Story = {
   args: {
     screenId: "screen-1",
     frame: null,
-    width: 1280,
-    height: 720,
     overlay: null,
     onBackgroundPointerDown: noop,
   },

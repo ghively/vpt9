@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { WarpHandle } from "./WarpHandle";
+import { arrowNudge, isEditableTarget } from "./nudge";
 import type { Mask, Point } from "./types";
 
 export interface MaskShapeOverlayProps {
@@ -56,8 +57,19 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     if (!isPolygon || selectedIndex == null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, button, [contenteditable='true']")) return;
+      if (isEditableTarget(event)) return;
+      // Arrow keys nudge the selected vertex (fine step; Shift = coarse) — the same
+      // precision affordance the warp handles get in StageSelectionOverlay.
+      const nudge = arrowNudge(event);
+      if (nudge) {
+        const current = points[selectedIndex];
+        if (!current) return;
+        const next = clonePoints(points);
+        next[selectedIndex] = { x: clamp01(current.x + nudge.dx), y: clamp01(current.y + nudge.dy) };
+        onChange?.({ points: next });
+        event.preventDefault();
+        return;
+      }
       if (event.key !== "Delete" && event.key !== "Backspace") return;
       if (points.length <= 3) return;
       const next = clonePoints(points);
@@ -90,7 +102,15 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     }
   };
 
-  const startDrag = (event: ReactPointerEvent<HTMLDivElement>, apply: (nx: number, ny: number) => void) => {
+  // `apply` mutates geom.current (so paint() tracks every raw pointer event) and returns
+  // the patch to emit. Emission is coalesced to one onChange per animation frame — each
+  // onChange fans out into WebSocket updates, and raw pointermove rates (60-120+ Hz on
+  // high-poll-rate devices) flooded the control plane. The final patch always flushes on
+  // release so the server never misses where the gesture ended.
+  const startDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    apply: (nx: number, ny: number) => Partial<Pick<Mask, "cx" | "cy" | "rx" | "ry">>,
+  ) => {
     event.stopPropagation();
     const stage = rootRef.current?.parentElement;
     if (!stage) return;
@@ -98,13 +118,25 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     target.setPointerCapture(event.pointerId);
     onDragStart?.();
     const rect = stage.getBoundingClientRect();
+    let raf = 0;
+    let pending: Partial<Pick<Mask, "cx" | "cy" | "rx" | "ry">> | null = null;
+    const flush = () => {
+      raf = 0;
+      if (!pending) return;
+      const patch = pending;
+      pending = null;
+      onChange?.(patch);
+    };
     const onMove = (e: PointerEvent) => {
       const nx = clamp01((e.clientX - rect.left) / rect.width);
       const ny = clamp01((e.clientY - rect.top) / rect.height);
-      apply(nx, ny);
+      pending = { ...pending, ...apply(nx, ny) };
       paint();
+      if (!raf) raf = requestAnimationFrame(flush);
     };
     const onUp = () => {
+      if (raf) cancelAnimationFrame(raf);
+      flush();
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onUp);
       target.removeEventListener("pointercancel", onUp);
@@ -192,15 +224,15 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
              *  looks for it, to keep it from firing underneath a drag handle. */}
             <div
               className="mask-shape__body deck-handle"
-              onPointerDown={(e) => startDrag(e, (nx, ny) => { geom.current.cx = nx; geom.current.cy = ny; onChange?.({ cx: nx, cy: ny }); })}
+              onPointerDown={(e) => startDrag(e, (nx, ny) => { geom.current.cx = nx; geom.current.cy = ny; return { cx: nx, cy: ny }; })}
             />
             <div
               className="mask-shape__edge mask-shape__edge--right deck-handle"
-              onPointerDown={(e) => startDrag(e, (nx) => { const rx = clampR(nx - geom.current.cx); geom.current.rx = rx; onChange?.({ rx }); })}
+              onPointerDown={(e) => startDrag(e, (nx) => { const rx = clampR(nx - geom.current.cx); geom.current.rx = rx; return { rx }; })}
             />
             <div
               className="mask-shape__edge mask-shape__edge--bottom deck-handle"
-              onPointerDown={(e) => startDrag(e, (_nx, ny) => { const ry = clampR(ny - geom.current.cy); geom.current.ry = ry; onChange?.({ ry }); })}
+              onPointerDown={(e) => startDrag(e, (_nx, ny) => { const ry = clampR(ny - geom.current.cy); geom.current.ry = ry; return { ry }; })}
             />
           </div>
         </>

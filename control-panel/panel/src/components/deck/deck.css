@@ -296,6 +296,10 @@
 .tick.bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
 .tick.br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
 
+/* The LIVE/BLIND tally. LIVE is the broadcast red tally — this stage mirrors what the
+ * audience is seeing, so edits here land on the wall. BLIND (task A20) flips the whole
+ * stage chrome amber: the wall is frozen, the preview shows the off-air look, edits are
+ * safe — the grandMA-Blind / program-vs-preview convention, made unmissable at a glance. */
 .stage-badge {
   position: absolute;
   top: 12px;
@@ -305,12 +309,26 @@
   gap: 8px;
   font-family: var(--font-mono);
   font-size: 9.5px;
+  font-weight: 700;
   letter-spacing: .12em;
-  color: var(--cool);
+  color: var(--live);
   text-transform: uppercase;
   pointer-events: none;
 }
-.stage-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cool); box-shadow: 0 0 8px var(--cool); }
+.stage-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); box-shadow: 0 0 8px var(--live); }
+.deck-stage[data-blind="true"] { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn), 0 20px 60px -20px #000; }
+.deck-stage[data-blind="true"] .stage-badge { color: var(--warn); }
+.deck-stage[data-blind="true"] .stage-badge .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.stage-blind-note {
+  position: absolute;
+  bottom: 10px;
+  left: 32px;
+  font-size: 9px;
+  letter-spacing: .14em;
+  color: var(--warn);
+  text-transform: uppercase;
+  pointer-events: none;
+}
 .stage-fps {
   position: absolute;
   top: 12px;
@@ -319,6 +337,7 @@
   font-size: 9.5px;
   color: var(--muted);
   letter-spacing: .1em;
+  text-transform: uppercase;
   pointer-events: none;
 }
 
