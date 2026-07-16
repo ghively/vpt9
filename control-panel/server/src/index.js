@@ -1,7 +1,10 @@
 import { createServer } from "node:http";
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { WebSocketServer } from "ws";
 import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent, resetShowState } from "./state.js";
+import { writeFileTags } from "./media-tags.js";
+import { SAFE_FILENAME } from "./media.js";
 import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
 import { createOscOut } from "./osc-out.js";
@@ -294,6 +297,17 @@ wss.on("connection", (socket) => {
         if (applyUpdate(state, message.path, message.value)) {
           scheduleSave();
           broadcast({ type: "update", path: message.path, value: message.value });
+          // Tags live IN the media files (media-tags.js): mirror a panel tag edit back
+          // into the file's XMP-dc:Subject so the file stays the durable record.
+          // Fire-and-forget — the state write + broadcast above already succeeded, and
+          // writeFileTags degrades to a warn when exiftool is missing.
+          const tagEdit = /^media\.([^.]+)\.tags$/.exec(message.path);
+          if (tagEdit) {
+            const entry = state.media?.[tagEdit[1]];
+            if (entry && SAFE_FILENAME.test(entry.filename)) {
+              writeFileTags(join(MEDIA_DIR, entry.filename), message.value);
+            }
+          }
         }
         return;
       }

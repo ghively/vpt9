@@ -122,7 +122,7 @@ test("OPTIONS preflight to /api/media succeeds with CORS headers", withServer(as
   assert.ok(res.status === 204 || res.status === 200);
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
   assert.equal(res.headers.get("access-control-allow-methods"), "POST, DELETE, OPTIONS");
-  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name, Content-Type");
+  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name, X-Media-Tags, Content-Type");
   // Regression guard: xhr.send(file) with no explicit Content-Type makes the browser
   // auto-set one (e.g. video/mp4), which is not CORS-safelisted, so the real preflight
   // requests "content-type" and the server must allow it or the browser blocks the upload.
@@ -137,7 +137,7 @@ test("OPTIONS preflight to /api/media/:id succeeds with CORS headers", withServe
   assert.ok(res.status === 204 || res.status === 200);
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
   assert.equal(res.headers.get("access-control-allow-methods"), "POST, DELETE, OPTIONS");
-  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name, Content-Type");
+  assert.equal(res.headers.get("access-control-allow-headers"), "X-File-Name, X-Media-Tags, Content-Type");
   assert.ok(
     res.headers.get("access-control-allow-headers").toLowerCase().includes("content-type"),
     "allow-headers must include content-type (case-insensitive) for the browser upload path"
@@ -187,4 +187,25 @@ test("client disconnecting mid-upload leaves no partial file behind", withServer
   }
   assert.deepEqual(readdirSync(dir), []); // partial file cleaned up, not orphaned
   assert.deepEqual(state.media, {}); // never made it into state either
+}));
+
+test("X-Media-Tags upload header seeds the entry's tags (generator one-shot tagging)", withServer(async ({ base, state }) => {
+  const res = await fetch(`${base}/api/media`, {
+    method: "POST",
+    headers: { "X-File-Name": "gen.mp4", "X-Media-Tags": " space , loop, SPACE,, nebula " },
+    body: Buffer.from([1, 2, 3]),
+  });
+  assert.equal(res.status, 200);
+  const { media } = await res.json();
+  // trimmed, empties dropped, case-insensitive dedupe keeping the first spelling
+  assert.deepEqual(media.tags, ["space", "loop", "nebula"]);
+  assert.deepEqual(state.media[media.id].tags, ["space", "loop", "nebula"]);
+}));
+
+test("upload without X-Media-Tags still owns tags as an explicit empty array", withServer(async ({ base, state }) => {
+  const res = await upload(base, "plain.mp4", [1]);
+  assert.equal(res.status, 200);
+  const { media } = await res.json();
+  assert.deepEqual(media.tags, []);
+  assert.deepEqual(state.media[media.id].tags, []);
 }));
