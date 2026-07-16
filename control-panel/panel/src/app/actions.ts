@@ -347,6 +347,11 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     renameMedia(id: string, name: string) {
       send({ type: "update", path: `media.${id}.name`, value: name });
     },
+    // Tags are a whole-array leaf swap (media.<id>.tags) — the server pins the value
+    // to an array of strings and backfills the leaf onto pre-tagging entries.
+    setMediaTags(id: string, tags: string[]) {
+      send({ type: "update", path: `media.${id}.tags`, value: tags });
+    },
 
     // ── Source bank ──────────────────────────────────────────────────────────
     // `sourceBank` is a fixed-length array addressed positionally by the existing

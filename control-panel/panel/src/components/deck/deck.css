@@ -361,6 +361,8 @@
 }
 .media-bin__filters { display: flex; flex-wrap: wrap; gap: 3px; }
 .media-bin__filters .chip { padding: 2px 7px; font-size: 9px; }
+/* Tag chips read quieter than the kind row (lowercase, no letterspacing shout). */
+.media-bin__filters--tags .chip { text-transform: none; letter-spacing: 0.02em; }
 .media-bin__clear {
   padding: 1px 6px;
   border: 1px solid var(--hairline);

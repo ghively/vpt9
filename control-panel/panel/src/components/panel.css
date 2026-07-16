@@ -106,8 +106,19 @@ html, body { height: 100%; }
     background: var(--panel-sunken); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
     flex-shrink: 0;
   }
-  .media-row .media-name { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text); font-size: 12px; padding: 4px 2px; font-family: var(--font-ui); }
+  /* name + tags stack in the row's flexible middle column */
+  .media-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .media-row .media-name { min-width: 0; background: transparent; border: none; color: var(--text); font-size: 12px; padding: 4px 2px 1px; font-family: var(--font-ui); }
   .media-row .media-name:focus { outline: none; }
+  .media-row .media-tags {
+    min-width: 0;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 10px;
+    padding: 0 2px 3px;
+  }
+  .media-row .media-tags:focus { outline: none; color: var(--text); }
   .media-size { font-size: 10px; color: var(--muted); width: 62px; text-align: right; flex-shrink: 0; }
 
   /* Source-bank mix slot: A/B pickers + blend mode (unstyled selects, above) plus the

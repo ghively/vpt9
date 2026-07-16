@@ -489,9 +489,9 @@ test("media bin: the view toolbar filters by kind, searches by name, and sorts",
   const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
   await new Promise((resolve) => socket.once("open", resolve));
   const seed = [
-    { id: "vt-alpha", name: "alpha.mp4", filename: "vt-alpha.mp4", kind: "video", size: 300, uploadedAt: "2020-01-01T00:00:00.000Z" },
-    { id: "vt-beta", name: "beta.gif", filename: "vt-beta.gif", kind: "gif", size: 200, uploadedAt: "2021-01-01T00:00:00.000Z" },
-    { id: "vt-gamma", name: "gamma.jpg", filename: "vt-gamma.jpg", kind: "image", size: 100, uploadedAt: "2030-01-01T00:00:00.000Z" },
+    { id: "vt-alpha", name: "alpha.mp4", filename: "vt-alpha.mp4", kind: "video", size: 300, uploadedAt: "2020-01-01T00:00:00.000Z", tags: [] },
+    { id: "vt-beta", name: "beta.gif", filename: "vt-beta.gif", kind: "gif", size: 200, uploadedAt: "2021-01-01T00:00:00.000Z", tags: ["strobe"] },
+    { id: "vt-gamma", name: "gamma.jpg", filename: "vt-gamma.jpg", kind: "image", size: 100, uploadedAt: "2030-01-01T00:00:00.000Z", tags: ["backdrop"] },
   ];
   for (const value of seed) await wsSend(socket, { type: "create", path: "media", value });
   socket.close();
@@ -521,6 +521,14 @@ test("media bin: the view toolbar filters by kind, searches by name, and sorts",
   await expect(cells.first()).toContainText("gamma.jpg");
   await bin.locator(".media-bin__search").press("Escape");
   await expect(cells.first()).toContainText("alpha.mp4"); // name sort still applied
+
+  // Tag chips (media.<id>.tags): #strobe narrows to the one tagged item; clicking the
+  // active chip again clears the tag filter.
+  await bin.locator(".media-bin__filters--tags .chip", { hasText: "#strobe" }).click();
+  await expect(cells).toHaveCount(1);
+  await expect(cells.first()).toContainText("beta.gif");
+  await bin.locator(".media-bin__filters--tags .chip", { hasText: "#strobe" }).click();
+  await expect(cells.first()).toContainText("alpha.mp4");
 
   // An impossible query hits the "nothing matches" cell; clear filters restores the grid.
   await bin.locator(".media-bin__search").fill("zzz-no-such-media");

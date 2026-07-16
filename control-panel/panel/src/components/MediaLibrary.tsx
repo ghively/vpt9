@@ -13,11 +13,28 @@ function formatSize(bytes: number): string {
   return `${bytes} B`;
 }
 
+// Tags are edited as one comma-separated line per row; parse tolerantly (trim, drop
+// empties, dedupe case-insensitively but keep the first spelling typed).
+function parseTags(raw: string): string[] {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const part of raw.split(",")) {
+    const tag = part.trim();
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  return tags;
+}
+
 export interface MediaLibraryProps {
   media: MediaItem[];
   /** POST target for uploads, e.g. "http://host:8080/api/media". */
   uploadUrl: string;
   onRename?: (id: string, name: string) => void;
+  /** Commit a row's full tag list (media.<id>.tags — see actions.setMediaTags). */
+  onSetTags?: (id: string, tags: string[]) => void;
   onRemove?: (id: string) => void;
   /** Camera record-to-disk (task A14b): true while a recording is in progress. When set,
    *  the record button lights and toggling it stops + saves the clip to this library. */
@@ -29,7 +46,7 @@ export interface MediaLibraryProps {
  *  + a row per file. Uploads go over HTTP (not the WS protocol); the server broadcasts a
  *  `create` on success (including when a finished recording is uploaded by the render
  *  client), so the list re-renders from shared state without this component tracking it. */
-export function MediaLibrary({ media, uploadUrl, onRename, onRemove, recording = false, onToggleRecord }: MediaLibraryProps) {
+export function MediaLibrary({ media, uploadUrl, onRename, onSetTags, onRemove, recording = false, onToggleRecord }: MediaLibraryProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +119,18 @@ export function MediaLibrary({ media, uploadUrl, onRename, onRemove, recording =
         media.map((m) => (
           <div className="media-row" key={m.id}>
             <span className="media-tag mono">{KIND_TAG[m.kind]}</span>
-            <TextField className="media-name" value={m.name} onCommit={(v) => onRename?.(m.id, v)} />
+            <div className="media-fields">
+              <TextField className="media-name" value={m.name} onCommit={(v) => onRename?.(m.id, v)} />
+              {onSetTags && (
+                <TextField
+                  className="media-tags mono"
+                  placeholder="tags, comma-separated…"
+                  title="Organization tags — the media bin can filter by these"
+                  value={(m.tags ?? []).join(", ")}
+                  onCommit={(v) => onSetTags(m.id, parseTags(v))}
+                />
+              )}
+            </div>
             <span className="media-size mono">{formatSize(m.size)}</span>
             <ToggleSquare label="×" title="Delete media" onClick={() => onRemove?.(m.id)} />
           </div>

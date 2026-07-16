@@ -114,3 +114,16 @@ test("the automation tick does not crash on a null layer element", async () => {
   process.off("uncaughtException", onUnhandled);
   assert.equal(crashed, null);
 });
+
+// Media tags (media.<id>.tags): the panel's tag-filter chips iterate + string-compare
+// these, so the leaf is pinned to an array of strings.
+test("applyUpdate accepts a string array for media tags and refuses everything else", () => {
+  const state = { media: { "media-1": { id: "media-1", name: "clip.mp4", tags: [] } } };
+  assert.equal(applyUpdate(state, "media.media-1.tags", ["intro", "loop"]), true);
+  assert.deepEqual(state.media["media-1"].tags, ["intro", "loop"]);
+  assert.equal(applyUpdate(state, "media.media-1.tags", "intro"), false);
+  assert.equal(applyUpdate(state, "media.media-1.tags", null), false);
+  assert.equal(applyUpdate(state, "media.media-1.tags", [1, "x"]), false);
+  assert.equal(applyUpdate(state, "media.media-1.tags", { intro: true }), false);
+  assert.deepEqual(state.media["media-1"].tags, ["intro", "loop"]);
+});

@@ -87,7 +87,21 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
   const [linkDraft, setLinkDraft] = useState("");
   const [view, setView] = useState(loadView);
   const [query, setQuery] = useState("");
+  // Tag filter: transient like the search box (tags come and go with library edits;
+  // a persisted stale tag would silently blank the bin across a reload).
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const ctx = useContextMenu();
+
+  // Union of every tag in the library, alphabetical (case-insensitive), for the filter
+  // row. Tags are edited in the Show drawer's Media tab; the bin only filters by them.
+  const allTags = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const m of media) for (const t of m.tags ?? []) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [media]);
+  // A tag can disappear (last tagged item deleted/retagged) — drop a dangling filter
+  // instead of showing an empty grid with no active-looking chip explaining why.
+  const activeTag = tagFilter && allTags.some((t) => t.toLowerCase() === tagFilter.toLowerCase()) ? tagFilter : null;
 
   const saveView = (next: { sort: MediaSort; kind: KindFilter }) => {
     setView(next);
@@ -100,10 +114,16 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const tag = activeTag?.toLowerCase() ?? null;
     return media
-      .filter((m) => (view.kind === "all" || m.kind === view.kind) && (!q || m.name.toLowerCase().includes(q)))
+      .filter(
+        (m) =>
+          (view.kind === "all" || m.kind === view.kind) &&
+          (!tag || (m.tags ?? []).some((t) => t.toLowerCase() === tag)) &&
+          (!q || m.name.toLowerCase().includes(q)),
+      )
       .sort(SORTERS[view.sort]);
-  }, [media, view, query]);
+  }, [media, view, query, activeTag]);
   const filtered = visible.length !== media.length;
 
   const submitLink = () => {
@@ -190,6 +210,13 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
               />
             ))}
           </div>
+          {allTags.length > 0 && (
+            <div className="media-bin__filters media-bin__filters--tags">
+              {allTags.map((t) => (
+                <Chip key={t} label={`#${t}`} active={activeTag === t} onClick={() => setTagFilter(activeTag === t ? null : t)} />
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="media-bin__grid">
@@ -242,6 +269,7 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
               className="media-bin__clear"
               onClick={() => {
                 setQuery("");
+                setTagFilter(null);
                 saveView({ ...view, kind: "all" });
               }}
             >
