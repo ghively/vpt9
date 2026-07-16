@@ -213,6 +213,26 @@ with a throwaway CA-injected Dockerfile. What was confirmed:
 a hardware MIDI controller, a real phone casting, and live YouTube-in-PiP playback. Everything
 software-reachable in Phase D is now exercised, not just claimed.
 
+### Hardware acceptance checklist (for the operator, when the devices are in the room)
+
+Each residual item is now a single plug-in-and-observe step — the software path behind it is already
+verified (synthetically), so this is pure device acceptance, not debugging. Bring the stack up first
+(`docker compose up` from `control-panel/`, or the no-Docker node steps in `control-panel/README.md`).
+
+1. **Hardware GPU** — open the render-client in a browser on the projector machine; in devtools run
+   `document.querySelector("canvas").getContext("webgl2").getParameter(0x9246)` (UNMASKED_RENDERER) and
+   confirm it names the real GPU (not "SwiftShader"/"llvmpipe"). *Expected:* a hardware renderer string;
+   the Stage composites smoothly at the show's resolution.
+2. **Physical camera** — set a layer's source to Camera in the Inspector; pick the device + resolution.
+   *Expected:* the live feed composites on the Stage; the record button writes a clip into the media bin.
+3. **Hardware MIDI controller** — plug it in (Chrome), open the MIDI panel, arm a mapping (learn), wiggle a
+   knob to bind it, then move that knob. *Expected:* the learned CC fills channel/controller, and moving it
+   drives the bound parameter live (the exact decode/scale path `midi-cc-mapping.spec.js` verifies).
+4. **Real phone cast + live YouTube** — on a phone on the same LAN (set `CAST_RECEIVER_HOST` to the
+   machine's LAN IP first), open YouTube → Cast → pick "Room Cast"; play a video. *Expected:* it appears as
+   a PiP window on the target screen and plays (the DIAL relay + iframe wiring are already verified; this
+   confirms the real YouTube Leanback launch flow + youtube.com playback).
+
 ---
 
 ## Confirmed non-goals (NOT gaps — do not build)
