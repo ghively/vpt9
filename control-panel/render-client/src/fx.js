@@ -44,6 +44,7 @@ uniform vec2 u_anchor;     // zoom/rotate pivot, in uv space; (0.5, 0.5) = cente
 uniform float u_rotation;  // radians, about u_anchor
 uniform vec2 u_pan;
 uniform vec3 u_brcosa;     // brightness, contrast, saturation
+uniform float u_hue;       // hue rotation in radians, 0 = unchanged
 uniform vec4 u_edges;      // left, right, top, bottom fractional widths
 uniform float u_edgeGamma;
 uniform bool u_edgeInvert; // fade the CENTER instead of the edges (VPT8 tr.edgeblend01.jxs)
@@ -55,6 +56,15 @@ uniform bool u_enTransform; // gates flip/tile/zoom/pan/rotation
 uniform bool u_enBrcosa;    // gates brightness/contrast/saturation
 uniform bool u_enEdge;      // gates the edge-blend ramp (+ invert)
 out vec4 outColor;
+
+// Hue rotation about the achromatic (1,1,1) axis (Rodrigues rotation). At a==0 this
+// returns col exactly (cos 0 = 1, sin 0 = 0), so a neutral hue is byte-identical and the
+// existing saturation luma-mix below is untouched.
+vec3 hueRotate(vec3 col, float a) {
+  const vec3 k = vec3(0.57735026); // normalize(vec3(1.0))
+  float ca = cos(a);
+  return col * ca + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - ca);
+}
 
 void main() {
   // Inverse of the image-space op chain flip -> tile -> rotate/zoom/pan: undo pan, then
@@ -96,10 +106,12 @@ void main() {
 
   vec4 c = u_isColor ? vec4(u_color, 1.0) : texture(u_src, clamp(suv, 0.0, 1.0));
 
-  // brcosa: contrast about mid-grey, then brightness gain, then saturation vs. luma.
+  // brcosa: contrast about mid-grey, then brightness gain, then hue rotation, then
+  // saturation vs. luma. Hue is gated on !=0.0 so a neutral layer is byte-identical.
   if (u_enBrcosa) {
     c.rgb = (c.rgb - 0.5) * u_brcosa.y + 0.5;
     c.rgb *= u_brcosa.x;
+    if (u_hue != 0.0) c.rgb = hueRotate(c.rgb, u_hue);
     float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
     c.rgb = mix(vec3(luma), c.rgb, u_brcosa.z);
   }
@@ -274,7 +286,7 @@ export function fxNeedsChain(fx) {
     (fx.anchorX ?? 0.5) !== 0.5 || (fx.anchorY ?? 0.5) !== 0.5 ||
     (fx.rotationDeg ?? 0) !== 0 ||
     (fx.blur ?? 0) > 0 || (fx.motionBlur ?? 0) > 0 ||
-    (fx.brightness ?? 1) !== 1 || (fx.contrast ?? 1) !== 1 || (fx.saturation ?? 1) !== 1 ||
+    (fx.brightness ?? 1) !== 1 || (fx.contrast ?? 1) !== 1 || (fx.saturation ?? 1) !== 1 || (fx.hue ?? 0) !== 0 ||
     (eb.left ?? 0) > 0 || (eb.right ?? 0) > 0 || (eb.top ?? 0) > 0 || (eb.bottom ?? 0) > 0 ||
     Boolean(eb.invert)
   );
@@ -294,7 +306,7 @@ export class FxPasses {
         [
           "u_src", "u_isColor", "u_color", "u_flip", "u_tile",
           "u_zoom", "u_zoomXY", "u_anchor", "u_rotation", "u_pan",
-          "u_brcosa", "u_edges", "u_edgeGamma", "u_edgeInvert",
+          "u_brcosa", "u_hue", "u_edges", "u_edgeGamma", "u_edgeInvert",
           "u_enTransform", "u_enBrcosa", "u_enEdge",
         ].map((name) => [name, gl.getUniformLocation(this.point, name)])
       ),
@@ -362,6 +374,7 @@ export class FxChain {
     gl.uniform1f(u.u_rotation, ((fx.rotationDeg ?? 0) * Math.PI) / 180);
     gl.uniform2f(u.u_pan, fx.panX ?? 0, fx.panY ?? 0);
     gl.uniform3f(u.u_brcosa, fx.brightness ?? 1, fx.contrast ?? 1, fx.saturation ?? 1);
+    gl.uniform1f(u.u_hue, ((fx.hue ?? 0) * Math.PI) / 180);
     gl.uniform4f(u.u_edges, eb.left ?? 0, eb.right ?? 0, eb.top ?? 0, eb.bottom ?? 0);
     gl.uniform1f(u.u_edgeGamma, eb.gamma ?? 2);
     gl.uniform1i(u.u_edgeInvert, eb.invert ? 1 : 0);

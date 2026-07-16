@@ -22,6 +22,12 @@ import { execFile } from "node:child_process";
 // for the same gif share one in-flight generation.
 
 const MAX_SHEET_DIM = 8192; // stay well under canvas/texture limits on modest hardware
+// Per-frame longest-side cap (px). The old sheet used FULL frame resolution, so a
+// 1280x1024 gif became a ~7680x1024 multi-MB PNG the render-client re-fetched per player —
+// a big cause of "gifs take forever". A projector composites at output res, not source
+// res, so capping frames to 480px shrinks the sheet ~10x with no visible loss. Never
+// upscales (min with the source dimension below).
+const MAX_FRAME_DIM = 480;
 
 function run(bin, args) {
   return new Promise((resolve, reject) => {
@@ -56,12 +62,18 @@ async function probeGif(filePath) {
 // Grid layout: pack N frames into a sheet whose sides stay under MAX_SHEET_DIM, scaling
 // frames down (never up) if even the best grid would overflow.
 function layoutSheet(n, w, h) {
-  const rowsMax = Math.max(1, Math.floor(MAX_SHEET_DIM / h));
+  // First clamp each frame to MAX_FRAME_DIM on its longest side (never upscale), THEN pack.
+  const frameScale = Math.min(1, MAX_FRAME_DIM / Math.max(w, h));
+  let frameWidth = Math.max(2, Math.round(w * frameScale));
+  let frameHeight = Math.max(2, Math.round(h * frameScale));
+  // The MAX_SHEET_DIM guard remains as a backstop for pathological frame counts.
+  const rowsMax = Math.max(1, Math.floor(MAX_SHEET_DIM / frameHeight));
   let cols = Math.ceil(n / rowsMax);
-  let scale = 1;
-  if (cols * w > MAX_SHEET_DIM) scale = MAX_SHEET_DIM / (cols * w);
-  const frameWidth = Math.max(2, Math.floor(w * scale));
-  const frameHeight = Math.max(2, Math.floor(h * scale));
+  if (cols * frameWidth > MAX_SHEET_DIM) {
+    const shrink = MAX_SHEET_DIM / (cols * frameWidth);
+    frameWidth = Math.max(2, Math.floor(frameWidth * shrink));
+    frameHeight = Math.max(2, Math.floor(frameHeight * shrink));
+  }
   cols = Math.min(n, Math.max(1, Math.floor(MAX_SHEET_DIM / frameWidth)));
   const rows = Math.ceil(n / cols);
   return { cols, rows, frameWidth, frameHeight };

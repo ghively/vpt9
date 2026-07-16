@@ -12,7 +12,9 @@ export interface MobileTabBarProps {
 
 const TABS: Array<[MobileTab, string]> = [
   ["layers", "Layers"],
-  ["slots", "Slots"],
+  // "slots" key kept; label says "Media" because this tab shows the media library (bin)
+  // AND the source-bank slots — the old "Slots" label hid the whole media library.
+  ["slots", "Media"],
   ["inspector", "Inspector"],
   ["show", "Show"],
 ];

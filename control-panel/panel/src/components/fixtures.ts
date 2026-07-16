@@ -22,6 +22,7 @@ export const defaultFx: Fx = {
   brightness: 1,
   contrast: 1,
   saturation: 1,
+  hue: 0,
   edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2, invert: false },
   enabled: { transform: true, color: true, edgeBlend: true },
 };

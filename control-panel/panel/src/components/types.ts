@@ -151,6 +151,8 @@ export interface Fx {
   brightness: number;
   contrast: number;
   saturation: number;
+  /** Hue rotation in degrees (-180..180); 0 = unchanged. Applied after brightness/contrast/saturation in the color FX stage. */
+  hue: number;
   edgeBlend: EdgeBlend;
   /** Section-level stage bypass — decouples "toggle a stage off" from "lose its preset
    *  value" (VPT8's per-stage `pattr on`). All default true (stage runs, same as before

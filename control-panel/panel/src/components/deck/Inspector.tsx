@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Select } from "../primitives/Select";
 import { Fader } from "../primitives/Fader";
 import { TextField } from "../primitives/TextField";
@@ -141,25 +141,40 @@ function InspectorSection({
   title,
   summary,
   active,
+  defaultOpen = false,
   onActivate,
   children,
 }: {
   title: string;
   summary: string;
+  /** True when THIS section owns the on-stage handles (stage edit mode). Independent of
+   *  whether the section is expanded — sections open/close independently now (de-modal
+   *  2026-07-16: the old accordion showed only one at a time, hiding 2/3 of the controls). */
   active: boolean;
+  defaultOpen?: boolean;
   onActivate: () => void;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="insp-sec" data-active={active}>
-      <button type="button" className="insp-sec__head" aria-label={title} aria-expanded={active} onClick={onActivate}>
+    <section className="insp-sec" data-active={active} data-open={open}>
+      <button
+        type="button"
+        className="insp-sec__head"
+        aria-label={title}
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((o) => !o);
+          onActivate(); // keep the on-stage handles pointed at the section you just touched
+        }}
+      >
         <span className="insp-sec__title">{title}</span>
         <span className="insp-sec__sum mono">{summary}</span>
         <span className="insp-sec__chev" aria-hidden="true">
-          {active ? "▾" : "▸"}
+          {open ? "▾" : "▸"}
         </span>
       </button>
-      {active && <div className="insp-sec__body ctx">{children}</div>}
+      {open && <div className="insp-sec__body ctx">{children}</div>}
     </section>
   );
 }
@@ -527,7 +542,7 @@ function MaskBody({
  *  StageSelectionOverlay and ChannelRack/LayerStrip already use — App.tsx wires these to
  *  `actions.updateLayer` / the layer-warp actions / the SCREEN warp actions unchanged,
  *  no new WS message types. */
-export function Inspector(props: InspectorProps) {
+function InspectorView(props: InspectorProps) {
   // Narrow on `props.editTarget` directly (not a destructured copy) so TS actually
   // narrows the union.
   if (props.editTarget === "screen") {
@@ -665,7 +680,7 @@ export function Inspector(props: InspectorProps) {
           <InspectorSection title="Mask" summary={maskSummary(layer)} active={mode === "mask"} onActivate={() => onModeChange("mask")}>
             <MaskBody layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} />
           </InspectorSection>
-          <InspectorSection title="FX" summary={fxSummary(layer)} active={mode === "fx"} onActivate={() => onModeChange("fx")}>
+          <InspectorSection title="FX" summary={fxSummary(layer)} active={mode === "fx"} defaultOpen onActivate={() => onModeChange("fx")}>
             <FxDrawer
               fx={layer.fx}
               mask={layer.mask}
@@ -691,3 +706,5 @@ export function Inspector(props: InspectorProps) {
     </>
   );
 }
+
+export const Inspector = memo(InspectorView);

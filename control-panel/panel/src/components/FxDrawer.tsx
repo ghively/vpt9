@@ -80,6 +80,7 @@ const COLOR_SLIDERS: SliderSpec[] = [
   { label: "BRIGHT", field: "fx.brightness", min: 0, max: 3, step: 0.01, neutral: 1 },
   { label: "CONTRAST", field: "fx.contrast", min: 0, max: 3, step: 0.01, neutral: 1 },
   { label: "SAT", field: "fx.saturation", min: 0, max: 3, step: 0.01, neutral: 1 },
+  { label: "HUE", field: "fx.hue", min: -180, max: 180, step: 1, neutral: 0 },
 ];
 
 const EDGE_SLIDERS: SliderSpec[] = [

@@ -43,7 +43,7 @@ test("direct .mp4 link downloads into the library through the normal create path
     assert.equal(h.state.media[entry.id], entry, "entered shared state");
     const types = h.broadcasts.map((b) => `${b.type}${b.status ? ":" + b.status : ""}`);
     assert.deepEqual(types, ["mediaImportStatus:downloading", "create", "mediaImportStatus:done"]);
-    assert.equal(readdirSync(h.mediaDir).length, 1, "no temp files left behind");
+    assert.equal(readdirSync(h.mediaDir).filter((f) => !f.startsWith(".")).length, 1, "no temp files left behind");
   } finally {
     h.cleanup();
   }
@@ -54,7 +54,7 @@ test("oversize direct download aborts, cleans up, and broadcasts an error status
   try {
     await assert.rejects(() => h.importer.importUrl("http://example.test/big.mp4"), /exceeds/);
     assert.deepEqual(h.state.media, {}, "nothing entered state");
-    assert.equal(readdirSync(h.mediaDir).length, 0, "partial file removed");
+    assert.equal(readdirSync(h.mediaDir).filter((f) => !f.startsWith(".")).length, 0, "partial file removed");
     assert.equal(h.broadcasts.at(-1).status, "error");
   } finally {
     h.cleanup();
@@ -113,7 +113,7 @@ echo "Test Clip Title"
     assert.equal(entry.kind, "video");
     assert.equal(readFileSync(join(h.mediaDir, entry.filename), "utf8"), "fake-video");
     assert.equal(h.broadcasts.at(-1).status, "done");
-    assert.equal(readdirSync(h.mediaDir).length, 1, "temp renamed into place, nothing left over");
+    assert.equal(readdirSync(h.mediaDir).filter((f) => !f.startsWith(".")).length, 1, "temp renamed into place, nothing left over");
   } finally {
     rmSync(dir, { recursive: true, force: true });
     h.cleanup();

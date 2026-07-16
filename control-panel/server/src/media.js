@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { applyCreate, applyDelete, resolveDanglingSourceRefs } from "./state.js";
 import { createFramesProvider } from "./media-frames.js";
+import { createThumbProvider } from "./media-thumbs.js";
 import { readFileTags, writeFileTags } from "./media-tags.js";
 
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
@@ -41,6 +42,7 @@ const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
 // router so it's testable without index.js's top-level listen().
 export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, maxBytes = DEFAULT_MAX_BYTES, importer = null }) {
   const frames = createFramesProvider({ mediaDir });
+  const thumbs = createThumbProvider({ mediaDir });
   // The panel itself (a separate origin from this server, e.g. :8082 vs :8080) calls
   // upload/delete directly via fetch(), so every JSON response needs the same wildcard
   // CORS policy the GET/serve path already carries for the render-client.
@@ -155,6 +157,7 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
       const entry = { id, name: fileName, filename, kind: meta.kind, size: written, uploadedAt: new Date().toISOString(), tags };
       applyCreate(state, "media", entry);
       scheduleSave();
+      thumbs.warm(filename); // proactively extract the bin poster so first view isn't blocked
       broadcast({ type: "create", path: "media", key: id, value: entry });
       sendJson(res, 200, { ok: true, media: entry });
     });
@@ -169,7 +172,16 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     const contentType = (MEDIA_TYPES[extOf(filename)] ?? {}).contentType ?? "application/octet-stream";
     // CORS is mandatory: the render-client draws these into a WebGL texture (crossOrigin
     // "anonymous"), which taints the canvas without an allow-origin header.
-    const headers = { "access-control-allow-origin": "*", "accept-ranges": "bytes", "content-type": contentType };
+    // Cache immutably: filenames are permanent content hashes (media-<hash>.ext), so the
+    // bytes at a URL NEVER change — without this the bin re-downloaded every full file on
+    // every view. `immutable` skips even the revalidation request; ETag is the filename.
+    const headers = {
+      "access-control-allow-origin": "*",
+      "accept-ranges": "bytes",
+      "content-type": contentType,
+      "cache-control": "public, max-age=31536000, immutable",
+      etag: `"${filename}"`,
+    };
 
     const range = req.headers.range;
     const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
@@ -199,13 +211,45 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     }
     try {
       const { manifest, sheetPath } = await frames.get(filename);
-      if (!wantsSheet) { sendJson(res, 200, manifest); return; }
+      // Derived from an immutable source file → immutable too (see handleServe).
+      const cache = "public, max-age=31536000, immutable";
+      if (!wantsSheet) {
+        res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": cache });
+        res.end(JSON.stringify(manifest));
+        return;
+      }
       const { size } = statSync(sheetPath);
-      res.writeHead(200, { "access-control-allow-origin": "*", "content-type": "image/png", "content-length": size });
+      res.writeHead(200, { "access-control-allow-origin": "*", "content-type": "image/png", "content-length": size, "cache-control": cache });
       createReadStream(sheetPath).pipe(res);
     } catch (err) {
       console.warn(`[media-frames] extraction failed for "${filename}":`, err?.message);
       sendJson(res, 500, { error: "frame extraction failed (is ffmpeg installed on the server?)" });
+    }
+  }
+
+  // GET /media/<file>/thumb — a small JPEG poster for the media bin (see media-thumbs.js).
+  // Falls back to a 302 → the full source file if extraction fails (e.g. no ffmpeg), so the
+  // bin still shows SOMETHING rather than a broken image.
+  async function handleThumb(res, filename) {
+    if (!SAFE_FILENAME.test(filename) || !existsSync(join(mediaDir, filename))) {
+      res.writeHead(404, { "access-control-allow-origin": "*" });
+      res.end();
+      return;
+    }
+    try {
+      const thumbPath = await thumbs.get(filename);
+      const { size } = statSync(thumbPath);
+      res.writeHead(200, {
+        "access-control-allow-origin": "*",
+        "content-type": "image/jpeg",
+        "content-length": size,
+        "cache-control": "public, max-age=31536000, immutable",
+      });
+      createReadStream(thumbPath).pipe(res);
+    } catch (err) {
+      console.warn(`[media-thumbs] thumb failed for "${filename}" (serving source):`, err?.message);
+      res.writeHead(302, { location: `/media/${encodeURIComponent(filename)}`, "access-control-allow-origin": "*" });
+      res.end();
     }
   }
 
@@ -215,6 +259,7 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     if (SAFE_FILENAME.test(entry.filename)) {
       try { unlinkSync(join(mediaDir, entry.filename)); } catch { /* already gone */ }
       frames.evict(entry.filename);
+      thumbs.evict(entry.filename);
     }
     applyDelete(state, `media.${id}`);
     resolveDanglingSourceRefs(state, "media", id);
@@ -270,6 +315,8 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
       if (req.method === "POST" && url === "/api/media") { handleUpload(req, res); return true; }
       const framesMatch = req.method === "GET" && /^\/media\/([^/?]+)\/frames(\.png)?$/.exec(url);
       if (framesMatch) { await handleFrames(res, decodeURIComponent(framesMatch[1]), !!framesMatch[2]); return true; }
+      const thumbMatch = req.method === "GET" && /^\/media\/([^/?]+)\/thumb$/.exec(url);
+      if (thumbMatch) { await handleThumb(res, decodeURIComponent(thumbMatch[1])); return true; }
       const serve = req.method === "GET" && /^\/media\/([^/?]+)/.exec(url);
       if (serve) { handleServe(req, res, decodeURIComponent(serve[1])); return true; }
       const del = req.method === "DELETE" && /^\/api\/media\/([^/?]+)$/.exec(url);

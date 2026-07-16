@@ -25,8 +25,74 @@
    * rather than a hardcoded 46px, so the bar never clips its content. Trailing `auto`
    * is the Show drawer (Task 8): its own height (tab strip collapsed, tab strip + body
    * expanded) comes straight out of `.body`'s `1fr` share — no JS height math needed. */
-  grid-template-rows: auto 1fr auto;
+  /* rows: faceplate / body / Show drawer / master strip (both auto, at the bottom). */
+  grid-template-rows: auto 1fr auto auto;
 }
+
+/* ---------------- master / transport strip (bottom) ---------------- */
+.master-bar {
+  grid-row: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--hairline-soft);
+  background: var(--panel-sunken, rgba(0, 0, 0, 0.25));
+}
+.faceplate-right { display: flex; align-items: center; gap: 10px; }
+.help-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(138, 143, 152, 0.5);
+  background: transparent;
+  color: var(--text-dim, #8a8f98);
+  font: 600 13px ui-monospace, monospace;
+  cursor: pointer;
+}
+.help-btn:hover { color: var(--text); border-color: var(--text); }
+
+/* ---------------- help panel (shortcuts + gestures) ---------------- */
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.help-panel {
+  max-width: 720px;
+  width: 100%;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--panel, #14161d);
+  border: 1px solid var(--hairline-soft, rgba(138, 143, 152, 0.3));
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline-soft);
+  position: sticky;
+  top: 0;
+  background: var(--panel, #14161d);
+}
+.help-title { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--text); }
+.help-close { background: transparent; border: none; color: var(--text-dim); font-size: 20px; line-height: 1; cursor: pointer; }
+.help-close:hover { color: var(--text); }
+.help-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; padding: 16px; }
+.help-section-title { margin: 0 0 8px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--beam-line, #9aa0aa); }
+.help-rows { margin: 0; display: flex; flex-direction: column; gap: 5px; }
+.help-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: baseline; }
+.help-key { font-size: 10px; color: var(--text); background: rgba(255, 255, 255, 0.05); padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.help-desc { font-size: 11px; color: var(--text-dim, #b8bcc4); margin: 0; }
 
 /* ---------------- command bar ---------------- */
 .cmd {
@@ -197,6 +263,22 @@
   text-transform: uppercase;
 }
 .layer-op { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+/* Row quick-controls: play/pause + draggable opacity fader (always visible). */
+.layer-quick { display: flex; align-items: center; gap: 6px; padding: 2px 8px 4px 40px; }
+.layer-quick input[type="range"] { flex: 1; min-width: 60px; }
+.layer-quick .op { min-width: 34px; text-align: right; font-size: 9px; color: var(--text-dim, #8a8f98); }
+.layer-play {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid rgba(138, 143, 152, 0.4);
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+  cursor: pointer;
+}
+.layer-play:hover { border-color: var(--text); }
 .layer .op { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
 .layer .opbar { width: 34px; height: 3px; background: var(--panel-sunken); border-radius: 2px; overflow: hidden; }
 .layer .opbar > i { display: block; height: 100%; background: var(--beam); opacity: .8; }
@@ -302,6 +384,11 @@
   background: var(--panel-sunken);
   cursor: grab;
   transition: border-color .12s;
+  /* Native windowing: the browser skips render/layout of off-screen cells (with lazy-load
+     they skip the thumb fetch too), so a big folder isn't hundreds of live decodes. The
+     intrinsic size keeps the scrollbar honest for not-yet-rendered cells. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 .media-cell:hover { border-color: var(--beam-line); }
 .media-cell:active { cursor: grabbing; }
@@ -1113,6 +1200,29 @@
   max-height: none;
   flex: 1;
   min-height: 0;
+}
+/* Mobile Show tab de-crowd: you're ALREADY on the Show tab, so the drawer's own "Show"
+   toggle is redundant — hide it; and let the 8 tabs wrap instead of crushing/overflowing
+   a ~360px row. */
+.deck[data-mobile="true"] .sheet .show-drawer-toggle { display: none; }
+.deck[data-mobile="true"] .sheet .show-drawer-tabs { flex-wrap: wrap; }
+.deck[data-mobile="true"] .sheet .show-drawer-bar { flex-wrap: wrap; row-gap: 6px; }
+
+/* Master strip wraps on a phone instead of clipping the fader + BLIND/BLACKOUT (and
+   GO LIVE/DISCARD while blind); center it rather than right-justify when wrapped. */
+.deck[data-mobile="true"] .master-bar { justify-content: center; flex-wrap: wrap; }
+.deck[data-mobile="true"] #master-control { flex-wrap: wrap; justify-content: center; }
+
+/* The media bin lives inside the already-scrolling sheet on the "Media" tab — drop the
+   grid's own max-height scroll so it doesn't create a nested double-scroll trap. */
+.deck[data-mobile="true"] .media-bin__grid { max-height: none; overflow: visible; }
+
+/* Help panel: single column + smaller padding so shortcut rows don't overflow a narrow
+   phone (the desktop auto-fit columns want >=300px each). */
+@media (max-width: 719px) {
+  .help-backdrop { padding: 10px; }
+  .help-body { grid-template-columns: 1fr; }
+  .help-row { grid-template-columns: 120px 1fr; }
 }
 
 /* Command bar: let the nameplate / audio-owner+master / status readout wrap onto extra

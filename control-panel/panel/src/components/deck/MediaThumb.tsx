@@ -1,14 +1,18 @@
+import { memo } from "react";
 import type { MediaItem } from "../types";
 
-/** A real content thumbnail for a library item: images and gifs render themselves, a
- *  video shows its first decoded frame (`preload="metadata"` — no playback, no audio).
- *  Shared by the MediaBin, the layer rows, and the source-bank slots so "what is this?"
- *  is answered by looking, not by reading an id. */
-export function MediaThumb({ item, mediaBase, className }: { item: MediaItem; mediaBase: string; className?: string }) {
-  const url = `${mediaBase}/media/${item.filename}`;
+/** A poster thumbnail for a library item. Uses the server's `…/thumb` endpoint — a small
+ *  (<=320px) JPEG the server extracts once with ffmpeg — instead of the FULL-resolution
+ *  source file (which is why the bin used to take forever: every cell downloaded and
+ *  decoded a multi-MB gif/mp4). Static `<img>` for every kind; `loading="lazy"` so
+ *  off-screen cells don't fetch, `decoding="async"` keeps decode off the main thread.
+ *  Shared by the MediaBin, layer rows, and source-bank slots. Memoized so an unrelated
+ *  panel re-render doesn't reconcile (and potentially reload) every thumbnail.
+ *
+ *  If the server can't make a thumb (no ffmpeg / odd file) the endpoint 302-redirects to
+ *  the source file, so this still shows something. */
+export const MediaThumb = memo(function MediaThumb({ item, mediaBase, className }: { item: MediaItem; mediaBase: string; className?: string }) {
+  const url = `${mediaBase}/media/${item.filename}/thumb`;
   const cls = className ? `media-thumb ${className}` : "media-thumb";
-  if (item.kind === "video") {
-    return <video className={cls} src={url} muted playsInline preload="metadata" tabIndex={-1} aria-hidden="true" />;
-  }
-  return <img className={cls} src={url} alt="" draggable={false} aria-hidden="true" />;
-}
+  return <img className={cls} src={url} alt="" draggable={false} aria-hidden="true" loading="lazy" decoding="async" />;
+});

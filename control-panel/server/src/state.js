@@ -59,6 +59,7 @@ export function defaultFx() {
     brightness: 1,
     contrast: 1,
     saturation: 1,
+    hue: 0,
     edgeBlend: { left: 0, right: 0, top: 0, bottom: 0, gamma: 2, invert: false },
     // Per-stage enable/bypass (task A7 — VPT8 parity: a `pattr on` per stage, decoupled
     // from its value). All default true so an untouched layer's chain behaves exactly as

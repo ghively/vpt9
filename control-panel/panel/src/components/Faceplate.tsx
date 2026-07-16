@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 
 export interface FaceplateProps {
   /** Screen-select slot — sits beside the wordmark, e.g. the active-screen segment.
@@ -14,7 +14,7 @@ export interface FaceplateProps {
 /** The equipment faceplate: nameplate + breathing power lamp on the left (with an
  *  optional screen-select segment beside it), center and right slots for the
  *  audio-owner picker and status readout. */
-export function Faceplate({ screenSelect, center, right }: FaceplateProps) {
+function FaceplateView({ screenSelect, center, right }: FaceplateProps) {
   return (
     <header>
       <div className="nameplate">
@@ -32,3 +32,5 @@ export function Faceplate({ screenSelect, center, right }: FaceplateProps) {
     </header>
   );
 }
+
+export const Faceplate = memo(FaceplateView);

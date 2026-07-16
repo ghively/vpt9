@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useContextMenu } from "./ContextMenu";
+import { useContextMenu, longPressHandlers, type MenuItem } from "./ContextMenu";
 import type { Preset } from "../types";
 
 export interface LookBarProps {
@@ -38,6 +38,13 @@ export function LookBar({ looks, onRecall, onSave, onRename, onRemove, focus = f
     setRenamingId(null);
   };
 
+  // Shared by right-click and touch long-press (mobile has no right-click).
+  const lookMenu = (look: Preset): MenuItem[] => [
+    ...(onRecall ? [{ label: "Recall", onSelect: () => onRecall(look.id) }] : []),
+    ...(onRename ? [{ label: "Rename…", onSelect: () => { setDraft(look.name); setRenamingId(look.id); } }] : []),
+    ...(onRemove ? ["separator" as const, { label: "Delete look", danger: true, onSelect: () => onRemove(look.id) }] : []),
+  ];
+
   return (
     <div className="lookbar" data-blind={blind}>
       <span className="lookbar__label label">Looks</span>
@@ -63,19 +70,10 @@ export function LookBar({ looks, onRecall, onSave, onRename, onRemove, focus = f
               key={look.id}
               type="button"
               className="look-chip"
-              title={i < 9 ? `Recall (key ${i + 1}) · right-click to manage` : "Recall · right-click to manage"}
+              title={i < 9 ? `Recall (key ${i + 1}) · right-click / long-press to manage` : "Recall · right-click / long-press to manage"}
               onClick={() => onRecall?.(look.id)}
-              onContextMenu={(e) =>
-                ctx.open(e, [
-                  ...(onRecall ? [{ label: "Recall", onSelect: () => onRecall(look.id) }] : []),
-                  ...(onRename
-                    ? [{ label: "Rename…", onSelect: () => { setDraft(look.name); setRenamingId(look.id); } }]
-                    : []),
-                  ...(onRemove
-                    ? ["separator" as const, { label: "Delete look", danger: true, onSelect: () => onRemove(look.id) }]
-                    : []),
-                ])
-              }
+              onContextMenu={(e) => ctx.open(e, lookMenu(look))}
+              {...longPressHandlers((x, y) => ctx.openAt(x, y, lookMenu(look)))}
             >
               {i < 9 && <span className="look-chip__key mono">{i + 1}</span>}
               <span className="look-chip__name">{look.name}</span>

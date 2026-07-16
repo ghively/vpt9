@@ -75,22 +75,45 @@ function walkToParent(state: unknown, keys: string[]): Record<string, unknown> |
   return node as Record<string, unknown>;
 }
 
+// Copy-on-write walk: shallow-clone every container from the root down to (and returning)
+// the leaf's parent, rewiring each parent to point at its clone. The root object keeps its
+// identity (we only reassign its keys), but every ANCESTOR of the mutated leaf gets a NEW
+// identity. That is what makes React + useMemo work: `Object.values(state.media)` only
+// changes reference when `media` actually changed, so memoized children skip reconcile on
+// unrelated updates instead of the whole tree re-rendering (perf 2026-07-16). Callers must
+// first confirm via walkToParent that the path exists / the value differs, so an unchanged
+// write clones nothing and preserves the no-op semantics memoization depends on.
+function cowParent(state: PanelState, keys: string[]): Record<string, unknown> | null {
+  let parent = state as unknown as Record<string, unknown>;
+  for (const key of keys) {
+    if (UNSAFE_KEYS.has(key)) return null;
+    const child = parent[key];
+    if (child == null || typeof child !== "object" || !Object.hasOwn(parent, key)) return null;
+    const cloned = Array.isArray(child) ? child.slice() : { ...(child as Record<string, unknown>) };
+    parent[key] = cloned;
+    parent = cloned as Record<string, unknown>;
+  }
+  return parent;
+}
+
 export function applyUpdate(state: PanelState, path: string, value: unknown): boolean {
   const keys = path.split(".");
   const last = keys.pop()!;
   if (UNSAFE_KEYS.has(last)) return false;
-  const node = walkToParent(state, keys);
-  if (node == null || !Object.hasOwn(node, last)) return false;
-  if (node[last] === value) return false;
-  node[last] = value;
+  const read = walkToParent(state, keys); // read-only existence/no-op check before any clone
+  if (read == null || !Object.hasOwn(read, last)) return false;
+  if (read[last] === value) return false;
+  const parent = cowParent(state, keys)!;
+  parent[last] = value;
   return true;
 }
 
 export function applyCreate(state: PanelState, containerPath: string, key: string, value: unknown): boolean {
   if (typeof key !== "string" || UNSAFE_KEYS.has(key)) return false;
-  const node = walkToParent(state, containerPath.split("."));
-  if (node == null) return false;
-  node[key] = value;
+  const keys = containerPath.split(".");
+  if (walkToParent(state, keys) == null) return false;
+  const parent = cowParent(state, keys)!;
+  parent[key] = value;
   return true;
 }
 
@@ -98,9 +121,10 @@ export function applyDelete(state: PanelState, path: string): boolean {
   const keys = path.split(".");
   const last = keys.pop()!;
   if (UNSAFE_KEYS.has(last)) return false;
-  const node = walkToParent(state, keys);
-  if (node == null || !Object.hasOwn(node, last)) return false;
-  delete node[last];
+  const read = walkToParent(state, keys);
+  if (read == null || !Object.hasOwn(read, last)) return false;
+  const parent = cowParent(state, keys)!;
+  delete parent[last];
   return true;
 }
 
