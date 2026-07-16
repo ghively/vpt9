@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AudioOwner,
   CueList,
   Faceplate,
   HelpPanel,
@@ -117,6 +118,8 @@ export function App() {
   const [showDrawerOpen, setShowDrawerOpen] = useState(true);
   // Keyboard-shortcuts / hidden-gestures reference (opened from the "?" in the faceplate).
   const [helpOpen, setHelpOpen] = useState(false);
+  const helpOpenRef = useRef(false);
+  helpOpenRef.current = helpOpen;
   // Mobile pass (Task 9): below the useIsMobile() breakpoint the 3-zone `.body` grid
   // collapses to a single column with the Stage dominant at top; the left rail
   // (Layers/Slots), Inspector, and Show drawer become bottom-sheet tabs picked by
@@ -386,6 +389,10 @@ export function App() {
       // No auto-repeat: a held B would machine-gun blind toggles, and every OFF edge is
       // a COMMIT that destroys the server's pre-blind snapshot.
       if (e.repeat) return;
+      // The Help modal is open: don't let 1-9 (recall look), B (blind — a COMMIT that
+      // destroys the pre-blind snapshot), or F (focus) fire on the LIVE output while the
+      // operator is reading the shortcuts reference.
+      if (helpOpenRef.current) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if (e.key >= "1" && e.key <= "9") {
@@ -478,6 +485,11 @@ export function App() {
     [state.pip, selectedScreenId],
   );
   const sid = selectedScreenId ?? "";
+  // Stable references so the memoized LayerStack / MediaBin actually skip re-render on
+  // unrelated updates (inline arrows/arrays defeated React.memo before).
+  const setLayerPlaying = useCallback((id: string, playing: boolean) => actions.updateLayer(id, "transport.playing", playing), [actions]);
+  const setLayerOpacity = useCallback((id: string, v: number) => actions.updateLayer(id, "opacity", v), [actions]);
+  const mediaImportsArr = useMemo(() => Object.entries(mediaImports).map(([url, s]) => ({ url, ...s })), [mediaImports]);
 
   // Top faceplate = identity + status only. The master/blackout/blind controls moved to a
   // persistent bottom strip (masterBarEl) where a VJ expects a master/transport bar, and
@@ -503,9 +515,15 @@ export function App() {
     />
   );
 
-  // Persistent bottom master/transport strip.
+  // Persistent bottom master/transport strip. The "Playback owner" picker (multi-screen
+  // only) lives here too — it governs playlist advance / transport telemetry / camera
+  // record (audio is gone), and without a way to set it those go dead on a screen that
+  // isn't the default owner.
   const masterBarEl = (
     <div className="master-bar">
+      {screens.length > 1 && (
+        <AudioOwner screens={screens} ownerId={state.audioOwnerScreenId} onSelect={actions.setAudioOwner} />
+      )}
       <MasterControl
         master={state.master ?? 1}
         onChange={actions.setMaster}
@@ -518,7 +536,7 @@ export function App() {
   );
 
   const layersTopFirst = useMemo(
-    () => Object.values(state.layers).sort((a, b) => (b.order ?? 0) - (a.order ?? 0)), // top-of-stack first
+    () => Object.values(state.layers ?? {}).sort((a, b) => (b.order ?? 0) - (a.order ?? 0)), // top-of-stack first
     [state.layers],
   );
   const selection = useSelection(layersTopFirst[0]?.id ?? null);
@@ -818,7 +836,7 @@ export function App() {
       activePanel = (
         <section className="sc-card">
           <TimerBank
-            timers={Object.values(automation.timers ?? {})}
+            timers={Object.values(automation.timers ?? {}).filter(Boolean)}
             presets={presets}
             sourcePresets={sourceBankPresets}
             onAdd={actions.addTimer}
@@ -832,7 +850,7 @@ export function App() {
       activePanel = (
         <section className="sc-card">
           <LfoRack
-            lfos={Object.values(state.lfos ?? {})}
+            lfos={Object.values(state.lfos ?? {}).filter(Boolean)}
             tempoBpm={state.tempoBpm ?? 120}
             targetOptions={targetOptions}
             onAdd={actions.addLfo}
@@ -847,7 +865,7 @@ export function App() {
       activePanel = (
         <section className="sc-card">
           <MidiMapPanel
-            mappings={Object.values(state.midiMap ?? {})}
+            mappings={Object.values(state.midiMap ?? {}).filter(Boolean)}
             learningId={midi.learningId}
             midiAvailable={midi.available}
             targetOptions={targetOptions}
@@ -919,8 +937,8 @@ export function App() {
       onRemoveLayer={actions.removeLayer}
       onCopyLayer={copyLayer}
       onPasteLayer={pasteLayer}
-      onSetLayerPlaying={(id, playing) => actions.updateLayer(id, "transport.playing", playing)}
-      onSetLayerOpacity={(id, v) => actions.updateLayer(id, "opacity", v)}
+      onSetLayerPlaying={setLayerPlaying}
+      onSetLayerOpacity={setLayerOpacity}
       hasClipboard={hasClipboard}
       onRenameLayer={renameLayer}
       onDropMedia={assignMediaToLayer}
@@ -943,14 +961,14 @@ export function App() {
       onRemove={removeMedia}
       onSetTags={actions.setMediaTags}
       onImportUrl={importMediaUrl}
-      imports={Object.entries(mediaImports).map(([url, s]) => ({ url, ...s }))}
+      imports={mediaImportsArr}
       onDismissImport={dismissMediaImport}
     />
   );
   const slotGridEl = (
     <SlotGrid
       slots={state.sourceBank}
-      media={Object.values(state.media)}
+      media={media}
       cameraDevices={cameraDevices}
       mediaBase={httpBase}
       onRename={actions.renameSourceBankSlot}
@@ -1054,7 +1072,7 @@ export function App() {
         layer={selectedLayer}
         mode={selection.stageEditMode}
         onModeChange={selection.setStageEditMode}
-        media={Object.values(state.media)}
+        media={media}
         sourceBank={state.sourceBank}
         cameraDevices={cameraDevices}
         allScreens={Object.values(state.screens ?? {})}

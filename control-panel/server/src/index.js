@@ -252,7 +252,13 @@ function handlePresetSave(message) {
 function recallPreset(presetId) {
   const preset = state.presets[presetId];
   if (!preset) return false;
-  for (const field of PRESET_FIELDS) state[field] = structuredClone(preset.snapshot[field]);
+  // A legacy/partial snapshot may lack a field; structuredClone(undefined) is undefined
+  // (no throw), which used to set state.pip / state.audioOwnerScreenId to `undefined` —
+  // then Object.hasOwn(state.pip, …) threw (cast route 500) and clients desynced. Only
+  // overwrite fields the snapshot actually carries; leave the rest intact.
+  for (const field of PRESET_FIELDS) {
+    if (preset.snapshot?.[field] !== undefined) state[field] = structuredClone(preset.snapshot[field]);
+  }
   scheduleSave();
   broadcast({ type: "state", state });
   return true;

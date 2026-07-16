@@ -630,3 +630,13 @@ test("layers.<id>.screens accepts null or a string array, rejects junk (screen r
   assert.equal(applyUpdate(state, "layers.layer-1.screens", "screen-1"), false); // scalar
   assert.equal(applyUpdate(state, "layers.layer-1.screens", [1, 2]), false); // non-strings
 });
+
+test("ensureStateDefaults backfills core containers (pip/screens/presets/layers/audioOwnerScreenId) on a partial state", () => {
+  const state = { automation: { running: false } }; // missing everything else
+  ensureStateDefaults(state);
+  assert.deepEqual(state.pip, {});
+  assert.deepEqual(state.screens, {});
+  assert.deepEqual(state.presets, {});
+  assert.deepEqual(state.layers, {});
+  assert.equal(state.audioOwnerScreenId, "screen-1");
+});
