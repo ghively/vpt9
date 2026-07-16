@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { Fader } from "./primitives/Fader";
 import { Button } from "./primitives/Button";
 import { ToggleSquare } from "./primitives/ToggleSquare";
@@ -14,6 +15,9 @@ export interface TransportControlsProps {
    *  as a read-only readout next to the scrub. Per-layer only — shared slots have no
    *  position telemetry, so this is omitted there. */
   position?: number;
+  /** Clip duration in seconds (same telemetry relay) — lets the scrub thumb track the
+   *  live playhead (position/duration) instead of sitting frozen at the last seek. */
+  duration?: number;
 }
 
 // off → loop → palindrome → once → off. Mirrors VPT8's loop-mode set plus the "once"
@@ -78,9 +82,23 @@ function NumField({ value, placeholder, onCommit }: { value: number | null | und
  *  rate, pan, vol, a loop-mode cycle (off/loop/palindrome/once), loop in/out, and a
  *  normalized 0..1 scrub. Used by both the layer FX drawer's Transport section and the
  *  source-bank slot editor so the two never drift. */
-export function TransportControls({ transport, onUpdate, position }: TransportControlsProps) {
+export function TransportControls({ transport, onUpdate, position, duration }: TransportControlsProps) {
   const loopMode = transport.loopMode ?? "off";
   const seek = transport.seek ?? 0;
+  // The scrub thumb follows the live playhead (position/duration) when playing; while the
+  // operator is dragging it we show the drag value and clear it a beat after the last change
+  // so the thumb resumes tracking. Falls back to `seek` when there's no duration telemetry
+  // (a paused/never-played clip, or a shared slot with no position relay).
+  const [scrubDrag, setScrubDrag] = useState<number | null>(null);
+  const scrubTimer = useRef<number | null>(null);
+  const playhead = duration && duration > 0 && position != null ? Math.min(1, Math.max(0, position / duration)) : seek;
+  const scrubValue = scrubDrag ?? playhead;
+  const onScrub = (v: number) => {
+    setScrubDrag(v);
+    onUpdate("seek", v);
+    if (scrubTimer.current != null) clearTimeout(scrubTimer.current);
+    scrubTimer.current = window.setTimeout(() => setScrubDrag(null), 500);
+  };
   return (
     <>
       <Button label={transport.playing ? "Pause" : "Play"} onClick={() => onUpdate("playing", !transport.playing)} />
@@ -101,10 +119,10 @@ export function TransportControls({ transport, onUpdate, position }: TransportCo
         <span className="fx-label">LOOP OUT</span>
         <NumField value={transport.loopOut} placeholder="sec" onCommit={(v) => onUpdate("loopOut", v)} />
       </label>
-      <label className="fx-control" data-neutral={seek === 0}>
+      <label className="fx-control" data-neutral={scrubValue === 0}>
         <span className="fx-label">SCRUB</span>
-        <Fader value={seek} min={0} max={1} step={0.001} ariaLabel="Scrub" onChange={(v) => onUpdate("seek", v)} />
-        <span className="fx-val mono">{position != null ? `${position.toFixed(1)}s` : `${Math.round(seek * 100)}%`}</span>
+        <Fader value={scrubValue} min={0} max={1} step={0.001} ariaLabel="Scrub" onChange={onScrub} />
+        <span className="fx-val mono">{position != null ? `${position.toFixed(1)}s` : `${Math.round(scrubValue * 100)}%`}</span>
       </label>
     </>
   );
