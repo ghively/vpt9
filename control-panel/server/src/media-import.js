@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { applyCreate } from "./state.js";
 import { MEDIA_TYPES, extOf } from "./media.js";
+import { readFileTags } from "./media-tags.js";
 
 // Import-by-link for the media library: paste a URL on the panel and the SERVER pulls it
 // into MEDIA_DIR (the panel may be a phone — the file must land where the render clients
@@ -27,7 +28,7 @@ export function createMediaImporter({ mediaDir, state, broadcast, scheduleSave, 
 
   const status = (url, s, extra = {}) => broadcast({ type: "mediaImportStatus", url, status: s, ...extra });
 
-  function finalize(tmpPath, ext, name) {
+  async function finalize(tmpPath, ext, name) {
     const id = `media-${randomBytes(8).toString("hex")}`;
     const filename = `${id}.${ext}`; // matches SAFE_FILENAME by construction
     const finalPath = join(mediaDir, filename);
@@ -39,7 +40,11 @@ export function createMediaImporter({ mediaDir, state, broadcast, scheduleSave, 
       kind: MEDIA_TYPES[ext].kind,
       size: statSync(finalPath).size,
       uploadedAt: new Date().toISOString(),
-      tags: [], // owned up front — applyUpdate only patches existing leaves
+      // The file is the durable tag store: a downloaded file that already carries
+      // XMP-dc:Subject keywords (e.g. produced by a tagging generator and served over
+      // HTTP) lands pre-tagged. Owned as an array even when empty — applyUpdate only
+      // patches existing leaves.
+      tags: await readFileTags(finalPath),
     };
     applyCreate(state, "media", entry);
     scheduleSave();

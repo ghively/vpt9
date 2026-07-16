@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { applyCreate, applyDelete, resolveDanglingSourceRefs } from "./state.js";
 import { createFramesProvider } from "./media-frames.js";
+import { readFileTags, writeFileTags } from "./media-tags.js";
 
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
 
@@ -57,10 +58,30 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     res.writeHead(204, {
       "access-control-allow-origin": "*",
       "access-control-allow-methods": "POST, DELETE, OPTIONS",
-      "access-control-allow-headers": "X-File-Name, Content-Type",
+      "access-control-allow-headers": "X-File-Name, X-Media-Tags, Content-Type",
       "access-control-max-age": "86400",
     });
     res.end();
+  }
+
+  // Optional X-Media-Tags upload header: comma-separated tags applied to the entry at
+  // create time, so automated producers (a generator scripting POST /api/media) tag in
+  // ONE request instead of needing a follow-up WebSocket update to media.<id>.tags.
+  // Same tolerant parse as the panel's tag inputs (trim, drop empties, dedupe
+  // case-insensitively) + the same shape guarantee corruptsStructure pins for the WS
+  // path: only non-empty strings ever land in state.
+  function parseTagsHeader(raw) {
+    if (typeof raw !== "string" || !raw.trim()) return [];
+    const seen = new Set();
+    const tags = [];
+    for (const part of raw.split(",")) {
+      const tag = part.trim();
+      const key = tag.toLowerCase();
+      if (!tag || seen.has(key)) continue;
+      seen.add(key);
+      tags.push(tag);
+    }
+    return tags;
   }
 
   function handleUpload(req, res) {
@@ -115,12 +136,23 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
       abort(400, "upload stream closed before completion");
     });
     out.on("error", () => abort(500, "could not write file"));
-    out.on("finish", () => {
+    out.on("finish", async () => {
       if (aborted) return;
       finished = true;
-      // tags: owned as an explicit empty array (applyUpdate only patches EXISTING leaves,
-      // so an absent key would make every later media.<id>.tags write silently no-op).
-      const entry = { id, name: fileName, filename, kind: meta.kind, size: written, uploadedAt: new Date().toISOString(), tags: [] };
+      // tags: owned as an explicit array even when empty (applyUpdate only patches
+      // EXISTING leaves, so an absent key would make every later media.<id>.tags write
+      // silently no-op). The FILE is the durable tag store (media-tags.js): embedded
+      // XMP-dc:Subject keywords seed the entry, unioned with the X-Media-Tags header
+      // (header first, embedded appended, case-insensitive dedupe). A producer can
+      // therefore tag by embedding standard XMP before POSTing — no second request.
+      const headerTags = parseTagsHeader(req.headers["x-media-tags"]);
+      const fileTags = await readFileTags(filePath);
+      const seen = new Set(headerTags.map((t) => t.toLowerCase()));
+      const tags = [...headerTags, ...fileTags.filter((t) => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))];
+      // Header tags aren't in the file yet — write the union back so the file stays
+      // the complete record (skipped when exiftool is absent or nothing to write).
+      if (headerTags.length) writeFileTags(filePath, tags);
+      const entry = { id, name: fileName, filename, kind: meta.kind, size: written, uploadedAt: new Date().toISOString(), tags };
       applyCreate(state, "media", entry);
       scheduleSave();
       broadcast({ type: "create", path: "media", key: id, value: entry });

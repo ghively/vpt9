@@ -182,6 +182,10 @@ export interface Layer {
    *  typechecks (the server backfills 1). Only applies to a layer's DIRECT video/image/
    *  camera source, not a shared-slot source (whose texture is shared across layers). */
   downscale?: number;
+  /** Per-layer screen routing (owner request 2026-07-16): null/absent = composite on
+   *  EVERY screen (the pre-routing behavior); an array of screen ids composites only on
+   *  those screens — each render client filters by its own ?screen= identity. */
+  screens?: string[] | null;
 }
 
 export interface Point {

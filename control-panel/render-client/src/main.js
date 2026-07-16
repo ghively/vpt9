@@ -75,9 +75,23 @@ function syncPipOverlay() {
   }
 }
 
+// Per-layer screen routing: a layer with `screens: null` (the default) composites on
+// every screen — the pre-routing behavior; an array composites only on the listed screen
+// ids. Filtered HERE (each render client knows its own ?screen= identity) so a routed-away
+// layer never even decodes on this screen — its media element is torn down like a deleted
+// layer's, not just hidden.
+function layersForThisScreen(layersById) {
+  const mine = {};
+  for (const [id, layer] of Object.entries(layersById ?? {})) {
+    const routes = layer?.screens;
+    if (routes == null || (Array.isArray(routes) && routes.includes(screenId))) mine[id] = layer;
+  }
+  return mine;
+}
+
 function applyDerivedState() {
   isAudioOwner = state.audioOwnerScreenId === screenId;
-  compositor.setLayers(state.layers, state.sourceBank, state.media);
+  compositor.setLayers(layersForThisScreen(state.layers), state.sourceBank, state.media);
   compositor.setWarp(state.screens?.[screenId]?.warp);
   compositor.setMuted(!isAudioOwner);
   compositor.setMaster(state.master ?? 1);

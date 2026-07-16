@@ -18,6 +18,7 @@ import {
   defaultMask,
   loadState,
   saveState,
+  resetShowState,
 } from "../src/state.js";
 
 function sampleState() {
@@ -587,4 +588,45 @@ test("ensureStateDefaults backfills tags onto media entries saved before tagging
   ensureStateDefaults(state);
   assert.deepEqual(state.media["media-old"].tags, []);
   assert.deepEqual(state.media["media-new"].tags, ["keep"]); // existing tags untouched
+});
+
+test("resetShowState wipes the show but keeps media + screen registry (owner 'start fresh')", () => {
+  const state = {
+    layers: { "layer-x": { id: "layer-x", source: { type: "video", url: "/media/media-a.mp4" } } },
+    screens: { "screen-1": { id: "screen-1", name: "Left wall", warp: { mode: "mesh", corners: [], mesh: { size: 8, points: [{ x: 0.3, y: 0.7 }] } } } },
+    media: { "media-a": { id: "media-a", filename: "media-a.mp4", kind: "video", tags: ["keep"] } },
+    presets: { p1: { name: "look" } },
+    pip: { "pip-1": { id: "pip-1" } },
+    master: 0, // mid-blackout
+    blind: true,
+    audioOwnerScreenId: "screen-1",
+    lfos: { l1: {} },
+  };
+  const ref = state; // must mutate IN PLACE — the state object is a shared singleton
+  resetShowState(state);
+  assert.equal(state, ref);
+  assert.deepEqual(state.layers, {});
+  assert.deepEqual(state.presets, {});
+  assert.deepEqual(state.pip, {});
+  assert.deepEqual(state.lfos, {});
+  assert.equal(state.master, 1);
+  assert.equal(state.blind, false);
+  assert.equal(state.sourceBank.length, 8);
+  assert.ok(state.sourceBank.every((s) => s.content === null));
+  // survivors: media library untouched, screen ids/names kept with warp reset to identity
+  assert.deepEqual(state.media["media-a"].tags, ["keep"]);
+  assert.equal(state.screens["screen-1"].name, "Left wall");
+  assert.equal(state.screens["screen-1"].warp.mode, "corner");
+  assert.equal(state.audioOwnerScreenId, "screen-1");
+});
+
+test("layers.<id>.screens accepts null or a string array, rejects junk (screen routing)", () => {
+  const state = sampleState();
+  ensureLayerDefaults(state.layers["layer-1"]);
+  assert.equal(state.layers["layer-1"].screens, null); // backfilled default: every screen
+  assert.equal(applyUpdate(state, "layers.layer-1.screens", ["screen-1"]), true);
+  assert.deepEqual(state.layers["layer-1"].screens, ["screen-1"]);
+  assert.equal(applyUpdate(state, "layers.layer-1.screens", null), true);
+  assert.equal(applyUpdate(state, "layers.layer-1.screens", "screen-1"), false); // scalar
+  assert.equal(applyUpdate(state, "layers.layer-1.screens", [1, 2]), false); // non-strings
 });

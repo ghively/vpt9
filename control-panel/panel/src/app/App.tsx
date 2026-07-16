@@ -883,6 +883,7 @@ export function App() {
       uploadUrl={`${httpBase}/api/media`}
       onUseOnSelected={useMediaOnSelected}
       onRemove={removeMedia}
+      onSetTags={actions.setMediaTags}
       onImportUrl={importMediaUrl}
       imports={Object.entries(mediaImports).map(([url, s]) => ({ url, ...s }))}
       onDismissImport={dismissMediaImport}
@@ -998,6 +999,7 @@ export function App() {
         media={Object.values(state.media)}
         sourceBank={state.sourceBank}
         cameraDevices={cameraDevices}
+        allScreens={Object.values(state.screens ?? {})}
         transportPosition={selectedLayer ? transportPositionsRef.current[selectedLayer.id] : undefined}
         onUpdate={onInspectorUpdate}
         onSetSourceMode={onInspectorSetSourceMode}
@@ -1010,7 +1012,7 @@ export function App() {
       />
     );
   const showDrawerEl = (
-    <ShowDrawer tab={showTab} onTab={setShowTab} open={showDrawerOpen} onToggle={() => setShowDrawerOpen((o) => !o)}>
+    <ShowDrawer tab={showTab} onTab={setShowTab} open={showDrawerOpen} onToggle={() => setShowDrawerOpen((o) => !o)} onResetShow={actions.resetShow}>
       {activePanel}
     </ShowDrawer>
   );

@@ -4,6 +4,7 @@ import { useContextMenu } from "./ContextMenu";
 import { setMediaDrag } from "./dnd";
 import { Chip } from "../primitives/Chip";
 import { Select } from "../primitives/Select";
+import { parseTags } from "../tags";
 import type { MediaItem, MediaKind } from "../types";
 
 /* ---- bin view (sort + kind filter + name search) -------------------------------
@@ -61,6 +62,10 @@ export interface MediaBinProps {
   /** Context menu "Delete from library" — removes the file server-side (layers/slots
    *  referencing it are swept to safe fallbacks by the server). */
   onRemove?: (id: string) => void;
+  /** Context menu "Edit tags…" — inline tag editing right in the bin (owner request
+   *  2026-07-16: the bin is the library's primary surface, not the Show drawer). Commits
+   *  the item's full comma-separated tag list to media.<id>.tags. */
+  onSetTags?: (id: string, tags: string[]) => void;
   /** Import-by-link: a pasted/typed URL the SERVER downloads into the library (direct
    *  media files immediately; YouTube & co. via yt-dlp). Also fired by App's global
    *  paste handler — this field is the discoverable path. */
@@ -79,7 +84,7 @@ export interface MediaBinProps {
  *  organizes big libraries — all client-local, see the MediaSort block above.
  *  Renaming/deleting stays in the Show drawer's Media tab — the bin is the fast path,
  *  not the manager. */
-export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
+export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onSetTags, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,10 +95,12 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
   // Tag filter: transient like the search box (tags come and go with library edits;
   // a persisted stale tag would silently blank the bin across a reload).
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // Inline tag editing (context menu "Edit tags…"): which item's cell shows the input.
+  const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
   const ctx = useContextMenu();
 
   // Union of every tag in the library, alphabetical (case-insensitive), for the filter
-  // row. Tags are edited in the Show drawer's Media tab; the bin only filters by them.
+  // row. Tags are edited inline (context menu "Edit tags…") or in the Show drawer.
   const allTags = useMemo(() => {
     const seen = new Map<string, string>();
     for (const m of media) for (const t of m.tags ?? []) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
@@ -231,6 +238,7 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
             onContextMenu={(e) =>
               ctx.open(e, [
                 ...(onUseOnSelected ? [{ label: "Use on selected layer", onSelect: () => onUseOnSelected(item) }] : []),
+                ...(onSetTags ? [{ label: "Edit tags…", onSelect: () => setEditingTagsId(item.id) }] : []),
                 ...(onRemove
                   ? ["separator" as const, { label: "Delete from library", danger: true, onSelect: () => onRemove(item.id) }]
                   : []),
@@ -238,7 +246,29 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
             }
           >
             <MediaThumb item={item} mediaBase={mediaBase} />
-            <span className="media-cell__name">{item.name}</span>
+            {editingTagsId === item.id ? (
+              <input
+                className="media-cell__tags-input mono"
+                autoFocus
+                placeholder="tags, comma-separated…"
+                defaultValue={(item.tags ?? []).join(", ")}
+                // The cell is draggable — keep pointer/drag gestures inside the input
+                // from starting a media drag while typing.
+                draggable={false}
+                onPointerDown={(e) => e.stopPropagation()}
+                onDragStart={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setEditingTagsId(null);
+                }}
+                onBlur={(e) => {
+                  if (editingTagsId === item.id) onSetTags?.(item.id, parseTags(e.target.value));
+                  setEditingTagsId(null);
+                }}
+              />
+            ) : (
+              <span className="media-cell__name">{item.name}</span>
+            )}
             <span className="media-cell__kind mono">{item.kind}</span>
           </div>
         ))}

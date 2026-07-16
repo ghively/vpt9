@@ -320,6 +320,20 @@
   white-space: nowrap;
   pointer-events: none;
 }
+/* Inline tag editor (context menu "Edit tags…"): sits where the name strip sits. */
+.media-cell__tags-input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  font-size: 10px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.85);
+  border: none;
+  border-top: 1px solid var(--accent, #888);
+  outline: none;
+}
 .media-cell__kind {
   position: absolute;
   top: 4px;
@@ -935,6 +949,26 @@
 .show-drawer[data-open="true"] .show-drawer-chevron { transform: rotate(180deg); }
 
 .show-drawer-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+/* "Start fresh" (owner request): pushed to the bar's far right, away from the tabs;
+ * armed state goes hot so the second, destructive click is a deliberate one. */
+.show-drawer-reset {
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-dim, #8a8f98);
+  background: transparent;
+  border: 1px solid rgba(138, 143, 152, 0.35);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.show-drawer-reset:hover { color: var(--text); border-color: rgba(138, 143, 152, 0.7); }
+.show-drawer-reset[data-armed="true"] {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.08);
+}
 .show-drawer-tab {
   padding: 6px 12px;
   border: 1px solid var(--hairline);

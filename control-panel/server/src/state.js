@@ -291,6 +291,11 @@ export function ensureLayerDefaults(layer) {
     // explicit leaf (not left undefined) so the Inspector's downscale select can patch it —
     // applyUpdate only ever writes an existing leaf.
     downscale: 1,
+    // Per-layer screen routing (owner request 2026-07-16): null = composite on EVERY
+    // screen (the pre-routing behavior — all outputs shared one scene, differing only in
+    // final warp); an array of screen ids composites only on those screens. Owned as an
+    // explicit leaf so the Inspector's screen chips can patch it.
+    screens: null,
   });
 }
 
@@ -338,6 +343,26 @@ export function ensureStateDefaults(state) {
   // (server/src/blind.js), so a persisted blind:true after a restart would be a stuck
   // freeze with nothing to discard-restore.
   state.blind = false;
+  return state;
+}
+
+// "Start fresh" (owner request 2026-07-16): wipe the show back to first-boot defaults
+// IN PLACE (the state object is a shared singleton closed over by every subsystem, so it
+// must never be reassigned). Two things survive: the media library (uploaded files are
+// assets, not show state — the files stay on disk and their entries stay addressable)
+// and the screen REGISTRY (ids/names describe physical outputs; their warps reset to
+// identity). Everything else — layers, slots, presets, pip, automation, LFOs, MIDI,
+// blackout/blind — returns to defaults via the same ensureStateDefaults a first boot uses.
+export function resetShowState(state) {
+  const media = state.media ?? {};
+  const audioOwnerScreenId = state.audioOwnerScreenId ?? null;
+  const screens = {};
+  for (const [sid, s] of Object.entries(state.screens ?? {})) {
+    screens[sid] = { id: sid, name: s?.name ?? sid, warp: defaultWarp() };
+  }
+  for (const key of Object.keys(state)) delete state[key];
+  Object.assign(state, { layers: {}, screens, pip: {}, audioOwnerScreenId, presets: {}, media });
+  ensureStateDefaults(state);
   return state;
 }
 
@@ -455,6 +480,12 @@ function corruptsStructure(keys, last, value) {
   // a LAN client would crash the bin's chip row, and junk would persist to disk).
   if (last === "tags" && keys.length === 2 && keys[0] === "media") {
     return !Array.isArray(value) || value.some((t) => typeof t !== "string");
+  }
+  // Per-layer screen routing (layers.<id>.screens): null (every screen) or an array of
+  // screen-id strings — every render client filters its composite by this per frame, so
+  // pin the shape like media tags (a scalar/object/mixed array would crash the filter).
+  if (last === "screens" && keys.length === 2 && keys[0] === "layers") {
+    return !(value === null || (Array.isArray(value) && value.every((s) => typeof s === "string")));
   }
   return false;
 }
