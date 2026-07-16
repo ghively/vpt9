@@ -164,8 +164,13 @@ function InspectorSection({
         aria-label={title}
         aria-expanded={open}
         onClick={() => {
-          setOpen((o) => !o);
-          onActivate(); // keep the on-stage handles pointed at the section you just touched
+          setOpen((o) => {
+            // Only re-point the on-stage handles when EXPANDING (or re-touching the already-
+            // active section). Clicking purely to COLLAPSE a section must not hijack the
+            // stage edit mode away from whatever the operator was actually editing.
+            if (!o || active) onActivate();
+            return !o;
+          });
         }}
       >
         <span className="insp-sec__title">{title}</span>

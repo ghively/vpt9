@@ -433,7 +433,10 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
               className="media-cell"
               title={`${item.name} — drag onto a layer, slot, or the stage · double-click = use on selected layer`}
               draggable
-              onDragStart={(e) => setMediaDrag(e, item)}
+              // Native HTML5 drag suppresses pointer events, so pointerleave/up never fire
+              // to clear `liveId` — without this a hovered gif stays animating forever after
+              // you drag it onto a layer. Clear it as the drag begins.
+              onDragStart={(e) => { setLiveId(null); setMediaDrag(e, item); }}
               onDoubleClick={() => onUseOnSelected?.(item)}
               {...cellInteraction(item)}
             >

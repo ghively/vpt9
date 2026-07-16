@@ -362,9 +362,12 @@ export function FxDrawer({
             onClick={() => onUpdate?.("mask.enabled", !mask.enabled)}
           />
           <ToggleSquare
-            label={mask.shape === "rect" ? "□" : "○"}
-            title="Mask shape"
-            onClick={() => onUpdate?.("mask.shape", mask.shape === "rect" ? "ellipse" : "rect")}
+            label={mask.shape === "polygon" ? "▽" : mask.shape === "rect" ? "□" : "○"}
+            title={mask.shape === "polygon" ? "Polygon mask — edit shape in the Inspector's Mask section" : "Mask shape (rect / ellipse)"}
+            // This quick toggle only knows rect/ellipse. A polygon mask has its own point
+            // editor in the Mask section — clicking here used to silently convert it to a
+            // rect and orphan its points. Do nothing for polygon; only flip rect<->ellipse.
+            onClick={() => { if (mask.shape !== "polygon") onUpdate?.("mask.shape", mask.shape === "rect" ? "ellipse" : "rect"); }}
           />
           {onEditMask && <Button label="Edit on canvas" onClick={onEditMask} />}
           {MASK_SLIDERS.map((spec) => (
