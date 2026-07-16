@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState, type DragEvent } from "react";
+import { memo, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { MediaThumb } from "./MediaThumb";
 import { useContextMenu, longPressHandlers } from "./ContextMenu";
 import { setMediaDrag, hasMediaDrag, getMediaDrag } from "./dnd";
@@ -119,7 +119,27 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
   // Tag filter: transient like the search box (tags come and go with library edits;
   // a persisted stale tag would silently blank the bin across a reload).
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // Which cell is "live" (animating its real gif): the hovered one on desktop, the pressed
+  // one on touch. Only that cell swaps its poster for the full file, so the grid stays fast.
+  const [liveId, setLiveId] = useState<string | null>(null);
   const ctx = useContextMenu();
+
+  // Cell interaction: right-click / long-press → menu, PLUS hover(mouse)/press(touch) →
+  // animate that one gif (setLiveId). All via pointer events (pointerType-gated) so touch
+  // and mouse don't cross-fire; the long-press handlers are composed in, not replaced.
+  const clearLive = (id: string) => setLiveId((cur) => (cur === id ? null : cur));
+  const cellInteraction = (item: MediaItem) => {
+    const lp = longPressHandlers((x, y) => ctx.openAt(x, y, cellMenu(item)));
+    return {
+      onContextMenu: (e: ReactMouseEvent) => ctx.open(e, cellMenu(item)),
+      onPointerEnter: (e: ReactPointerEvent) => { if (e.pointerType === "mouse") setLiveId(item.id); },
+      onPointerLeave: (e: ReactPointerEvent) => { if (e.pointerType === "mouse") clearLive(item.id); else lp.onPointerLeave(); },
+      onPointerDown: (e: ReactPointerEvent) => { lp.onPointerDown(e); if (e.pointerType !== "mouse") setLiveId(item.id); },
+      onPointerMove: lp.onPointerMove,
+      onPointerUp: (e: ReactPointerEvent) => { lp.onPointerUp(); if (e.pointerType !== "mouse") clearLive(item.id); },
+      onPointerCancel: (e: ReactPointerEvent) => { lp.onPointerCancel(); if (e.pointerType !== "mouse") clearLive(item.id); },
+    };
+  };
 
   const collections = useMemo(() => deriveCollections(media, pending), [media, pending]);
   const untaggedCount = useMemo(() => media.filter((m) => splitTags(m.tags).collections.length === 0).length, [media]);
@@ -415,10 +435,9 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
               draggable
               onDragStart={(e) => setMediaDrag(e, item)}
               onDoubleClick={() => onUseOnSelected?.(item)}
-              onContextMenu={(e) => ctx.open(e, cellMenu(item))}
-              {...longPressHandlers((x, y) => ctx.openAt(x, y, cellMenu(item)))}
+              {...cellInteraction(item)}
             >
-              <MediaThumb item={item} mediaBase={mediaBase} />
+              <MediaThumb item={item} mediaBase={mediaBase} live={liveId === item.id} />
               {editingTagsId === item.id ? (
                 <input
                   className="media-cell__tags-input mono"
