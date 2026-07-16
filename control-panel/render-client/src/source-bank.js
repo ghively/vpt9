@@ -1,6 +1,7 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
 import { applyVideoTransport, nativeLoop, clearTransportState } from "./transport.js";
 import { cameraConstraints, cameraKey } from "./camera.js";
+import { GifPlayer, gifPlayerSupported } from "./gif.js";
 
 // A slot with no transport in state (older state that predates task A9, or an
 // impossible pre-backfill edge) falls back to the pre-A9 behavior — auto-play, whole-clip
@@ -118,7 +119,7 @@ export class SourceBank {
     if (!this.entries.has(slotId)) {
       this.entries.set(slotId, {
         texture: createTexture(this.gl), videoEl: null, imgEl: null, imgKind: null, imgUploaded: false,
-        stream: null, currentUrl: null,
+        gifPlayer: null, stream: null, currentUrl: null,
       });
     }
     return this.entries.get(slotId);
@@ -141,6 +142,7 @@ export class SourceBank {
       entry.stream = null;
     }
     if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
+    if (entry.gifPlayer) { entry.gifPlayer.dispose(); entry.gifPlayer = null; }
     entry.imgKind = null;
     entry.imgUploaded = false;
   }
@@ -194,6 +196,10 @@ export class SourceBank {
         entry.imgEl = img;
         entry.imgKind = kind; // "gif" | "image"
         entry.imgUploaded = false;
+        // Animated gif in a slot: decode frames with a GifPlayer (a GL upload of an
+        // animated <img> only ever takes the FIRST frame — see gif.js); the <img>
+        // stays as the static fallback when ImageDecoder is unavailable/fails.
+        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = new GifPlayer(url);
       }
     }
     if (entry.videoEl) {
@@ -267,14 +273,18 @@ export class SourceBank {
   }
 
   _uploadImageFrame(entry) {
+    // An animating gif samples its GifPlayer's canvas (the CURRENT decoded frame);
+    // stills — and gifs whose player isn't ready/failed — sample the <img> (which for
+    // an animated gif is always its first frame).
+    const gifCanvas = entry.gifPlayer?.ready ? entry.gifPlayer.canvas : null;
     const img = entry.imgEl;
-    if (!img.complete || img.naturalWidth === 0) return;
+    if (!gifCanvas && (!img.complete || img.naturalWidth === 0)) return;
     // Static image uploads once; gif re-uploads every frame to catch the current frame.
     if (entry.imgKind === "image" && entry.imgUploaded) return;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, entry.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gifCanvas ?? img);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     entry.imgUploaded = true;
   }

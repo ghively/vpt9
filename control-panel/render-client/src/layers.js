@@ -3,6 +3,7 @@ import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
 import { SourceBank } from "./source-bank.js";
 import { applyVideoTransport, clearTransportState } from "./transport.js";
 import { cameraConstraints, cameraKey } from "./camera.js";
+import { GifPlayer, gifPlayerSupported } from "./gif.js";
 
 // Order is load-bearing: BLEND_INDEX derives each mode's shader-side integer from
 // array position, and panel/src/components/types.ts's BLEND_MODES must list the exact
@@ -213,7 +214,7 @@ export class LayerStack {
       this.entries.set(id, {
         texture: createTexture(this.gl),
         videoEl: null, stream: null, imgEl: null, imgKind: null, imgUploaded: false,
-        currentUrl: null, fxChain: null,
+        gifPlayer: null, currentUrl: null, fxChain: null,
       });
     }
     return this.entries.get(id);
@@ -247,6 +248,7 @@ export class LayerStack {
       entry.imgEl.remove();
       entry.imgEl = null;
     }
+    if (entry.gifPlayer) { entry.gifPlayer.dispose(); entry.gifPlayer = null; }
     entry.imgKind = null;
     entry.imgUploaded = false;
   }
@@ -288,13 +290,12 @@ export class LayerStack {
         entry._bornBlind = this.blindHold;
         entry.videoEl = video;
       } else {
-        // Still image (jpg) or animated gif: sample an <img> into the texture. A gif
-        // advances its own frames on the browser clock, so re-uploading each render
-        // frame picks up the current frame; a static image needs a single upload.
-        // The element is attached to the document (off-screen, invisible) rather than
-        // left detached: animation-frame advancement for <img> gifs is tied to the
-        // element being part of the active render tree in some browser engines, unlike
-        // <video>, where playback is well-defined even while detached.
+        // Still image (jpg) or animated gif: sample an <img> into the texture. A static
+        // image needs a single upload. An animated gif ALSO gets a GifPlayer (below):
+        // GL uploads of an animated <img> always take its FIRST frame, never the
+        // currently-displayed one, so real animation requires decoding the frames
+        // ourselves — the <img> stays as the guaranteed fallback (first frame beats
+        // black) when ImageDecoder is unavailable or the gif decode fails.
         const img = document.createElement("img");
         img.crossOrigin = "anonymous";
         img.style.cssText = "position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none;";
@@ -305,6 +306,7 @@ export class LayerStack {
         entry.imgEl = img;
         entry.imgKind = kind; // "gif" | "image"
         entry.imgUploaded = false;
+        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = new GifPlayer(url);
       }
     } else if (source?.type === "camera") {
       // Live camera input (VPT8's cam1/cam2). Chrome requires a secure context
@@ -490,14 +492,20 @@ export class LayerStack {
   }
 
   _uploadImageFrame(entry) {
+    // An animating gif samples its GifPlayer's canvas (holding the CURRENT decoded
+    // frame); everything else — stills, plus gifs whose player isn't ready or failed —
+    // samples the <img> (which for an animated gif is always its first frame).
+    const gifCanvas = entry.gifPlayer?.ready ? entry.gifPlayer.canvas : null;
     const img = entry.imgEl;
-    if (!img || !img.complete || img.naturalWidth === 0) return false;
+    if (!gifCanvas && (!img || !img.complete || img.naturalWidth === 0)) return false;
     // Static image uploads once; gif re-uploads every frame to catch the current frame.
     // (A downscale change resets imgUploaded in render() so a still re-uploads at the new
     // size — see the `entry.downscale !== divisor` reset there.)
     if (entry.imgKind === "image" && entry.imgUploaded) return true;
     const gl = this.gl;
-    const src = this._maybeDownscale(entry, img, img.naturalWidth, img.naturalHeight);
+    const src = gifCanvas
+      ? this._maybeDownscale(entry, gifCanvas, gifCanvas.width, gifCanvas.height)
+      : this._maybeDownscale(entry, img, img.naturalWidth, img.naturalHeight);
     gl.bindTexture(gl.TEXTURE_2D, entry.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
@@ -532,13 +540,14 @@ export class LayerStack {
     const url = this._resolveUrl(`/media/${item.filename}`);
     let entry = this.matteEntries.get(mediaId);
     if (!entry) {
-      entry = { texture: createTexture(this.gl), videoEl: null, imgEl: null, imgKind: null, imgUploaded: false, currentUrl: null };
+      entry = { texture: createTexture(this.gl), videoEl: null, imgEl: null, imgKind: null, imgUploaded: false, gifPlayer: null, currentUrl: null };
       this.matteEntries.set(mediaId, entry);
     }
     if (entry.currentUrl !== url) {
       entry.currentUrl = url;
       if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); entry.videoEl = null; }
       if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
+      if (entry.gifPlayer) { entry.gifPlayer.dispose(); entry.gifPlayer = null; }
       entry.imgKind = null;
       entry.imgUploaded = false;
       const kind = item.kind ?? "video";
@@ -562,6 +571,9 @@ export class LayerStack {
         document.body.appendChild(img);
         entry.imgEl = img;
         entry.imgKind = kind; // "gif" | "image"
+        // Animated matte: same GifPlayer as the source paths — a GL upload of an
+        // animated <img> only ever takes the first frame.
+        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = new GifPlayer(url);
       }
     }
     this._uploadSourceFrame(entry);
@@ -575,6 +587,7 @@ export class LayerStack {
       if (activeMatteMediaIds.has(mediaId)) continue;
       if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); }
       if (entry.imgEl) entry.imgEl.remove();
+      entry.gifPlayer?.dispose();
       if (entry.texture) this.gl.deleteTexture(entry.texture);
       this.matteEntries.delete(mediaId);
     }
