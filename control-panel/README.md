@@ -101,9 +101,10 @@ task-by-task history). The shipped feature set:
 **Not verifiable from this environment** (needs real hardware — see the "What's verified"
 section below): a *physical* camera's live feed, a hardware MIDI controller, a real phone
 casting via Chromecast, live YouTube-in-PiP playback, and hardware-GPU acceleration. The
-Docker stack itself, the render-client's WebGL compositing, the camera source path (with a
-synthetic device), and the DIAL cast relay were all exercised in Docker on 2026-07-16;
-A14's camera record-to-disk still needs a real camera to confirm end to end.
+Docker stack itself, the render-client's WebGL compositing, the camera source path AND
+record-to-disk (with a synthetic device), the MIDI CC path (synthetic controller), SSDP
+discovery + the DIAL cast relay, and the YouTube-PiP iframe wiring were all exercised on
+2026-07-16 — only the physical devices themselves remain.
 
 **Explicit non-goals** (confirmed correctly scoped out, not gaps — see
 `docs/VPT8-PARITY-GAPS.md` and `docs/ROADMAP.md`): Art-Net/DMX, serial/sensor input,
@@ -468,15 +469,22 @@ Not verifiable from this environment, by nature of what they are:
 - **Camera source path — VERIFIED with a synthetic device (2026-07-16).** With Chromium's
   `--use-fake-device-for-media-stream`, the full path — `getUserMedia` → stream → WebGL texture
   upload → composite — ran in the dockerized render-client and rendered the synthetic camera
-  frame with no errors. A real physical camera's live feed and the record-to-disk button against
-  a real device remain untested.
+  frame with no errors. **Record-to-disk (A14b) is also verified** (`e2e/camera-record.spec.js`):
+  the audio-owner render-client wrapped MediaRecorder around the fake-camera stream and uploaded
+  a `video` clip into the media library. Only a *real* camera's live footage remains untested.
+- **SSDP discovery + MIDI CC + PiP iframe — VERIFIED (2026-07-16).** The cast-receiver answers an
+  M-SEARCH for the DIAL service with a 200 OK carrying LOCATION + USN (`cast-receiver/test/ssdp.test.js`
+  — the discovery step a phone does before casting); a synthetic WebMIDI CC message drives its
+  mapped parameter through the 0–127→[min,max] scale (`e2e/midi-cc-mapping.spec.js`); and a visible
+  PiP with a videoId mounts the correct YouTube-embed iframe (`e2e/pip-youtube-iframe.spec.js`).
 - **Real hardware at the edges** — a physical camera on a projector machine (the getUserMedia +
-  device-picker path is verified with a synthetic device per the bullet above; only a *real*
-  camera's live feed and the record-to-disk button against a real device are untested), a
-  hardware MIDI controller against the learn flow (WebMIDI needs Chrome + a device and can't be
-  synthesized in-browser), real Chromecast hardware, and Art-Net/DMX/serial (no browser API
-  exists — these need a small bridge process speaking the WS/OSC protocol above, which is
-  deliberately left until hardware is actually in the room).
+  device-picker path AND record-to-disk are verified with a synthetic device per the bullets
+  above; only a *real* camera's live footage is untested), a hardware MIDI controller (the CC
+  decode/scale/map path is verified with a synthetic controller; only a physical knob emitting
+  the CC is untested), real Chromecast hardware (SSDP discovery + the DIAL relay are verified;
+  only a real phone's launch + live youtube.com playback are untested), and Art-Net/DMX/serial
+  (no browser API exists — these need a small bridge process speaking the WS/OSC protocol above,
+  which is deliberately left until hardware is actually in the room).
 
 For the historical record of what parity gaps existed and how each was closed, see
 `docs/VPT8-PARITY-GAPS.md` (the audit) and `docs/REMAINING-WORK.md` (the task-by-task

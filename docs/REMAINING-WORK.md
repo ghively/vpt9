@@ -196,18 +196,23 @@ with a throwaway CA-injected Dockerfile. What was confirmed:
   **obtains a WebGL2 context (1280×720) and composites** the demo layer against the dockerized
   control-plane with **zero page errors**. *Irreducible remainder:* hardware-GPU acceleration (the
   verified path uses software WebGL, which proves the code; hardware is a performance detail).
-- **D2 — camera VERIFIED (synthetic device); MIDI still needs hardware.** With Chromium's
+- **D2 — camera path + record-to-disk + MIDI CC all VERIFIED (synthetic devices).** With Chromium's
   `--use-fake-device-for-media-stream`, the full camera path — `getUserMedia` → stream → WebGL
   texture upload → composite — ran in the dockerized render-client and rendered the synthetic camera
-  frame (`[74,255,20]`) with no errors, exercising the A14 camera-source code live. *Irreducible
-  remainder:* a real physical camera's live feed, and a hardware MIDI controller for WebMIDI CC-learn
-  (WebMIDI can't be meaningfully synthesized in-browser).
-- **D3 — Chromecast/PiP relay: VERIFIED (minus the phone).** The cast-receiver serves the DIAL
-  device description, and a simulated DIAL launch — `POST /apps/YouTube` with the exact `v=<id>` body
-  a phone's YouTube app sends — relayed through the cast-receiver to the control-plane and flipped
-  `pip-1` to `{ videoId, title: "Cast from phone", visible: true }`. *Irreducible remainder:* a real
-  phone's YouTube app initiating the DIAL launch, and the YouTube iframe actually playing video
-  (needs youtube.com + a real browser session).
+  frame (`[74,255,20]`), and **record-to-disk** (A14b) ran end to end — the audio-owner render-client
+  wrapped MediaRecorder around the fake stream and POSTed a `video` clip into the media library
+  (`e2e/camera-record.spec.js`; MediaRecorder turned out to work headless on localhost, correcting the
+  old "unverifiable headless" note in `record.js`). The **MIDI CC** decode → channel/controller-match →
+  0–127→[min,max] write path is verified with a synthetic WebMIDI device (`e2e/midi-cc-mapping.spec.js`).
+  *Irreducible remainder:* a real camera's live footage and a physical MIDI controller emitting the CC.
+- **D3 — SSDP discovery + DIAL relay + PiP iframe all VERIFIED (minus the phone).** The cast-receiver
+  answers an **M-SEARCH** for the DIAL service with a 200 OK carrying LOCATION + USN
+  (`cast-receiver/test/ssdp.test.js` — the discovery a phone does *before* casting); a simulated DIAL
+  launch (`POST /apps/YouTube v=<id>`, the exact request a phone sends) relayed through the
+  cast-receiver to the control-plane and flipped `pip-1` to `{ videoId, visible: true }`; and a visible
+  PiP mounts the correct YouTube-embed **iframe** (`e2e/pip-youtube-iframe.spec.js`). *Irreducible
+  remainder:* a real phone's YouTube app initiating the launch, and youtube.com actually playing in the
+  cross-origin iframe.
 
 **What genuinely still needs a human + hardware:** hardware-GPU accel (perf only), a physical camera,
 a hardware MIDI controller, a real phone casting, and live YouTube-in-PiP playback. Everything
