@@ -50,7 +50,7 @@ test.afterAll(async () => {
   rmSync(`${TMP}-media`, { recursive: true, force: true });
 });
 
-test("master/blind strip is at the bottom; the dead audio-owner control is gone", async ({ page }) => {
+test("master/blind strip is at the bottom; playback-owner picker is in it (relabeled), not the old 'Audio on:'", async ({ page }) => {
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
   const bar = page.locator(".master-bar");
   await expect(bar).toBeVisible();
@@ -59,8 +59,10 @@ test("master/blind strip is at the bottom; the dead audio-owner control is gone"
   // The master strip is the last child of .deck (bottom of the page).
   const isLast = await page.evaluate(() => document.querySelector(".deck")?.lastElementChild?.classList.contains("master-bar"));
   expect(isLast).toBe(true);
-  // Audio-owner picker removed entirely.
-  await expect(page.locator("#audio-owner")).toHaveCount(0);
+  // The owner picker is BACK (it drives playlist-advance/telemetry/record, not audio) — in
+  // the master bar, multi-screen only (default state ships screen-1 + screen-2), relabeled.
+  await expect(bar.locator("#audio-owner")).toBeVisible();
+  await expect(bar.getByText("Playback:")).toBeVisible();
   await expect(page.getByText("Audio on:")).toHaveCount(0);
 });
 
