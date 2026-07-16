@@ -177,7 +177,7 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDev
       {/* Per-slot clip transport (task A9): shown for any content that has playable video
           (media or mix). Slots stay muted (audio-owner policy), so pan/vol round-trip but
           have no audible effect — the render-client applies play/rate/loop/scrub. */}
-      {slot.content && (
+      {(slot.content?.type === "media" || slot.content?.type === "mix") && (
         <div className="fx-row source-slot-transport">
           <TransportControls transport={transport} onUpdate={(field, value) => onSetTransport?.(index, field, value)} />
         </div>

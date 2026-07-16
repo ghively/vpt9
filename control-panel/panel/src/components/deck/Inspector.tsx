@@ -223,8 +223,11 @@ function SourceControl({
   const mediaOptions = media.map((m) => ({ value: `/media/${m.filename}`, label: m.name }));
   const currentUrl = layer.source?.url ?? "";
   const isLibraryUrl = mediaOptions.some((o) => o.value === currentUrl);
-  // Start in External mode only if the current url is a non-empty, non-library url.
-  const [externalMode, setExternalMode] = useState(currentUrl !== "" && !isLibraryUrl);
+  // An EMPTY url is "library-first" (show the picker), not external — only a non-empty,
+  // non-library url is genuinely external. (A fresh video layer used to open in External-URL
+  // mode with a blank text field, hiding the library list.)
+  const isExternalUrl = currentUrl !== "" && !isLibraryUrl;
+  const [externalMode, setExternalMode] = useState(isExternalUrl);
 
   return (
     <div className="source-group">
@@ -279,7 +282,7 @@ function SourceControl({
           <>
             <Select
               className="source-media-select"
-              value={externalMode || !isLibraryUrl ? "__external__" : currentUrl}
+              value={externalMode || isExternalUrl ? "__external__" : currentUrl}
               options={[...mediaOptions, { value: "__external__", label: "External URL…" }]}
               onChange={(v) => {
                 if (v === "__external__") {
@@ -290,7 +293,7 @@ function SourceControl({
                 }
               }}
             />
-            {(externalMode || !isLibraryUrl) && (
+            {(externalMode || isExternalUrl) && (
               <TextField
                 value={currentUrl}
                 placeholder="/media/video.mp4 or https://…"
@@ -500,7 +503,7 @@ function MaskBody({
           <div className="field">
             <span className="label">Feather</span>
             <div className="row">
-              <Fader value={mask.feather} min={0} max={0.5} step={0.005} ariaLabel="Mask feather" onChange={(v) => onUpdate?.("mask.feather", v)} />
+              <Fader key={layer.id} value={mask.feather} min={0} max={0.5} step={0.005} ariaLabel="Mask feather" onChange={(v) => onUpdate?.("mask.feather", v)} />
               <span className="mono">{mask.feather.toFixed(2)}</span>
             </div>
           </div>
@@ -634,7 +637,7 @@ function InspectorView(props: InspectorProps) {
         <div className="field">
           <span className="label">Opacity</span>
           <div className="row">
-            <Fader value={layer.opacity ?? 1} ariaLabel="Layer opacity" onChange={(v) => onUpdate?.("opacity", v)} />
+            <Fader key={layer.id} value={layer.opacity ?? 1} ariaLabel="Layer opacity" onChange={(v) => onUpdate?.("opacity", v)} />
             <span className="mono">{opacityPct}%</span>
           </div>
         </div>

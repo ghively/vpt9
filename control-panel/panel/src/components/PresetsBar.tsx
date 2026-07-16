@@ -80,7 +80,14 @@ export function PresetsBar({ presets, onRecall, onSave, onRename, onRemove }: Pr
   const [name, setName] = useState("");
 
   const save = () => {
-    onSave?.(name.trim() || `Preset ${presets.length + 1}`);
+    let auto = "";
+    if (!name.trim()) {
+      const names = new Set(presets.map((p) => p.name));
+      let n = 1;
+      while (names.has(`Preset ${n}`)) n++; // smallest free — `length+1` collided after a delete
+      auto = `Preset ${n}`;
+    }
+    onSave?.(name.trim() || auto);
     setName("");
   };
 

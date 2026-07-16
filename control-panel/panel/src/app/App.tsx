@@ -310,6 +310,14 @@ export function App() {
   // "midi" tab (Task 8 — previously discarded here since the panel wasn't mounted).
   const midi = useMidi(getState, send);
 
+  // Master fader writes go through here so preBlackoutRef always holds the last NON-ZERO
+  // level — otherwise pulling the fader to 0 directly (not via blackout) left preBlackoutRef
+  // stale, and clicking BLACKOUT to restore jumped to full (1) instead of the prior level.
+  const setMasterRemembering = useCallback((v: number) => {
+    if (v > 0) preBlackoutRef.current = v;
+    actions.setMaster(v);
+  }, [actions]);
+
   const toggleBlackout = useCallback(() => {
     const current = stateRef.current.master ?? 1;
     if (current > 0) {
@@ -375,7 +383,10 @@ export function App() {
   // Look bar save: snapshot the current scene under an auto-name. Renaming/deleting
   // stays in the Show drawer's Presets tab — the bar itself is trigger-only.
   const saveLook = useCallback(() => {
-    const n = Object.keys(stateRef.current.presets ?? {}).length + 1;
+    // Smallest free "Look N" — `count + 1` collided with an existing chip after a deletion.
+    const names = new Set(Object.values(stateRef.current.presets ?? {}).map((p) => p.name));
+    let n = 1;
+    while (names.has(`Look ${n}`)) n++;
     actions.savePreset(`Look ${n}`);
   }, [actions]);
 
@@ -424,12 +435,13 @@ export function App() {
   // confirmation). Toggling off requests the stop+upload.
   const [recording, setRecording] = useState(false);
   const toggleRecord = useCallback(() => {
-    setRecording((on) => {
-      if (on) actions.recordStop();
-      else actions.recordStart();
-      return !on;
-    });
-  }, [actions]);
+    // Side effects (the record start/stop relay) belong OUTSIDE the setState updater —
+    // StrictMode double-invokes updaters, which double-fired the relay in dev.
+    const next = !recording;
+    if (next) actions.recordStart();
+    else actions.recordStop();
+    setRecording(next);
+  }, [actions, recording]);
 
   // Task A2: copy/paste a layer's look. Recovered verbatim from the pre-deck-redesign
   // App.tsx (git show 2cd91e7) — copyLayer snapshots the four LOOK fields off the
@@ -526,7 +538,7 @@ export function App() {
       )}
       <MasterControl
         master={state.master ?? 1}
-        onChange={actions.setMaster}
+        onChange={setMasterRemembering}
         onToggleBlackout={toggleBlackout}
         blind={state.blind ?? false}
         onToggleBlind={toggleBlind}

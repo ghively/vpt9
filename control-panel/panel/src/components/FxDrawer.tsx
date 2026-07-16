@@ -230,9 +230,15 @@ function PlaylistEditor({
         <div className="playlist-row" key={index}>
           <span className="playlist-idx mono">{String(index).padStart(2, "0")}</span>
           <Select
-            value={item.ref?.type === "media" ? (item.ref.mediaId ?? "") : ""}
-            options={media.length ? media.map((m) => ({ value: m.id, label: m.name })) : [{ value: "", label: "(no media)" }]}
-            onChange={(v) => patchItem(index, { ref: v ? { type: "media", mediaId: v } : null })}
+            // A slot-type item can't be represented by the media list — show its own option
+            // (so the select doesn't misleadingly display the first media as selected) and
+            // don't overwrite the slot binding unless the operator actually picks a media.
+            value={item.ref?.type === "media" ? (item.ref.mediaId ?? "") : item.ref?.type === "slot" ? "__slot__" : ""}
+            options={[
+              ...(item.ref?.type === "slot" ? [{ value: "__slot__", label: playlistItemLabel(item, media) }] : []),
+              ...(media.length ? media.map((m) => ({ value: m.id, label: m.name })) : [{ value: "", label: "(no media)" }]),
+            ]}
+            onChange={(v) => { if (v === "__slot__") return; patchItem(index, { ref: v ? { type: "media", mediaId: v } : null }); }}
           />
           <NumField
             className="playlist-duration"
