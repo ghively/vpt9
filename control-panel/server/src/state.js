@@ -93,8 +93,12 @@ export function defaultWarp() {
 }
 
 // Per-layer / per-slot transport: play/pause + rate/loop/pan/vol + scrub for the current
-// source. Defaults are "stopped, neutral" — a freshly created or backfilled layer/slot
-// never starts itself playing or looping on its own.
+// source. Defaults are "playing, looping" (owner decision 2026-07-16): vpt9 is a silent
+// VIDEO instrument — dropping a clip anywhere must show continuous motion immediately,
+// not a black/frozen frame behind a hidden play button. (The pre-2026-07-16 default was
+// paused/"off", which made every fresh video layer look broken on the projector.) The
+// operator can still pause or change loop mode per layer/slot; `vol`/`pan` remain in the
+// schema for compatibility but drive nothing — the render client keeps all media muted.
 //
 // `loopMode` (task A10, VPT8 parity): "off"/"once" play through and stop (no native
 // loop); "loop"/"palindrome" native-loop. `seek` (task A11) is a scrub request: a 0..1
@@ -102,7 +106,7 @@ export function defaultWarp() {
 // leaves in place (see render-client/src/transport.js for the "track last-applied"
 // approach). null = no pending seek.
 export function defaultTransport() {
-  return { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1, seek: null };
+  return { playing: true, rate: 1, loopIn: null, loopOut: null, loopMode: "loop", pan: 0, vol: 1, seek: null };
 }
 
 // A source-bank slot's transport (task A9) auto-plays and loops by default, preserving the

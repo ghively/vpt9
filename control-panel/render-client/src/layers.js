@@ -241,12 +241,6 @@ export class LayerStack {
       // no-op'ing forever because entry._loopHandler is still (falsely) truthy.
       clearTransportState(entry, entry.videoEl);
       entry.videoEl = null;
-      if (entry._audioNodes) {
-        entry._audioNodes.gainNode.disconnect();
-        entry._audioNodes.pannerNode?.disconnect();
-        entry._audioNodes = null;
-        entry._audioNodesFor = null;
-      }
     }
     if (entry.stream) {
       for (const track of entry.stream.getTracks()) track.stop();
@@ -350,40 +344,14 @@ export class LayerStack {
     }
   }
 
-  setLayerMuted(id, muted) {
+  // AUDIO IS INTENTIONALLY DEAD (owner decision 2026-07-16): vpt9 is a silent video
+  // instrument, so every layer <video> stays muted for its whole life regardless of the
+  // audio-owner policy the caller derived. Muted playback is also the only kind Chromium
+  // autoplays unconditionally on a never-clicked projector page — unmuting is what used
+  // to get the element paused by the autoplay policy, killing the picture.
+  setLayerMuted(id, _muted) {
     const entry = this.entries.get(id);
-    if (!entry?.videoEl) return;
-    // The blind audio hold overrides the audio-owner policy for elements created during
-    // the blind session — they stay muted until commit no matter who owns audio.
-    const wantMuted = muted || (this.blindHold && !!entry._bornBlind);
-    entry._wantMuted = wantMuted;
-    // Autoplay policy: unmuting a video on a page the user has never interacted with makes
-    // Chromium PAUSE the element ("Unmuting failed and the element was paused instead") —
-    // on a projector page nobody ever clicks, that killed the PICTURE, not just the sound.
-    // While blocked, hold the element muted (picture keeps playing); the one-time gesture
-    // listener below re-applies the wanted mute state as soon as the page is interacted with.
-    if (!wantMuted && entry._audioBlocked && !this._userGestureSeen) return;
-    entry.videoEl.muted = wantMuted;
-  }
-
-  // First user gesture anywhere on the page: autoplay restrictions lift, so re-apply the
-  // wanted (unmuted) state to every element the policy previously blocked. Wired lazily
-  // from applyTransport the first time a block is detected — a page that never trips the
-  // policy never installs the listener.
-  _armGestureUnlock() {
-    if (this._gestureUnlockArmed) return;
-    this._gestureUnlockArmed = true;
-    const unlock = () => {
-      this._userGestureSeen = true;
-      for (const entry of this.entries.values()) {
-        if (!entry._audioBlocked || !entry.videoEl) continue;
-        entry._audioBlocked = false;
-        entry.videoEl.muted = entry._wantMuted ?? true;
-        if (!entry.videoEl.muted) entry.videoEl.play().catch(() => {});
-      }
-    };
-    document.addEventListener("pointerdown", unlock, { once: true });
-    document.addEventListener("keydown", unlock, { once: true });
+    if (entry?.videoEl) entry.videoEl.muted = true;
   }
 
   // Blind audio hold (the audible face of task A20's frozen wall): while the wall is
@@ -427,50 +395,15 @@ export class LayerStack {
     // layer path derives it from shouldLoop(), set on the element in setLayerSource — a
     // playlist video item must not native-loop or its `ended` advance never fires).
     applyVideoTransport(video, t, entry);
-    // applyVideoTransport flags _audioBlocked when the autoplay policy forced a re-mute;
-    // arm the one-time gesture listener so the first click/keypress restores audio.
-    if (entry._audioBlocked) this._armGestureUnlock();
 
-    // One shared AudioContext for the whole LayerStack (this.audioCtx, created lazily
-    // below), not one per layer — browsers cap the number of live AudioContexts (around
-    // 6 in Chrome), and this render client can have far more layers than that.
-    // entry._audioNodes is tied to THIS video element's identity (entry._audioNodesFor)
-    // so a source change that replaces entry.videoEl (via _stopSource) gets fresh nodes
-    // instead of silently keeping pan/vol routed to a dead element — createMediaElementSource
-    // can only be called once per element for its lifetime, so this check must never
-    // re-call it on the same still-live element either.
-    if (entry._audioNodesFor !== video && window.AudioContext) {
-      try {
-        if (!this.audioCtx) this.audioCtx = new AudioContext();
-        const source = this.audioCtx.createMediaElementSource(video);
-        const gainNode = this.audioCtx.createGain();
-        const pannerNode = this.audioCtx.createStereoPanner ? this.audioCtx.createStereoPanner() : null;
-        if (pannerNode) { source.connect(pannerNode); pannerNode.connect(gainNode); }
-        else source.connect(gainNode);
-        gainNode.connect(this.audioCtx.destination);
-        entry._audioNodes = { gainNode, pannerNode };
-        entry._audioNodesFor = video;
-      } catch {
-        entry._audioNodes = null;
-        entry._audioNodesFor = video; // still mark as "attempted for this element" so we don't retry every frame
-      }
-    }
-    // Autoplay policy: a context created before any user gesture starts "suspended" and
-    // outputs SILENCE — and createMediaElementSource has already rerouted the element's
-    // audio into it, so the audio-owner screen would stay mute forever. Retry resume()
-    // each frame: it succeeds immediately under kiosk autoplay flags, or on the first
-    // frame after any user gesture (click/fullscreen dblclick) otherwise.
-    if (this.audioCtx && this.audioCtx.state === "suspended") this.audioCtx.resume().catch(() => {});
-    // Blind audio hold: vol/pan freeze at their pre-blind levels while the wall is
-    // frozen — an off-air fader move must not be audible. Values resume tracking the
-    // live state on the first frame after commit/discard.
-    if (this.blindHold) return;
-    if (entry._audioNodes) {
-      entry._audioNodes.gainNode.gain.value = t.vol ?? 1;
-      if (entry._audioNodes.pannerNode) entry._audioNodes.pannerNode.pan.value = t.pan ?? 0;
-    } else {
-      video.volume = t.vol ?? 1;
-    }
+    // AUDIO IS INTENTIONALLY DEAD (owner decision 2026-07-16): vpt9 is a silent video
+    // instrument. The former audio-owner pipeline (a shared AudioContext with
+    // createMediaElementSource + gain/pan nodes per layer, unmuted on the audio-owner
+    // screen) is gone — unmuting on a never-clicked projector page tripped Chromium's
+    // autoplay policy, which PAUSED the element and killed the PICTURE, and volume
+    // changes rerouted through suspended contexts caused more of the same. Every layer
+    // <video> stays muted for its whole life (setLayerMuted below); transport vol/pan
+    // are accepted (state-schema compatibility) but drive nothing.
   }
 
   removeLayer(id) {
@@ -483,16 +416,12 @@ export class LayerStack {
   }
 
   // Full teardown: stop every layer's source and free its GL resources, plus the shared
-  // source-bank and AudioContext. Used when the WebGL context is lost (the compositor
-  // rebuilds a fresh LayerStack on restore) and for any explicit teardown.
+  // source-bank. Used when the WebGL context is lost (the compositor rebuilds a fresh
+  // LayerStack on restore) and for any explicit teardown.
   dispose() {
     for (const id of [...this.entries.keys()]) this.removeLayer(id);
     this._sweepMatteEntries(new Set()); // tear down every matte decoder + its texture
     this.sourceBank?.dispose?.();
-    if (this.audioCtx) {
-      try { this.audioCtx.close(); } catch { /* already closed */ }
-      this.audioCtx = null;
-    }
   }
 
   // Per-source downscale (task A15 — VPT8's `p adapt`): when entry.downscale > 1, draw the

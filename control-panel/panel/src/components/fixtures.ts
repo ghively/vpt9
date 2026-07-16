@@ -35,8 +35,9 @@ const identityCorners = [
 
 const defaultWarp = { mode: "corner" as const, corners: identityCorners, mesh: { size: 4, points: [] } };
 
-// Mirrors server/src/state.js's defaultTransport() / layer playlist default.
-export const defaultTransport: Transport = { playing: false, rate: 1, loopIn: null, loopOut: null, loopMode: "off", pan: 0, vol: 1 };
+// Mirrors server/src/state.js's defaultTransport() / layer playlist default:
+// playing+loop (owner decision 2026-07-16 — silent video instrument, motion on drop).
+export const defaultTransport: Transport = { playing: true, rate: 1, loopIn: null, loopOut: null, loopMode: "loop", pan: 0, vol: 1 };
 const defaultPlaylist: Playlist = { items: [], cursor: -1 };
 
 export const sampleLayers: Layer[] = [
