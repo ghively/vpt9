@@ -112,7 +112,12 @@ export function applyVideoTransport(video, transport, entry) {
   // re-play() attempted here is then rejected because the element is unmuted. Without the
   // fallback that killed the PICTURE permanently. Re-mute and play again — video always
   // survives; audio waits for the first gesture (layers.js's _armGestureUnlock).
-  if (t.playing && video.paused && !video.ended) {
+  // `entry._loopDir === -1`: a palindrome clip on its REVERSE leg is deliberately paused
+  // while startPalindromeReverse() manually rewinds currentTime each frame. Without this
+  // guard, this per-frame play() resumed forward native playback (t.playing is still true,
+  // the element was just paused), which cancelled the manual rewind — the clip stalled at
+  // loopOut and never ping-ponged back. Leave it paused during the reverse leg.
+  if (t.playing && video.paused && !video.ended && entry._loopDir !== -1) {
     video.play().catch((err) => {
       if (video.muted || err?.name !== "NotAllowedError") return;
       entry._audioBlocked = true;
