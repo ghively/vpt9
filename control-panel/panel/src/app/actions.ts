@@ -62,6 +62,16 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
           blendMode: "normal",
           mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0.08 },
           fx: defaultFx(),
+          // Include `warp` like `mask`/`fx` above (the server backfills it via
+          // ensureLayerDefaults, and the client doesn't optimistically apply creates, so
+          // this isn't a live bug) — but `Layer.warp` is required and StageSelectionOverlay's
+          // WarpHandles reads `warp.mode` unguarded, so ship the identity warp in the payload
+          // rather than depend on the round-trip to fill it.
+          warp: {
+            mode: "corner",
+            corners: IDENTITY_CORNERS.map((p) => ({ ...p })),
+            mesh: { size: 4, points: identityMeshPoints(4) },
+          },
         },
       });
     },
