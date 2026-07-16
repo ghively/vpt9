@@ -3,7 +3,7 @@ import { ToggleSquare } from "../primitives/ToggleSquare";
 import { Fader } from "../primitives/Fader";
 import { rgbToHex } from "../color";
 import { MediaThumb } from "./MediaThumb";
-import { useContextMenu, type MenuItem } from "./ContextMenu";
+import { useContextMenu, longPressHandlers, type MenuItem } from "./ContextMenu";
 import { hasMediaDrag, getMediaDrag, hasLayerDrag, getLayerDrag, setLayerDrag, type MediaDragPayload } from "./dnd";
 import type { Layer, MediaItem } from "../types";
 
@@ -286,6 +286,7 @@ function LayerStackView({
               data-drop={dropId === layer.id}
               {...dragProps(layer.id)}
               onContextMenu={(e) => ctx.open(e, layerMenu(layer))}
+              {...longPressHandlers((x, y) => ctx.openAt(x, y, layerMenu(layer)))}
             >
               {/* A div-with-button-role, not a <button>: the visibility eye nests inside
                *  the hit area (nested <button>s are invalid HTML). */}

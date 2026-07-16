@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useState, type DragEvent } from "react";
 import { MediaThumb } from "./MediaThumb";
-import { useContextMenu } from "./ContextMenu";
+import { useContextMenu, longPressHandlers } from "./ContextMenu";
 import { setMediaDrag, hasMediaDrag, getMediaDrag } from "./dnd";
 import { Chip } from "../primitives/Chip";
 import { Select } from "../primitives/Select";
@@ -416,6 +416,7 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
               onDragStart={(e) => setMediaDrag(e, item)}
               onDoubleClick={() => onUseOnSelected?.(item)}
               onContextMenu={(e) => ctx.open(e, cellMenu(item))}
+              {...longPressHandlers((x, y) => ctx.openAt(x, y, cellMenu(item)))}
             >
               <MediaThumb item={item} mediaBase={mediaBase} />
               {editingTagsId === item.id ? (

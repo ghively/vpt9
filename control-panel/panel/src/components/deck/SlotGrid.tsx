@@ -3,7 +3,7 @@ import { SourceBankSlotEditor } from "../SourceBankSlotEditor";
 import { otherSlotOptions } from "../sourceBank";
 import { MediaThumb } from "./MediaThumb";
 import { rgbToHex } from "../color";
-import { useContextMenu } from "./ContextMenu";
+import { useContextMenu, longPressHandlers, type MenuItem } from "./ContextMenu";
 import { hasMediaDrag, getMediaDrag } from "./dnd";
 import type { CameraDevice, MediaItem, SourceBankSlot } from "../types";
 
@@ -57,6 +57,17 @@ function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetCo
     onEditSlot?.(index);
   };
 
+  // Shared by right-click and touch long-press (mobile has no right-click).
+  const slotMenu = (i: number): MenuItem[] => {
+    const slot = slots[i];
+    return [
+      { label: editingIndex === i ? "Close editor" : "Open editor", onSelect: () => handleClick(i) },
+      ...(onSetContent && slot?.content
+        ? ["separator" as const, { label: "Clear slot", danger: true, onSelect: () => onSetContent(slot.id, i, null) }]
+        : []),
+    ];
+  };
+
   // A filled slot shows what it actually HOLDS: the media's own thumbnail, the solid
   // color, or a CAM/MIX badge — not just a name (media-first redesign).
   const slotFace = (slot: SourceBankSlot) => {
@@ -93,14 +104,8 @@ function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetCo
               aria-expanded={isEditing}
               title={summary ? `${slot.name} · ${summary}` : `${slot.name} — click to set up, or drop media here`}
               onClick={() => handleClick(i)}
-              onContextMenu={(e) =>
-                ctx.open(e, [
-                  { label: editingIndex === i ? "Close editor" : "Open editor", onSelect: () => handleClick(i) },
-                  ...(onSetContent && slot.content
-                    ? ["separator" as const, { label: "Clear slot", danger: true, onSelect: () => onSetContent(slot.id, i, null) }]
-                    : []),
-                ])
-              }
+              onContextMenu={(e) => ctx.open(e, slotMenu(i))}
+              {...longPressHandlers((x, y) => ctx.openAt(x, y, slotMenu(i)))}
               onDragOver={(e: DragEvent) => {
                 if (!onSetContent || !hasMediaDrag(e)) return;
                 e.preventDefault();

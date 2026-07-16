@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- the menu component and its
  * opener hook are one unit; splitting them for HMR pedantry would hurt discoverability. */
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 /** One entry in a right-click menu, or "separator" for a hairline divider. */
 export type MenuItem =
@@ -19,16 +19,57 @@ export type MenuItem =
 export function useContextMenu() {
   const [state, setState] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
 
+  // Position-based open — the shared core, used by both right-click (open) and long-press
+  // (useLongPress). Touch devices have no right-click, so this is how mobile reaches every
+  // context-menu action (rename, hide, duplicate, clear slot, media tags/collections,
+  // delete) that was otherwise mouse-only.
+  const openAt = useCallback((x: number, y: number, items: MenuItem[]) => {
+    if (!items.length) return;
+    setState({ x, y, items });
+  }, []);
   const open = useCallback((e: MouseEvent, items: MenuItem[]) => {
     if (!items.length) return;
     e.preventDefault();
     e.stopPropagation();
-    setState({ x: e.clientX, y: e.clientY, items });
-  }, []);
+    openAt(e.clientX, e.clientY, items);
+  }, [openAt]);
   const close = useCallback(() => setState(null), []);
 
   const menu = state ? <ContextMenu x={state.x} y={state.y} items={state.items} onClose={close} /> : null;
-  return { open, close, menu };
+  return { open, openAt, close, menu };
+}
+
+/** Touch long-press → fires `onLongPress(x, y)` after a hold, so a phone can open the same
+ *  context menus a mouse gets from right-click. Mouse pointers are ignored (they keep
+ *  right-click). Cancels on move (>tolerance) or lift, and eats the trailing click so the
+ *  hold doesn't ALSO select the row / open the slot editor. A plain factory (not a hook)
+ *  so it can be called per-item inside a .map(); each call closes over its own timer.
+ *  Spread the returned handlers onto the same element that carries `onContextMenu`. */
+export function longPressHandlers(onLongPress: (x: number, y: number) => void, ms = 500, moveTolerance = 12) {
+  let timer: number | null = null;
+  let start: { x: number; y: number } | null = null;
+  const clear = () => { if (timer != null) { clearTimeout(timer); timer = null; } start = null; };
+  const eatNextClick = () => {
+    const s = (e: Event) => { e.stopPropagation(); e.preventDefault(); cleanup(); };
+    const cleanup = () => window.removeEventListener("click", s, true);
+    window.addEventListener("click", s, true);
+    window.setTimeout(cleanup, 700); // safety: never leave a dangling suppressor
+  };
+  return {
+    onPointerDown: (e: ReactPointerEvent) => {
+      if (e.pointerType === "mouse") return; // desktop keeps right-click
+      start = { x: e.clientX, y: e.clientY };
+      const x = e.clientX, y = e.clientY;
+      timer = window.setTimeout(() => { timer = null; start = null; eatNextClick(); onLongPress(x, y); }, ms);
+    },
+    onPointerMove: (e: ReactPointerEvent) => {
+      if (!start) return;
+      if (Math.abs(e.clientX - start.x) > moveTolerance || Math.abs(e.clientY - start.y) > moveTolerance) clear();
+    },
+    onPointerUp: clear,
+    onPointerCancel: clear,
+    onPointerLeave: clear,
+  };
 }
 
 /** The menu itself: fixed-positioned at the pointer, clamped to the viewport.

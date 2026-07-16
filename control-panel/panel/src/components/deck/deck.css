@@ -1201,6 +1201,29 @@
   flex: 1;
   min-height: 0;
 }
+/* Mobile Show tab de-crowd: you're ALREADY on the Show tab, so the drawer's own "Show"
+   toggle is redundant — hide it; and let the 8 tabs wrap instead of crushing/overflowing
+   a ~360px row. */
+.deck[data-mobile="true"] .sheet .show-drawer-toggle { display: none; }
+.deck[data-mobile="true"] .sheet .show-drawer-tabs { flex-wrap: wrap; }
+.deck[data-mobile="true"] .sheet .show-drawer-bar { flex-wrap: wrap; row-gap: 6px; }
+
+/* Master strip wraps on a phone instead of clipping the fader + BLIND/BLACKOUT (and
+   GO LIVE/DISCARD while blind); center it rather than right-justify when wrapped. */
+.deck[data-mobile="true"] .master-bar { justify-content: center; flex-wrap: wrap; }
+.deck[data-mobile="true"] #master-control { flex-wrap: wrap; justify-content: center; }
+
+/* The media bin lives inside the already-scrolling sheet on the "Media" tab — drop the
+   grid's own max-height scroll so it doesn't create a nested double-scroll trap. */
+.deck[data-mobile="true"] .media-bin__grid { max-height: none; overflow: visible; }
+
+/* Help panel: single column + smaller padding so shortcut rows don't overflow a narrow
+   phone (the desktop auto-fit columns want >=300px each). */
+@media (max-width: 719px) {
+  .help-backdrop { padding: 10px; }
+  .help-body { grid-template-columns: 1fr; }
+  .help-row { grid-template-columns: 120px 1fr; }
+}
 
 /* Command bar: let the nameplate / audio-owner+master / status readout wrap onto extra
  * lines instead of overflowing on narrow phone widths (desktop keeps the single-line
