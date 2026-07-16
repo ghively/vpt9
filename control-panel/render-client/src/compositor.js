@@ -103,7 +103,13 @@ export class Compositor {
     const clamp = (v) => Math.max(MIN_INTERNAL, Math.min(MAX_INTERNAL, Math.round(v)));
     const w = clamp(this._fixedRes?.width ?? this.canvas.width);
     const h = clamp(this._fixedRes?.height ?? this.canvas.height);
+    if (w === this.layerStack.width && h === this.layerStack.height) return;
     this.layerStack.resize(w, h);
+    // resize() just freed the pingpong FBOs — including the texture _liveScene points
+    // at. Clear it so a blind-mode capturePreview tick landing between this resize and
+    // the next rAF doesn't sample a deleted texture (it falls back to capturing the
+    // frozen canvas, and repopulates on the next composited frame).
+    this._liveScene = null;
   }
 
   // layersById: state's `layers` map. sourceBank/media: state.sourceBank/state.media,
