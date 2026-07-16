@@ -117,30 +117,17 @@ test("a jpg source composites correctly", async ({ page }) => {
   expect(redPixel[1]).toBeLessThan(80);
 });
 
-// KNOWN ENVIRONMENT LIMITATION — not an app bug, not a harness bug.
-//
-// In this sandbox, headless Chromium never advances a JS-created, DOM-appended
-// `<img>` gif past its first frame (`document.createElement("img")` +
-// `appendChild`, which is exactly how render-client/src/layers.js's
-// `setLayerSource()` attaches gif sources). This has been independently
-// reproduced multiple times across separate sessions/tasks with different
-// gif-generation tools (PIL and ffmpeg) and confirmed to be specific to
-// JS-driven image attachment — an `<img>` written directly into initial HTML
-// via `page.setContent()` animates fine; a JS-created one on the real app page
-// transitions at most once, then the browser's own gif frame-advance timer
-// stops firing. See project memory `headless-webgl-flaky-gpu.md` ("Second,
-// distinct limitation") and the Task 1 report
-// (`.superpowers/sdd/task-1-report.md`) for the full diagnosis, including
-// direct verification that render-client's own upload code
-// (`_uploadImageFrame`) already re-uploads every frame correctly for
-// `imgKind === "gif"` — there is nothing to fix in app code.
-//
-// This assertion is expected to keep failing here, but should pass in a real
-// desktop browser or a non-sandboxed CI runner. Re-enable (replace `fixme`
-// with `test(...)`) once run somewhere that doesn't have this limitation, or
-// if the render client switches to manually decoding/uploading gif frames
-// instead of relying on the browser's native `<img>` animation timer.
-test.fixme("a gif source animates over time", async ({ page }) => {
+// Re-enabled: this was test.fixme() while gif playback relied on the browser's native
+// <img> animation timer, which (a) never advances a JS-created, DOM-appended <img> in
+// this sandbox's headless Chromium (see project memory `headless-webgl-flaky-gpu.md`)
+// and (b) doesn't feed GL uploads anyway — texImage2D of an animated image always
+// takes the FIRST frame per spec, which is why the projector showed frozen gifs even
+// in real desktop browsers. The render client now decodes gif frames itself
+// (render-client/src/gif.js, WebCodecs ImageDecoder on an explicit setTimeout clock),
+// which both fixes the frozen wall and makes the animation testable headless — the
+// exact re-enable condition the old fixme note called out. See also
+// gif-animation.spec.js for the pixel-level regression test.
+test("a gif source animates over time", async ({ page }) => {
   await createFixtureLayers();
 
   await page.goto(`http://localhost:${RENDER_PORT}/index.html?screen=screen-1&ws=ws://localhost:${WS_PORT}`);
@@ -156,9 +143,14 @@ test.fixme("a gif source animates over time", async ({ page }) => {
   socket2.close();
   await page.waitForTimeout(300);
 
-  // Confirm the gif is animating: two screenshots a beat apart must differ.
-  const frame1 = await canvas.screenshot();
-  await page.waitForTimeout(500);
-  const frame2 = await canvas.screenshot();
-  expect(Buffer.compare(frame1, frame2)).not.toBe(0);
+  // Confirm the gif is animating. Not a single before/after screenshot pair: the
+  // fixture cycles every ~400ms, so two captures a fixed beat apart can land on the
+  // same blink phase and compare equal (observed flake). Sample repeatedly across
+  // several cycles and require at least two distinct frames.
+  const seen = new Set();
+  for (let i = 0; i < 8 && seen.size < 2; i++) {
+    seen.add((await canvas.screenshot()).toString("base64"));
+    await page.waitForTimeout(150);
+  }
+  expect(seen.size).toBeGreaterThan(1);
 });

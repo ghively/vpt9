@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 export interface TextFieldProps {
   value: string;
   placeholder?: string;
+  /** Native tooltip. */
+  title?: string;
   /** Fires on blur or Enter (matches the vanilla panel's commit-on-change semantics),
    *  not on every keystroke — so a layer name isn't re-sent character by character. */
   onCommit?: (value: string) => void;
@@ -11,7 +13,7 @@ export interface TextFieldProps {
 
 /** A text input that keeps a local draft and commits on blur/Enter. Re-syncs when the
  *  external value changes (e.g. a preset recall) but never mid-keystroke. */
-export function TextField({ value, placeholder, onCommit, className }: TextFieldProps) {
+export function TextField({ value, placeholder, title, onCommit, className }: TextFieldProps) {
   const [draft, setDraft] = useState(value);
   useEffect(() => {
     setDraft(value);
@@ -26,6 +28,7 @@ export function TextField({ value, placeholder, onCommit, className }: TextField
       type="text"
       className={className}
       placeholder={placeholder}
+      title={title}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}

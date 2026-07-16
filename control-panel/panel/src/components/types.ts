@@ -77,6 +77,10 @@ export interface MediaItem {
   kind: MediaKind;
   size: number;
   uploadedAt: string;
+  /** Operator-assigned organization labels (edited in the Show drawer's Media tab,
+   *  filtered on in the MediaBin). Server-backfilled to [] on load, but optional here
+   *  so a stale in-flight snapshot from an older server can't crash the panel. */
+  tags?: string[];
 }
 
 export interface Mask {

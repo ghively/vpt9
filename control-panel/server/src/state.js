@@ -318,6 +318,12 @@ export function ensureStateDefaults(state) {
       if (slot && typeof slot === "object" && !Array.isArray(slot)) fillMissing(slot, { transport: defaultSlotTransport() });
     }
   }
+  // Backfill `tags` onto media entries saved before tagging existed, so the leaf is
+  // patchable (applyUpdate only ever writes an existing key) and the panel can treat
+  // tags as always-present.
+  for (const item of Object.values(state.media ?? {})) {
+    if (item && typeof item === "object" && !Array.isArray(item)) fillMissing(item, { tags: [] });
+  }
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
   for (const preset of Object.values(state.presets ?? {})) {
     for (const layer of Object.values(preset?.snapshot?.layers ?? {})) ensureLayerDefaults(layer);
@@ -440,6 +446,12 @@ function corruptsStructure(keys, last, value) {
   // A layer's visibility eye (layers.<id>.visible): every render client reads it per
   // frame to decide whether to composite the layer — pin it to a boolean like `blind`.
   if (last === "visible" && keys.length === 2 && keys[0] === "layers") return typeof value !== "boolean";
+  // Media tags (media.<id>.tags): the panel iterates + string-compares these for tag
+  // filtering, so pin the leaf to an array of strings (a scalar/object/mixed array from
+  // a LAN client would crash the bin's chip row, and junk would persist to disk).
+  if (last === "tags" && keys.length === 2 && keys[0] === "media") {
+    return !Array.isArray(value) || value.some((t) => typeof t !== "string");
+  }
   return false;
 }
 

@@ -13,6 +13,13 @@ import { ScreenWarp } from "./warp.js";
 // brcosa/edge-blend) are ONE shader pass; gaussian blur adds two separable passes and
 // motion-blur one feedback pass, each only when non-zero.
 
+// Blur/slide tap-spread reference resolution: the internal compositing size these
+// effects were originally calibrated at. Keeping the spread a fixed fraction of the
+// frame (amount*4 / REF) makes a given blur amount look identical at every internal
+// resolution now that compositing tracks the output canvas (compositor.js).
+const BLUR_REF_WIDTH = 1280;
+const BLUR_REF_HEIGHT = 720;
+
 const QUAD_VERT = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -372,12 +379,14 @@ export class FxChain {
     if (!this.blurFbo) {
       this.blurFbo = [createFramebuffer(gl, this.width, this.height), createFramebuffer(gl, this.width, this.height)];
     }
-    // amount 0..1 -> tap spread in texels; 9 taps at up to 4px apart reads wide enough
-    // for a heavy stage-wash blur at the 720p internal resolution.
-    const spread = amount * 4;
+    // amount 0..1 -> tap spread as a FIXED UV fraction, calibrated against the original
+    // 1280x720 internal resolution (9 taps at up to 4/1280 of the frame apart). The
+    // divisor is deliberately NOT this.width/height: since the internal resolution
+    // started tracking the output canvas, a texel-based spread would make the same blur
+    // amount look 2-3x weaker on a 1080p/4K projector than on the panel preview.
     const passes = [
-      { dir: [spread / this.width, 0], target: this.blurFbo[0] },
-      { dir: [0, spread / this.height], target: this.blurFbo[1] },
+      { dir: [(amount * 4) / BLUR_REF_WIDTH, 0], target: this.blurFbo[0] },
+      { dir: [0, (amount * 4) / BLUR_REF_HEIGHT], target: this.blurFbo[1] },
     ];
     let tex = srcTexture;
     for (const { dir, target } of passes) {
@@ -430,8 +439,9 @@ export class FxChain {
       this.feedbackFbo = [createFramebuffer(gl, this.width, this.height), createFramebuffer(gl, this.width, this.height)];
     }
     const rad = (angleDeg * Math.PI) / 180;
+    // Same fixed-UV calibration as _runBlur — see the note there.
     const spread = amount * 4;
-    const dir = [(Math.cos(rad) * spread) / this.width, (Math.sin(rad) * spread) / this.height];
+    const dir = [(Math.cos(rad) * spread) / BLUR_REF_WIDTH, (Math.sin(rad) * spread) / BLUR_REF_HEIGHT];
     gl.useProgram(this.passes.blur);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, srcTexture);

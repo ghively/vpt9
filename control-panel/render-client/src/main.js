@@ -8,12 +8,20 @@ const canvas = document.getElementById("stage");
 const statusEl = document.getElementById("status");
 const pipRoot = document.getElementById("pip-root");
 
-const compositor = new Compositor(canvas);
-compositor.start();
-
 const params = new URLSearchParams(location.search);
 const screenId = params.get("screen") || "screen-1";
 const wsUrl = params.get("ws") || `ws://${location.hostname}:8080`;
+
+// Optional fixed compositing resolution, e.g. ?res=1920x1080. Default (absent/invalid)
+// composites at the output canvas's own pixel size — see compositor.js's internal-size
+// notes. Use the override for weak projector GPUs or to pin a show's master resolution.
+function parseRes(raw) {
+  const m = /^(\d{2,5})x(\d{2,5})$/i.exec(raw ?? "");
+  return m ? { width: Number(m[1]), height: Number(m[2]) } : null;
+}
+
+const compositor = new Compositor(canvas, { internalRes: parseRes(params.get("res")) });
+compositor.start();
 
 // Library sources are stored as host-independent "/media/<file>" paths; resolve them
 // against the same host this client talks WebSocket to.
@@ -94,9 +102,28 @@ function noteControlActivity() {
   lastControlActivity = performance.now();
 }
 
+// The status line is a diagnostic, not a watermark: it must never sit over a live
+// projection. Show it while connecting/disconnected/erroring; on "connected", flash it
+// briefly (so a tech pointing a browser at the wall gets confirmation) then hide.
+let statusHideTimer = null;
+function showStatus(status) {
+  if (!statusEl) return;
+  statusEl.textContent = `${status} · ${wsUrl} · screen "${screenId}"`;
+  statusEl.style.display = "";
+  if (statusHideTimer) {
+    clearTimeout(statusHideTimer);
+    statusHideTimer = null;
+  }
+  if (status === "connected") {
+    statusHideTimer = setTimeout(() => {
+      statusEl.style.display = "none";
+    }, 2500);
+  }
+}
+
 const socket = connectControlPlane(wsUrl, {
   onStatus(status) {
-    if (statusEl) statusEl.textContent = `${status} · ${wsUrl} · screen "${screenId}"`;
+    showStatus(status);
     // Identify this connection as a render client (on every (re)connect): the server
     // then skips it when relaying panel-only telemetry — every screen's ~10fps 640px
     // preview JPEGs and transport positions used to be mirrored to every projector,

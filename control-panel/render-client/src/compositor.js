@@ -2,11 +2,20 @@ import { LayerStack } from "./layers.js";
 import { ScreenWarp } from "./warp.js";
 import { createFramebuffer } from "./gl-utils.js";
 
-const INTERNAL_WIDTH = 1280;
-const INTERNAL_HEIGHT = 720;
+// Internal compositing resolution bounds. The scene FBOs track the OUTPUT canvas's real
+// pixel size (dpr-aware) so a 1080p/4K projector gets native-res content — the old fixed
+// 1280x720 composited everything at 720p and upscaled, visibly softer than the panel.
+// The cap bounds FBO memory/fill cost against a huge dpr*viewport product; the floor
+// keeps degenerate pre-layout sizes from allocating unusable render targets.
+const MAX_INTERNAL = 4096;
+const MIN_INTERNAL = 16;
 
 export class Compositor {
-  constructor(canvas) {
+  // opts.internalRes: optional fixed { width, height } override (the ?res=WxH URL param) —
+  // an escape hatch for weak projector GPUs where native-res compositing is too heavy,
+  // or to force a show's exact master resolution regardless of the local canvas.
+  constructor(canvas, { internalRes = null } = {}) {
+    this._fixedRes = internalRes;
     this.canvas = canvas;
     // preserveDrawingBuffer: capturePreview() reads the canvas back via drawImage on its
     // own adaptive interval (~100-400ms, see main.js), outside the rAF that drew the
@@ -17,7 +26,6 @@ export class Compositor {
     this.gl = gl;
 
     this.layerStack = new LayerStack(gl);
-    this.layerStack.resize(INTERNAL_WIDTH, INTERNAL_HEIGHT);
     this.screenWarp = new ScreenWarp(gl);
 
     this.layers = []; // sorted by `order` ascending
@@ -69,7 +77,7 @@ export class Compositor {
     this.layerStack?.dispose?.();
     this.screenWarp?.dispose?.();
     this.layerStack = new LayerStack(this.gl);
-    this.layerStack.resize(INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    this._syncInternalSize();
     this.layerStack.setMediaOrigin(this._mediaOrigin);
     this.screenWarp = new ScreenWarp(this.gl);
     // The held-frame FBO's GL handle died with the lost context. Drop it and, if we're still
@@ -85,6 +93,23 @@ export class Compositor {
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
     this.canvas.height = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
+    this._syncInternalSize();
+  }
+
+  // Keep the compositing FBOs matched to the output (or the fixed ?res= override).
+  // LayerStack.resize no-ops on an unchanged size and lazily rebuilds fx chains on a
+  // real change, so calling this on every canvas resize/fullscreen toggle is cheap.
+  _syncInternalSize() {
+    const clamp = (v) => Math.max(MIN_INTERNAL, Math.min(MAX_INTERNAL, Math.round(v)));
+    const w = clamp(this._fixedRes?.width ?? this.canvas.width);
+    const h = clamp(this._fixedRes?.height ?? this.canvas.height);
+    if (w === this.layerStack.width && h === this.layerStack.height) return;
+    this.layerStack.resize(w, h);
+    // resize() just freed the pingpong FBOs — including the texture _liveScene points
+    // at. Clear it so a blind-mode capturePreview tick landing between this resize and
+    // the next rAF doesn't sample a deleted texture (it falls back to capturing the
+    // frozen canvas, and repopulates on the next composited frame).
+    this._liveScene = null;
   }
 
   // layersById: state's `layers` map. sourceBank/media: state.sourceBank/state.media,
@@ -142,11 +167,20 @@ export class Compositor {
   // identity warp to blit scene→FBO so the held texture is uv-identical to a scene texture,
   // meaning it re-displays through the normal warp path exactly like the live scene would.
   _snapshotHeldFrame(scene) {
-    if (!this._heldFbo) this._heldFbo = createFramebuffer(this.gl, INTERNAL_WIDTH, INTERNAL_HEIGHT);
-    this.screenWarp.render(scene, null, INTERNAL_WIDTH, INTERNAL_HEIGHT, 1, {
+    const w = this.layerStack.width;
+    const h = this.layerStack.height;
+    // The internal size can change between blind sessions (window resize/fullscreen) —
+    // recreate a stale-sized held FBO instead of freezing into a mismatched target.
+    if (this._heldFbo && (this._heldFbo.width !== w || this._heldFbo.height !== h)) {
+      this.gl.deleteFramebuffer(this._heldFbo.framebuffer);
+      this.gl.deleteTexture(this._heldFbo.texture);
+      this._heldFbo = null;
+    }
+    if (!this._heldFbo) this._heldFbo = createFramebuffer(this.gl, w, h);
+    this.screenWarp.render(scene, null, w, h, 1, {
       framebuffer: this._heldFbo.framebuffer,
-      width: INTERNAL_WIDTH,
-      height: INTERNAL_HEIGHT,
+      width: w,
+      height: h,
     });
     this._heldWarp = this.warp ? structuredClone(this.warp) : null;
     this._heldMaster = this.master;

@@ -116,7 +116,9 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     out.on("finish", () => {
       if (aborted) return;
       finished = true;
-      const entry = { id, name: fileName, filename, kind: meta.kind, size: written, uploadedAt: new Date().toISOString() };
+      // tags: owned as an explicit empty array (applyUpdate only patches EXISTING leaves,
+      // so an absent key would make every later media.<id>.tags write silently no-op).
+      const entry = { id, name: fileName, filename, kind: meta.kind, size: written, uploadedAt: new Date().toISOString(), tags: [] };
       applyCreate(state, "media", entry);
       scheduleSave();
       broadcast({ type: "create", path: "media", key: id, value: entry });

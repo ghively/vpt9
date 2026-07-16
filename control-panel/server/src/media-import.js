@@ -39,6 +39,7 @@ export function createMediaImporter({ mediaDir, state, broadcast, scheduleSave, 
       kind: MEDIA_TYPES[ext].kind,
       size: statSync(finalPath).size,
       uploadedAt: new Date().toISOString(),
+      tags: [], // owned up front — applyUpdate only patches existing leaves
     };
     applyCreate(state, "media", entry);
     scheduleSave();

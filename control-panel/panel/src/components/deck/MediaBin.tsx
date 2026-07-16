@@ -1,8 +1,53 @@
-import { useRef, useState, type DragEvent } from "react";
+import { useMemo, useRef, useState, type DragEvent } from "react";
 import { MediaThumb } from "./MediaThumb";
 import { useContextMenu } from "./ContextMenu";
 import { setMediaDrag } from "./dnd";
-import type { MediaItem } from "../types";
+import { Chip } from "../primitives/Chip";
+import { Select } from "../primitives/Select";
+import type { MediaItem, MediaKind } from "../types";
+
+/* ---- bin view (sort + kind filter + name search) -------------------------------
+ * Purely client-side organization of the library grid — nothing here touches shared
+ * state, so two operators can sort/filter their own bins independently. Sort and kind
+ * persist across reloads (localStorage); the search box is transient on purpose (a
+ * leftover query silently hiding the whole library across a reload would read as
+ * "my media is gone" mid-show). */
+type MediaSort = "newest" | "oldest" | "name" | "kind" | "largest";
+type KindFilter = "all" | MediaKind;
+
+const SORT_OPTIONS: Array<{ value: MediaSort; label: string }> = [
+  { value: "newest", label: "newest first" },
+  { value: "oldest", label: "oldest first" },
+  { value: "name", label: "name A–Z" },
+  { value: "kind", label: "by kind" },
+  { value: "largest", label: "largest first" },
+];
+const KIND_FILTERS: KindFilter[] = ["all", "video", "gif", "image"];
+
+// `|| 0` guards Date.parse(NaN) on a malformed uploadedAt — NaN comparators would
+// make sort order undefined for the whole array, not just the bad item.
+const byName = (a: MediaItem, b: MediaItem) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+const byNewest = (a: MediaItem, b: MediaItem) => (Date.parse(b.uploadedAt) || 0) - (Date.parse(a.uploadedAt) || 0);
+const SORTERS: Record<MediaSort, (a: MediaItem, b: MediaItem) => number> = {
+  newest: byNewest,
+  oldest: (a, b) => byNewest(b, a),
+  name: byName,
+  kind: (a, b) => a.kind.localeCompare(b.kind) || byName(a, b),
+  largest: (a, b) => (b.size || 0) - (a.size || 0),
+};
+
+const VIEW_STORAGE_KEY = "vpt.media-bin.view";
+function loadView(): { sort: MediaSort; kind: KindFilter } {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY) ?? "") as { sort?: string; kind?: string };
+    return {
+      sort: SORT_OPTIONS.some((o) => o.value === parsed.sort) ? (parsed.sort as MediaSort) : "newest",
+      kind: KIND_FILTERS.includes(parsed.kind as KindFilter) ? (parsed.kind as KindFilter) : "all",
+    };
+  } catch {
+    return { sort: "newest", kind: "all" };
+  }
+}
 
 export interface MediaBinProps {
   media: MediaItem[];
@@ -30,15 +75,56 @@ export interface MediaBinProps {
 /** The visual media bin (MadMapper's Media Panel / Resolume's file browser, sized for
  *  the rail): every library item as a REAL thumbnail, draggable onto a layer row, a
  *  source-bank slot, or the stage itself. Files can be dropped straight onto the bin
- *  (or picked via + add) to upload. Renaming/deleting stays in the Show drawer's Media
- *  tab — the bin is the fast path, not the manager. */
+ *  (or picked via + add) to upload. A view toolbar (name search, kind chips, sort)
+ *  organizes big libraries — all client-local, see the MediaSort block above.
+ *  Renaming/deleting stays in the Show drawer's Media tab — the bin is the fast path,
+ *  not the manager. */
 export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dropArmed, setDropArmed] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
+  const [view, setView] = useState(loadView);
+  const [query, setQuery] = useState("");
+  // Tag filter: transient like the search box (tags come and go with library edits;
+  // a persisted stale tag would silently blank the bin across a reload).
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const ctx = useContextMenu();
+
+  // Union of every tag in the library, alphabetical (case-insensitive), for the filter
+  // row. Tags are edited in the Show drawer's Media tab; the bin only filters by them.
+  const allTags = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const m of media) for (const t of m.tags ?? []) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [media]);
+  // A tag can disappear (last tagged item deleted/retagged) — drop a dangling filter
+  // instead of showing an empty grid with no active-looking chip explaining why.
+  const activeTag = tagFilter && allTags.some((t) => t.toLowerCase() === tagFilter.toLowerCase()) ? tagFilter : null;
+
+  const saveView = (next: { sort: MediaSort; kind: KindFilter }) => {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* storage full/blocked — the view still applies for this session */
+    }
+  };
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const tag = activeTag?.toLowerCase() ?? null;
+    return media
+      .filter(
+        (m) =>
+          (view.kind === "all" || m.kind === view.kind) &&
+          (!tag || (m.tags ?? []).some((t) => t.toLowerCase() === tag)) &&
+          (!q || m.name.toLowerCase().includes(q)),
+      )
+      .sort(SORTERS[view.sort]);
+  }, [media, view, query, activeTag]);
+  const filtered = visible.length !== media.length;
 
   const submitLink = () => {
     const url = linkDraft.trim();
@@ -92,10 +178,49 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
     >
       <div className="sec-head label">
         Media
-        <span className="count mono">{media.length}</span>
+        <span className="count mono">{filtered ? `${visible.length}/${media.length}` : media.length}</span>
       </div>
+      {media.length > 0 && (
+        <div className="media-bin__view">
+          <div className="media-bin__tools">
+            <input
+              type="search"
+              className="media-bin__search"
+              placeholder="search…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setQuery("");
+              }}
+            />
+            <Select
+              className="media-bin__sort"
+              value={view.sort}
+              options={SORT_OPTIONS}
+              onChange={(sort) => saveView({ ...view, sort: sort as MediaSort })}
+            />
+          </div>
+          <div className="media-bin__filters">
+            {KIND_FILTERS.map((k) => (
+              <Chip
+                key={k}
+                label={k === "all" ? `all ${media.length}` : `${k} ${media.filter((m) => m.kind === k).length}`}
+                active={view.kind === k}
+                onClick={() => saveView({ ...view, kind: k })}
+              />
+            ))}
+          </div>
+          {allTags.length > 0 && (
+            <div className="media-bin__filters media-bin__filters--tags">
+              {allTags.map((t) => (
+                <Chip key={t} label={`#${t}`} active={activeTag === t} onClick={() => setTagFilter(activeTag === t ? null : t)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="media-bin__grid">
-        {media.map((item) => (
+        {visible.map((item) => (
           <div
             key={item.id}
             className="media-cell"
@@ -135,6 +260,22 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
         ))}
         {media.length === 0 && imports.length === 0 && !uploading && (
           <div className="media-bin__empty mono">drop video / gif / jpg files here, + add, or paste a link</div>
+        )}
+        {media.length > 0 && visible.length === 0 && imports.length === 0 && (
+          <div className="media-bin__empty mono">
+            nothing matches{" "}
+            <button
+              type="button"
+              className="media-bin__clear"
+              onClick={() => {
+                setQuery("");
+                setTagFilter(null);
+                saveView({ ...view, kind: "all" });
+              }}
+            >
+              clear filters
+            </button>
+          </div>
         )}
       </div>
       <div className="media-bin__foot">

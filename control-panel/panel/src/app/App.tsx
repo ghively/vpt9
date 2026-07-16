@@ -815,6 +815,7 @@ export function App() {
           media={media}
           uploadUrl={`${httpBase}/api/media`}
           onRename={actions.renameMedia}
+          onSetTags={actions.setMediaTags}
           onRemove={removeMedia}
           recording={recording}
           onToggleRecord={toggleRecord}

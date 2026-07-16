@@ -574,3 +574,15 @@ test("layers.<id>.visible: backfilled true, pinned to boolean", () => {
   }
   assert.equal(state.layers["layer-1"].visible, false, "bad writes never landed");
 });
+
+test("ensureStateDefaults backfills tags onto media entries saved before tagging existed", () => {
+  const state = {
+    media: {
+      "media-old": { id: "media-old", name: "old.mp4", kind: "video" },
+      "media-new": { id: "media-new", name: "new.mp4", kind: "video", tags: ["keep"] },
+    },
+  };
+  ensureStateDefaults(state);
+  assert.deepEqual(state.media["media-old"].tags, []);
+  assert.deepEqual(state.media["media-new"].tags, ["keep"]); // existing tags untouched
+});
