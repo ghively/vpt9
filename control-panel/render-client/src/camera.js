@@ -22,6 +22,12 @@ export function cameraConstraints(deviceId, resolution) {
 // distinguishes a camera entry from a media ("<origin>/media/<file>") or color ("color:…")
 // entry sharing the same decoder cache.
 export function cameraKey(deviceId, resolution) {
-  const res = resolution && resolution.width ? `${resolution.width}x${resolution.height}` : "";
+  // Encode height even when width is absent: cameraConstraints applies a `height:{ideal}`
+  // whenever either dimension is set, so keying only on width would give {height:1080} and
+  // {height:720} the SAME key — a height-only resolution change would then never re-acquire
+  // (both layers.js and source-bank.js gate re-acquisition on this key being unchanged).
+  const w = resolution?.width || "";
+  const h = resolution?.height || "";
+  const res = w || h ? `${w}x${h}` : "";
   return `camera:${deviceId || ""}:${res}`;
 }
