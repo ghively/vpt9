@@ -17,6 +17,7 @@ export interface FxDrawerProps {
   /** Live playback position in seconds for the selected layer (transportStatus telemetry),
    *  shown as the scrub readout. */
   transportPosition?: number;
+  transportDuration?: number;
   /** "single" | "playlist" — which source-selection mode the layer is in. */
   sourceMode?: "single" | "playlist";
   /** Ordered clip queue for playlist mode. */
@@ -264,6 +265,7 @@ export function FxDrawer({
   mask,
   transport,
   transportPosition,
+  transportDuration,
   sourceMode,
   playlist,
   downscale,
@@ -391,6 +393,7 @@ export function FxDrawer({
           <TransportControls
             transport={transport}
             position={transportPosition}
+            duration={transportDuration}
             onUpdate={(field, value) => onUpdate?.(`transport.${field}`, value)}
           />
         </FxSection>

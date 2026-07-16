@@ -42,6 +42,8 @@ export interface InspectorLayerProps {
   /** Live playback position (seconds) for the selected layer — the FX drawer's Transport
    *  scrub readout (task A11). From the transportStatus telemetry relay. */
   transportPosition?: number;
+  /** Clip duration (seconds) from the same relay, so the scrub thumb can track the playhead. */
+  transportDuration?: number;
   /** Field paths are relative to the layer ("opacity", "blendMode", "source",
    *  "mask.feather", "fx.zoom", ...) — the SAME write path LayerStrip's `onUpdate` and
    *  FxDrawer's `onUpdate` already use. The container wires this to
@@ -594,6 +596,7 @@ function InspectorView(props: InspectorProps) {
     cameraDevices,
     allScreens,
     transportPosition,
+    transportDuration,
     onUpdate,
     onSetSourceMode,
     onSetPlaylist,
@@ -694,6 +697,7 @@ function InspectorView(props: InspectorProps) {
               mask={layer.mask}
               transport={layer.transport}
               transportPosition={transportPosition}
+              transportDuration={transportDuration}
               sourceMode={layer.sourceMode}
               playlist={layer.playlist}
               downscale={layer.downscale}

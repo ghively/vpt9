@@ -17,7 +17,7 @@ export interface SocketHandlers {
   onStatus: (status: ConnectionState, url: string) => void;
   /** Clip-transport scrub-position telemetry (Task 14). Not persisted state — a
    *  lightweight readout, so this handler is optional and separate from onUpdate. */
-  onTransportStatus?: (layerId: string, position: number) => void;
+  onTransportStatus?: (layerId: string, position: number, duration?: number) => void;
   /** Import-by-link progress (media-import.js): downloading / done / error per URL.
    *  Relay-style like preview/transportStatus — never part of persisted state. */
   onMediaImportStatus?: (url: string, status: string, error?: string, id?: string) => void;
@@ -70,7 +70,7 @@ export function useSocket(url: string, handlers: SocketHandlers): { send: (messa
         else if (message.type === "delete") h().onDelete(message.path);
         else if (message.type === "batch") h().onBatch(message.updates);
         else if (message.type === "preview") h().onPreview(message.screenId, message.frame);
-        else if (message.type === "transportStatus") h().onTransportStatus?.(message.layerId, message.position);
+        else if (message.type === "transportStatus") h().onTransportStatus?.(message.layerId, message.position, message.duration);
         else if (message.type === "mediaImportStatus") h().onMediaImportStatus?.(message.url, message.status, message.error, message.id);
       });
     };

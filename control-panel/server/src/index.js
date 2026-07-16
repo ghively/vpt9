@@ -382,7 +382,7 @@ wss.on("connection", (socket) => {
         // `preview` pattern exactly — see docs/superpowers/specs/2026-07-08-parity-
         // finish-line-design.md Section 3 for why this is NOT part of `state`.
         if (typeof message.layerId === "string" && typeof message.position === "number") {
-          broadcastToPanels({ type: "transportStatus", layerId: message.layerId, position: message.position }, socket);
+          broadcastToPanels({ type: "transportStatus", layerId: message.layerId, position: message.position, duration: message.duration }, socket);
         }
         return;
       case "clipEnded":

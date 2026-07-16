@@ -149,6 +149,8 @@ export function App() {
   // high-frequency, non-persisted display telemetry (Task 14's transportStatus relay),
   // so it lives outside the store/rerender path rather than as a reducer-driven field.
   const transportPositionsRef = useRef<Record<string, number>>({});
+  // Clip durations from the same telemetry, so the scrub fader thumb can track the playhead.
+  const transportDurationsRef = useRef<Record<string, number>>({});
   // Import-by-link started from inside a collection folder: url -> collection name,
   // applied when the import's "done" relay (which carries the new media id) arrives.
   const pendingImportCollections = useRef(new Map<string, string>());
@@ -268,8 +270,9 @@ export function App() {
         return { ...prev, [url]: { status: importStatus, error } };
       });
     },
-    onTransportStatus(layerId, position) {
+    onTransportStatus(layerId, position, duration) {
       transportPositionsRef.current[layerId] = position;
+      if (Number.isFinite(duration)) transportDurationsRef.current[layerId] = duration as number;
       // A playing clip streams a position ~2 Hz. The scrub readout flows as a prop into the
       // (now memoized) Inspector, so a throttled render repaints just that subtree — not the
       // whole deck every telemetry tick as before.
@@ -1089,6 +1092,7 @@ export function App() {
         cameraDevices={cameraDevices}
         allScreens={Object.values(state.screens ?? {})}
         transportPosition={selectedLayer ? transportPositionsRef.current[selectedLayer.id] : undefined}
+        transportDuration={selectedLayer ? transportDurationsRef.current[selectedLayer.id] : undefined}
         onUpdate={onInspectorUpdate}
         onSetSourceMode={onInspectorSetSourceMode}
         onSetPlaylist={onInspectorSetPlaylist}

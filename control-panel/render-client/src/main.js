@@ -229,7 +229,7 @@ setInterval(() => {
   if (!isAudioOwner || socket.readyState !== WebSocket.OPEN) return;
   for (const [layerId, entry] of compositor.layerStack.entries) {
     if (entry.videoEl && !entry.videoEl.paused) {
-      socket.send(JSON.stringify({ type: "transportStatus", layerId, position: entry.videoEl.currentTime }));
+      socket.send(JSON.stringify({ type: "transportStatus", layerId, position: entry.videoEl.currentTime, duration: entry.videoEl.duration }));
     }
   }
 }, 500);
