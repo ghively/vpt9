@@ -200,7 +200,16 @@ export class LayerStack {
     if (this.width === width && this.height === height) return;
     this.width = width;
     this.height = height;
+    this.sourceBank.setRenderSize(width, height); // mix FBOs follow the compositing size
     const gl = this.gl;
+    // The previous pingpong FBOs/textures are dropped for GC of the JS wrappers, but the
+    // GL objects must be freed explicitly or a resize leaks two full-res render targets.
+    for (const fbo of this.pingpong) {
+      if (fbo) {
+        gl.deleteFramebuffer(fbo.framebuffer);
+        gl.deleteTexture(fbo.texture);
+      }
+    }
     this.pingpong = [createFramebuffer(gl, width, height), createFramebuffer(gl, width, height)];
     // Fx chains carry render targets at the old size; rebuild lazily at the new one.
     for (const entry of this.entries.values()) {

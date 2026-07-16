@@ -100,6 +100,15 @@ export class SourceBank {
     this.entries = new Map(); // slotId -> { texture, videoEl, imgEl, currentUrl }
     this.mixFbos = new Map(); // slotId -> framebuffer, one per mix-type slot
     this.mediaOrigin = "";
+    // Mix render-target size — kept in step with the layer stack's compositing size by
+    // LayerStack.resize() so a mix isn't visibly softer than everything around it.
+    this.renderWidth = 1280;
+    this.renderHeight = 720;
+  }
+
+  setRenderSize(width, height) {
+    this.renderWidth = Math.max(1, width | 0);
+    this.renderHeight = Math.max(1, height | 0);
   }
 
   setMediaOrigin(origin) {
@@ -364,7 +373,15 @@ export class SourceBank {
       if (!texB) return texA;
 
       const gl = this.gl;
-      if (!this.mixFbos.has(slot.id)) this.mixFbos.set(slot.id, createFramebuffer(gl, 1280, 720));
+      // Recreate on size mismatch too (window resize / fullscreen changed the
+      // compositing size), not just on first use.
+      const stale = this.mixFbos.get(slot.id);
+      if (stale && (stale.width !== this.renderWidth || stale.height !== this.renderHeight)) {
+        gl.deleteFramebuffer(stale.framebuffer);
+        gl.deleteTexture(stale.texture);
+        this.mixFbos.delete(slot.id);
+      }
+      if (!this.mixFbos.has(slot.id)) this.mixFbos.set(slot.id, createFramebuffer(gl, this.renderWidth, this.renderHeight));
       const fbo = this.mixFbos.get(slot.id);
       const modeIndex = MIX_BLEND_MODES.indexOf(blendMode);
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.framebuffer);
