@@ -98,10 +98,12 @@ task-by-task history). The shipped feature set:
   a multi-screen selector with independent per-screen warp, PiP (YouTube/cast) windows,
   and a live confidence-monitor preview.
 
-**Not verifiable from this environment** (headless/no hardware — see the "What's
-verified" section below): a physical camera, a real MIDI controller, real Chromecast
-hardware, and Docker/GPU execution on a real machine. A14's camera record-to-disk is
-implemented but needs a real camera to confirm end to end.
+**Not verifiable from this environment** (needs real hardware — see the "What's verified"
+section below): a *physical* camera's live feed, a hardware MIDI controller, a real phone
+casting via Chromecast, live YouTube-in-PiP playback, and hardware-GPU acceleration. The
+Docker stack itself, the render-client's WebGL compositing, the camera source path (with a
+synthetic device), and the DIAL cast relay were all exercised in Docker on 2026-07-16;
+A14's camera record-to-disk still needs a real camera to confirm end to end.
 
 **Explicit non-goals** (confirmed correctly scoped out, not gaps — see
 `docs/VPT8-PARITY-GAPS.md` and `docs/ROADMAP.md`): Art-Net/DMX, serial/sensor input,
@@ -442,22 +444,39 @@ Not verifiable from this environment, by nature of what they are:
   implementation is spec-correct for the subset YouTube uses, but real-app compatibility
   (some details of YouTube's Leanback launch flow are reverse-engineered, not officially
   documented) hasn't been tested against a real device.
-- **Docker execution** — the Dockerfiles and compose file are written and reviewed but not
-  run under a Docker daemon (none available in the dev environment).
+- **Docker execution — VERIFIED (2026-07-16).** A Docker daemon became available, so the stack
+  was actually brought up: `docker compose config` validates, all **four images build**, and all
+  **four containers run and serve** — control-plane returns live JSON `/state`, render-client
+  serves its canvas page, panel serves the built Vite dist, cast-receiver serves the DIAL
+  `dd.xml`. Driving the **dockerized** render-client with a real browser confirmed it obtains a
+  WebGL2 context (1280×720) and composites the demo scene against the dockerized control-plane
+  with zero page errors. (Sandbox note: container builds needed this environment's transparent-
+  proxy CA injected for `apk`/`npm` — a proxy artifact, not a Dockerfile issue; the committed
+  Dockerfiles are correct for a normal network.)
 - **GPU execution — VERIFIED on real hardware (2026-07-13).** The four services were brought
   up locally on a Windows box with a discrete GPU (Node processes, no Docker): the render
   client obtained a hardware WebGL2 context — `ANGLE (AMD, AMD Radeon RX 9070 XT, Direct3D11)`,
   no context loss — and composited a driven scene end-to-end (color sources + `screen` blend +
   a feathered ellipse mask, pixel-verified), while the control panel connected to the
   control-plane, drove the scene, and showed the render client's live preview in its Stage, and
-  the cast-receiver served its DIAL `dd.xml`. Only Docker-daemon packaging remains unrun.
-- **Real hardware at the edges** — a physical camera on a projector machine (the
-  getUserMedia + device-picker path is written but headless has no camera; the
-  record-to-disk button is implemented but unverified against a real device), a hardware
-  MIDI controller against the learn flow (WebMIDI needs Chrome + a device), real
-  Chromecast hardware, and Art-Net/DMX/serial (no browser API exists — these need a
-  small bridge process speaking the WS/OSC protocol above, which is deliberately left
-  until hardware is actually in the room).
+  the cast-receiver served its DIAL `dd.xml`.
+- **DIAL cast relay — VERIFIED end-to-end minus the phone (2026-07-16).** Against the dockerized
+  stack, a simulated DIAL launch (`POST /apps/YouTube` with the exact `v=<id>` body a phone's
+  YouTube app sends) relayed through the cast-receiver to the control-plane and flipped `pip-1`
+  to `{ videoId, title: "Cast from phone", visible: true }`. A real phone initiating the launch,
+  and the YouTube iframe actually playing, remain untested (see the two items above).
+- **Camera source path — VERIFIED with a synthetic device (2026-07-16).** With Chromium's
+  `--use-fake-device-for-media-stream`, the full path — `getUserMedia` → stream → WebGL texture
+  upload → composite — ran in the dockerized render-client and rendered the synthetic camera
+  frame with no errors. A real physical camera's live feed and the record-to-disk button against
+  a real device remain untested.
+- **Real hardware at the edges** — a physical camera on a projector machine (the getUserMedia +
+  device-picker path is verified with a synthetic device per the bullet above; only a *real*
+  camera's live feed and the record-to-disk button against a real device are untested), a
+  hardware MIDI controller against the learn flow (WebMIDI needs Chrome + a device and can't be
+  synthesized in-browser), real Chromecast hardware, and Art-Net/DMX/serial (no browser API
+  exists — these need a small bridge process speaking the WS/OSC protocol above, which is
+  deliberately left until hardware is actually in the room).
 
 For the historical record of what parity gaps existed and how each was closed, see
 `docs/VPT8-PARITY-GAPS.md` (the audit) and `docs/REMAINING-WORK.md` (the task-by-task

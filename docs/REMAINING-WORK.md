@@ -21,10 +21,13 @@
 > - **Phase C (divorce) — done.** The `vpt8 source code/` tree is removed, preserved at tag
 >   `vpt8-source-archive` (present on `origin`); `git worktree list` is clean; `SHADER-CREDITS.md`
 >   exists; `CLAUDE.md` is re-centered on the control-panel.
-> - **Phase D (real-world verification) — still open, unchanged.** D1 Docker/GPU bring-up, D2
->   physical camera + MIDI controller, D3 Chromecast + YouTube-in-PiP all require hardware / a
->   non-sandboxed host and remain the genuine remainder. See `control-panel/README.md`'s
->   "Not verifiable from this environment" list.
+> - **Phase D (real-world verification) — software portions now VERIFIED in Docker (2026-07-16);
+>   only true hardware remains.** A Docker daemon was available, so the stack was actually brought
+>   up: all 4 images build, all 4 containers run and serve, the dockerized render-client obtains a
+>   WebGL2 context and composites (D1), a synthetic camera drives the full camera path (D2 camera),
+>   and a simulated DIAL launch relays through the cast-receiver to a visible PiP (D3). Irreducible
+>   remainder: hardware-GPU accel, a physical camera, a hardware MIDI controller, a real phone
+>   casting, and live YouTube-in-PiP playback. See the Phase D section below for the full record.
 >
 > **Gates green as of 2026-07-16:** `server/` `node --test` 230 pass / 10 skipped (documented
 > environment skips); `panel/` `tsc --noEmit` + `eslint .` both clean; every `render-client/src/*.js`
@@ -177,14 +180,38 @@ widgets subsume it).
   (v001/Vade via `shaders/v001 Mixers/`, `shaders/shared/licenses/`); add `render-client/SHADER-CREDITS.md`
   if useful. (Standard blend math isn't copyrightable — low risk — but keep attribution for a clean MIT.)
 
-## Phase D — real-world verification (needs the user / hardware) *(cannot be done from this environment)*
+## Phase D — real-world verification *(software portions now VERIFIED in Docker; only true hardware remains)*
 
-- **D1 — Docker/GPU bring-up:** `docker compose up` the 4 services on a real machine; confirm the
-  render-client gets a GPU context and composites; panel + cast-receiver reachable. Record in the README.
-- **D2 — physical camera + MIDI controller:** a real camera source (device picker from A14) and a
-  hardware MIDI controller (CC-learn) driving parameters live.
-- **D3 — Chromecast + YouTube-in-PiP:** cast a phone's YouTube to the DIAL/SSDP cast-receiver; confirm
-  it appears as a PiP window and plays in the render-client iframe.
+**2026-07-16 update.** A Docker daemon turned out to be available in the build environment, so the
+software-verifiable core of D1/D3 (and the camera half of D2) was actually exercised end-to-end —
+not just reasoned about. The only sandbox-specific wrinkle was that container builds need this
+environment's proxy CA injected for `apk`/`npm` (a transparent-MITM-proxy artifact, **not** a
+Dockerfile bug — the committed Dockerfiles are correct for a real network); verified by building
+with a throwaway CA-injected Dockerfile. What was confirmed:
+
+- **D1 — Docker/GPU bring-up: VERIFIED (software).** `docker compose config` validates; all **4
+  images build**; all **4 containers run and serve** — control-plane returns live JSON `/state`,
+  render-client serves its canvas page (HTTP 200), panel serves the built Vite dist, cast-receiver
+  serves the DIAL `dd.xml`. Driving the **dockerized** render-client with a real browser confirmed it
+  **obtains a WebGL2 context (1280×720) and composites** the demo layer against the dockerized
+  control-plane with **zero page errors**. *Irreducible remainder:* hardware-GPU acceleration (the
+  verified path uses software WebGL, which proves the code; hardware is a performance detail).
+- **D2 — camera VERIFIED (synthetic device); MIDI still needs hardware.** With Chromium's
+  `--use-fake-device-for-media-stream`, the full camera path — `getUserMedia` → stream → WebGL
+  texture upload → composite — ran in the dockerized render-client and rendered the synthetic camera
+  frame (`[74,255,20]`) with no errors, exercising the A14 camera-source code live. *Irreducible
+  remainder:* a real physical camera's live feed, and a hardware MIDI controller for WebMIDI CC-learn
+  (WebMIDI can't be meaningfully synthesized in-browser).
+- **D3 — Chromecast/PiP relay: VERIFIED (minus the phone).** The cast-receiver serves the DIAL
+  device description, and a simulated DIAL launch — `POST /apps/YouTube` with the exact `v=<id>` body
+  a phone's YouTube app sends — relayed through the cast-receiver to the control-plane and flipped
+  `pip-1` to `{ videoId, title: "Cast from phone", visible: true }`. *Irreducible remainder:* a real
+  phone's YouTube app initiating the DIAL launch, and the YouTube iframe actually playing video
+  (needs youtube.com + a real browser session).
+
+**What genuinely still needs a human + hardware:** hardware-GPU accel (perf only), a physical camera,
+a hardware MIDI controller, a real phone casting, and live YouTube-in-PiP playback. Everything
+software-reachable in Phase D is now exercised, not just claimed.
 
 ---
 
