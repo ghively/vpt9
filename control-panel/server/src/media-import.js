@@ -149,7 +149,7 @@ export function createMediaImporter({ mediaDir, state, broadcast, scheduleSave, 
     try {
       const ext = extOf(parsed.pathname);
       const entry = MEDIA_TYPES[ext] ? await directDownload(url, ext) : await ytDlpDownload(url);
-      status(url, "done", { name: entry.name });
+      status(url, "done", { name: entry.name, id: entry.id }); // id lets the panel file the import into a collection
       return entry;
     } catch (err) {
       status(url, "error", { error: err?.message ?? String(err) });

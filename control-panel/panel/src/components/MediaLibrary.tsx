@@ -4,6 +4,7 @@ import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
 import type { MediaItem, MediaKind } from "./types";
 import { parseTags } from "./tags";
+import { splitTags, withLooseTags } from "./collections";
 
 const KIND_TAG: Record<MediaKind, string> = { video: "MP4", gif: "GIF", image: "JPG" };
 
@@ -112,9 +113,9 @@ export function MediaLibrary({ media, uploadUrl, onRename, onSetTags, onRemove, 
                 <TextField
                   className="media-tags mono"
                   placeholder="tags, comma-separated…"
-                  title="Organization tags — the media bin can filter by these"
-                  value={(m.tags ?? []).join(", ")}
-                  onCommit={(v) => onSetTags(m.id, parseTags(v))}
+                  title="Organization tags — the media bin can filter by these (collections are managed in the bin's folders, not here)"
+                  value={splitTags(m.tags).loose.join(", ")}
+                  onCommit={(v) => onSetTags(m.id, withLooseTags(m.tags, parseTags(v)))}
                 />
               )}
             </div>
