@@ -1,27 +1,41 @@
 import { createServer } from "node:http";
 
-function deviceDescriptionXml({ friendlyName, uuid }) {
+// Escape the five XML predefined entities so an interpolated VALUE (a friendly name, or a
+// videoId a phone POSTed in the request body) can never break out of its element and emit
+// malformed XML. A real YouTube id is `[A-Za-z0-9_-]{11}`, but the DIAL app-launch body is
+// attacker-reachable on the LAN — a `v=` containing `<`/`&`/`"` used to corrupt the GET
+// /apps/YouTube app-state response a strict sender then failed to parse. Exported for test.
+export function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+export function deviceDescriptionXml({ friendlyName, uuid }) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0" xmlns:dial="urn:dial-multiscreen-org:schemas:dial">
   <specVersion><major>1</major><minor>0</minor></specVersion>
   <device>
     <deviceType>urn:schemas-upnp-org:device:tvdevice:1</deviceType>
-    <friendlyName>${friendlyName}</friendlyName>
+    <friendlyName>${xmlEscape(friendlyName)}</friendlyName>
     <manufacturer>vpt-modernization</manufacturer>
     <modelName>room-cast-receiver</modelName>
-    <UDN>uuid:${uuid}</UDN>
+    <UDN>uuid:${xmlEscape(uuid)}</UDN>
     <dial:X_dialEver>1.7</dial:X_dialEver>
   </device>
 </root>`;
 }
 
-function appStateXml({ name, state, videoId }) {
+export function appStateXml({ name, state, videoId }) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <service xmlns="urn:dial-multiscreen-org:schemas:dial">
-  <name>${name}</name>
+  <name>${xmlEscape(name)}</name>
   <options allowStop="true"/>
-  <state>${state}</state>
-  ${videoId ? `<additionalData><videoId>${videoId}</videoId></additionalData>` : ""}
+  <state>${xmlEscape(state)}</state>
+  ${videoId ? `<additionalData><videoId>${xmlEscape(videoId)}</videoId></additionalData>` : ""}
 </service>`;
 }
 
