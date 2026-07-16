@@ -468,7 +468,11 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
 
   const stage = page.locator(".deck-stage");
   const box = await stage.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  // Select this layer DETERMINISTICALLY via its LayerStack row, not a stage-center click:
+  // in a full-file run, earlier tests leave overlapping layers in the shared server state,
+  // so a geometric center-click can land on the wrong layer. Assert the selection landed.
+  await page.locator('.layer[data-id="layer-poly-insert"] .layer-hit').first().click();
+  await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-poly-insert");
   await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
@@ -479,6 +483,11 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
 
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.25);
   await expect.poll(async () => (await readMaskPoints()).length).toBe(5);
+  // Wait for the CLIENT overlay to actually render all 5 vertices before pressing Delete.
+  // The poll above only confirms the SERVER has 5 points; if Delete fires while the overlay
+  // still holds the pre-insert 4-point array, its keydown handler deletes a clamped index
+  // and echoes a 3-point array back — the intermittent "Received: 3" that made this flaky.
+  await expect(page.locator(".mask-point")).toHaveCount(5);
 
   await page.keyboard.press("Delete");
   await expect.poll(async () => (await readMaskPoints()).length).toBe(4);
