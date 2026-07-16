@@ -20,7 +20,7 @@ export interface SocketHandlers {
   onTransportStatus?: (layerId: string, position: number) => void;
   /** Import-by-link progress (media-import.js): downloading / done / error per URL.
    *  Relay-style like preview/transportStatus — never part of persisted state. */
-  onMediaImportStatus?: (url: string, status: string, error?: string) => void;
+  onMediaImportStatus?: (url: string, status: string, error?: string, id?: string) => void;
 }
 
 /** Connects to the control-plane WebSocket and routes messages to the handlers. Handlers
@@ -71,7 +71,7 @@ export function useSocket(url: string, handlers: SocketHandlers): { send: (messa
         else if (message.type === "batch") h().onBatch(message.updates);
         else if (message.type === "preview") h().onPreview(message.screenId, message.frame);
         else if (message.type === "transportStatus") h().onTransportStatus?.(message.layerId, message.position);
-        else if (message.type === "mediaImportStatus") h().onMediaImportStatus?.(message.url, message.status, message.error);
+        else if (message.type === "mediaImportStatus") h().onMediaImportStatus?.(message.url, message.status, message.error, message.id);
       });
     };
 

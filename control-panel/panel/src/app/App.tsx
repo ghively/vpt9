@@ -39,6 +39,7 @@ import {
 } from "../components";
 import { layerQuad, pickTopLayer } from "../components/deck/layerGeometry";
 import { mediaSourceUrl, type MediaDragPayload } from "../components/deck/dnd";
+import { addToCollection } from "../components/collections";
 import type { Layer, MediaItem } from "../components/types";
 import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
 import { useSocket, type SocketMessage } from "./useSocket";
@@ -140,6 +141,9 @@ export function App() {
   // high-frequency, non-persisted display telemetry (Task 14's transportStatus relay),
   // so it lives outside the store/rerender path rather than as a reducer-driven field.
   const transportPositionsRef = useRef<Record<string, number>>({});
+  // Import-by-link started from inside a collection folder: url -> collection name,
+  // applied when the import's "done" relay (which carries the new media id) arrives.
+  const pendingImportCollections = useRef(new Map<string, string>());
   // Task A2: per-layer copy/paste clipboard (VPT8's copypaste.maxpat parity — see
   // docs/VPT8-PARITY-GAPS.md §3). Holds a structuredClone of one layer's LOOK fields
   // (opacity/blendMode/mask/fx — not source/name/order/id) so it can be stamped onto
@@ -221,7 +225,15 @@ export function App() {
     onPreview(screenId, frame) {
       preview.push(screenId, frame);
     },
-    onMediaImportStatus(url, importStatus, error) {
+    onMediaImportStatus(url, importStatus, error, id) {
+      // An import started from inside a collection folder gets filed into it once the
+      // entry exists (the create broadcast lands before "done", so state.media has it).
+      if (importStatus === "done" && id) {
+        const collection = pendingImportCollections.current.get(url);
+        pendingImportCollections.current.delete(url);
+        const entry = stateRef.current.media?.[id];
+        if (collection && entry) actions.setMediaTags(id, addToCollection(entry.tags, collection));
+      }
       setMediaImports((prev) => {
         if (importStatus === "done") {
           const next = { ...prev };
@@ -296,9 +308,10 @@ export function App() {
   // Import-by-link: POST the URL; all progress comes back over the WS as
   // mediaImportStatus relays (see the socket handler above).
   const importMediaUrl = useCallback(
-    (url: string) => {
+    (url: string, collection?: string) => {
       const trimmed = url.trim();
       if (!/^https?:\/\/\S+$/i.test(trimmed)) return;
+      if (collection) pendingImportCollections.current.set(trimmed, collection);
       setMediaImports((prev) => ({ ...prev, [trimmed]: { status: "requesting" } }));
       fetch(`${httpBase}/api/media/import`, {
         method: "POST",
