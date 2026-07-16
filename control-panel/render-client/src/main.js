@@ -20,7 +20,24 @@ function parseRes(raw) {
   return m ? { width: Number(m[1]), height: Number(m[2]) } : null;
 }
 
-const compositor = new Compositor(canvas, { internalRes: parseRes(params.get("res")) });
+// Compositor construction acquires the WebGL2 context and throws if it can't (getContext
+// returns null: hardware acceleration disabled, the GPU is blocklisted, or too many live
+// WebGL contexts already exist). At module top-level an uncaught throw here kills the whole
+// render client — a silent black projector whose only trace is one console error, easily
+// buried under browser-extension noise. Surface it ON the canvas so the operator can see
+// WHAT failed and act on it, then rethrow (there is nothing to render without a context).
+let compositor;
+try {
+  compositor = new Compositor(canvas, { internalRes: parseRes(params.get("res")) });
+} catch (err) {
+  if (statusEl) {
+    statusEl.textContent = `render failed: ${err.message}. Enable the browser's hardware acceleration (GPU) and reload.`;
+    statusEl.style.display = "";
+    statusEl.style.color = "#ff6b6b";
+    statusEl.style.fontSize = "14px";
+  }
+  throw err;
+}
 compositor.start();
 
 // Library sources are stored as host-independent "/media/<file>" paths; resolve them
