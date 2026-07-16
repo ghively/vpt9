@@ -479,3 +479,52 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
   await page.keyboard.press("Delete");
   await expect.poll(async () => (await readMaskPoints()).length).toBe(4);
 });
+
+test("media bin: the view toolbar filters by kind, searches by name, and sorts", async ({ page }) => {
+  // Seed three library entries of distinct kinds directly (mirrors media.js's upload
+  // broadcast — no real files needed; broken thumbnails don't affect cell rendering).
+  // Names chosen so "alpha" sorts before every other item the earlier tests in this
+  // file may have left in the shared library (drag-fixture…, media-fixture…), and
+  // gamma's future uploadedAt makes it deterministically the newest.
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+  const seed = [
+    { id: "vt-alpha", name: "alpha.mp4", filename: "vt-alpha.mp4", kind: "video", size: 300, uploadedAt: "2020-01-01T00:00:00.000Z" },
+    { id: "vt-beta", name: "beta.gif", filename: "vt-beta.gif", kind: "gif", size: 200, uploadedAt: "2021-01-01T00:00:00.000Z" },
+    { id: "vt-gamma", name: "gamma.jpg", filename: "vt-gamma.jpg", kind: "image", size: 100, uploadedAt: "2030-01-01T00:00:00.000Z" },
+  ];
+  for (const value of seed) await wsSend(socket, { type: "create", path: "media", value });
+  socket.close();
+
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  const bin = page.locator(".media-bin");
+  const cells = bin.locator(".media-cell");
+  await expect(bin.locator(".media-cell", { hasText: "beta.gif" })).toBeVisible();
+
+  // Default sort is newest-first: gamma (uploadedAt 2030) leads the grid.
+  await expect(cells.first()).toContainText("gamma.jpg");
+
+  // Kind chip: only the gif remains.
+  await bin.locator(".media-bin__filters .chip", { hasText: "gif" }).click();
+  await expect(cells).toHaveCount(1);
+  await expect(cells.first()).toContainText("beta.gif");
+
+  // Back to all + name sort: alpha.* is alphabetically first across everything seeded
+  // by this spec file.
+  await bin.locator(".media-bin__filters .chip", { hasText: "all" }).click();
+  await bin.locator(".media-bin__sort").selectOption("name");
+  await expect(cells.first()).toContainText("alpha.mp4");
+
+  // Search narrows by name; the header count shows filtered/total; Escape clears.
+  await bin.locator(".media-bin__search").fill("gamma");
+  await expect(cells).toHaveCount(1);
+  await expect(cells.first()).toContainText("gamma.jpg");
+  await bin.locator(".media-bin__search").press("Escape");
+  await expect(cells.first()).toContainText("alpha.mp4"); // name sort still applied
+
+  // An impossible query hits the "nothing matches" cell; clear filters restores the grid.
+  await bin.locator(".media-bin__search").fill("zzz-no-such-media");
+  await expect(cells).toHaveCount(0);
+  await bin.locator(".media-bin__clear").click();
+  await expect(cells.first()).toContainText("alpha.mp4");
+});

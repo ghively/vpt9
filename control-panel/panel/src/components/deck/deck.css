@@ -343,6 +343,35 @@
   color: var(--muted-dim);
   text-align: center;
 }
+/* View toolbar: name search + sort select on one row, the kind-filter chips below.
+ * Sized for the 276px rail — everything stays on the compact end of the type scale. */
+.media-bin__view { display: flex; flex-direction: column; gap: 4px; padding: 0 10px 6px; }
+.media-bin__tools { display: flex; gap: 4px; }
+.media-bin__search {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.media-bin__sort {
+  flex: 0 0 auto;
+  max-width: 45%;
+  padding: 4px 4px;
+  font-size: 10px;
+}
+.media-bin__filters { display: flex; flex-wrap: wrap; gap: 3px; }
+.media-bin__filters .chip { padding: 2px 7px; font-size: 9px; }
+.media-bin__clear {
+  padding: 1px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.media-bin__clear:hover { border-color: var(--muted-dim); color: var(--text); }
+
 .media-bin__foot { display: flex; flex-direction: column; gap: 4px; }
 .media-bin__add { margin-bottom: 0; }
 .media-bin__link {
