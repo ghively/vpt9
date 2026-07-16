@@ -290,6 +290,7 @@ export class LayerStack {
         video.loop = loop;
         video.muted = true; // corrected by setLayerMuted() per the audio-owner policy
         video.playsInline = true;
+        video.preload = "auto"; // decode the first frame even while paused — a layer whose transport starts paused (the server default) must show a frame, not black (same fix as the slot path in source-bank.js)
         video.addEventListener("ended", () => {
           if (this.onClipEnded) this.onClipEnded(id);
         });
@@ -351,9 +352,38 @@ export class LayerStack {
 
   setLayerMuted(id, muted) {
     const entry = this.entries.get(id);
+    if (!entry?.videoEl) return;
     // The blind audio hold overrides the audio-owner policy for elements created during
     // the blind session — they stay muted until commit no matter who owns audio.
-    if (entry?.videoEl) entry.videoEl.muted = muted || (this.blindHold && !!entry._bornBlind);
+    const wantMuted = muted || (this.blindHold && !!entry._bornBlind);
+    entry._wantMuted = wantMuted;
+    // Autoplay policy: unmuting a video on a page the user has never interacted with makes
+    // Chromium PAUSE the element ("Unmuting failed and the element was paused instead") —
+    // on a projector page nobody ever clicks, that killed the PICTURE, not just the sound.
+    // While blocked, hold the element muted (picture keeps playing); the one-time gesture
+    // listener below re-applies the wanted mute state as soon as the page is interacted with.
+    if (!wantMuted && entry._audioBlocked && !this._userGestureSeen) return;
+    entry.videoEl.muted = wantMuted;
+  }
+
+  // First user gesture anywhere on the page: autoplay restrictions lift, so re-apply the
+  // wanted (unmuted) state to every element the policy previously blocked. Wired lazily
+  // from applyTransport the first time a block is detected — a page that never trips the
+  // policy never installs the listener.
+  _armGestureUnlock() {
+    if (this._gestureUnlockArmed) return;
+    this._gestureUnlockArmed = true;
+    const unlock = () => {
+      this._userGestureSeen = true;
+      for (const entry of this.entries.values()) {
+        if (!entry._audioBlocked || !entry.videoEl) continue;
+        entry._audioBlocked = false;
+        entry.videoEl.muted = entry._wantMuted ?? true;
+        if (!entry.videoEl.muted) entry.videoEl.play().catch(() => {});
+      }
+    };
+    document.addEventListener("pointerdown", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
   }
 
   // Blind audio hold (the audible face of task A20's frozen wall): while the wall is
@@ -397,6 +427,9 @@ export class LayerStack {
     // layer path derives it from shouldLoop(), set on the element in setLayerSource — a
     // playlist video item must not native-loop or its `ended` advance never fires).
     applyVideoTransport(video, t, entry);
+    // applyVideoTransport flags _audioBlocked when the autoplay policy forced a re-mute;
+    // arm the one-time gesture listener so the first click/keypress restores audio.
+    if (entry._audioBlocked) this._armGestureUnlock();
 
     // One shared AudioContext for the whole LayerStack (this.audioCtx, created lazily
     // below), not one per layer — browsers cap the number of live AudioContexts (around

@@ -6,16 +6,27 @@
 // drawImage) always use the image's DEFAULT frame — the first one — per the HTML spec,
 // so the wall showed a gif's first frame forever while the panel's native <img>
 // thumbnails happily animated. The only way to sample gif frames from GL is to decode
-// them ourselves: WebCodecs' ImageDecoder gives per-frame VideoFrames with real
-// durations, which we paint into a small offscreen canvas on the gif's own clock; the
-// upload paths then sample that canvas exactly like they would an <img>.
+// them ourselves, into a small offscreen canvas the upload paths sample like an <img>.
 //
-// Callers keep the plain-<img> path as a fallback (first frame beats a black layer)
-// when ImageDecoder is unavailable (Safari, older engines) or the decode fails —
-// check `gifPlayerSupported()` before constructing, and prefer `player.ready ?
-// player.canvas : imgEl` at upload time.
+// TWO decode paths, picked automatically:
+//
+// 1. WebCodecs ImageDecoder — per-frame VideoFrames with real durations, fully
+//    client-side. But WebCodecs is [SecureContext]-only, and this stack deliberately
+//    runs over plain http on a LAN IP (a projector is a LAN instrument, see the
+//    runbook) — so on http://<lan-ip> EVERY browser hides ImageDecoder. localhost is a
+//    "trustworthy origin", which is why dev and the e2e suite animated while every real
+//    projector froze on frame 1.
+//
+// 2. Server spritesheet — GET <gif-url>/frames returns a manifest (grid + per-frame
+//    delays) and <gif-url>/frames.png the sheet, extracted once by the server's ffmpeg
+//    (server/src/media-frames.js). Works in any context; used whenever ImageDecoder is
+//    missing (and only requires the media server, which the gif itself already came from).
+//
+// Callers keep the plain-<img> path as a LAST fallback (first frame beats a black
+// layer) when both decode paths fail — prefer `player.ready ? player.canvas : imgEl`
+// at upload time.
 export function gifPlayerSupported() {
-  return typeof window !== "undefined" && "ImageDecoder" in window;
+  return true; // the spritesheet path needs nothing from the platform
 }
 
 export class GifPlayer {
@@ -28,7 +39,9 @@ export class GifPlayer {
     this._decoder = null;
     this._frameIndex = 0;
     this._frameCount = 1;
-    this._start(url);
+    this._sheet = null; // { img, manifest } once the spritesheet path is active
+    if (typeof window !== "undefined" && "ImageDecoder" in window) this._start(url);
+    else this._startSheet(url);
   }
 
   async _start(url) {
@@ -46,10 +59,57 @@ export class GifPlayer {
       this._frameCount = Math.max(1, this._decoder.tracks.selectedTrack?.frameCount ?? 1);
       await this._advance();
     } catch (err) {
+      // ImageDecoder path failed outright — try the server spritesheet before giving up.
+      console.warn(`[gif] ImageDecoder decode failed for "${url}" (trying server frames):`, err?.message ?? err);
+      this._startSheet(url);
+    }
+  }
+
+  // Server-spritesheet path: fetch the manifest + sheet the server extracted with
+  // ffmpeg, then step through grid cells on the gif's own delays.
+  async _startSheet(url) {
+    try {
+      const resp = await fetch(`${url}/frames`, { mode: "cors" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const manifest = await resp.json();
+      if (this._disposed) return;
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error("spritesheet image failed to load"));
+        img.src = `${url}/frames.png`;
+      });
+      if (this._disposed) return;
+      this.canvas.width = manifest.frameWidth;
+      this.canvas.height = manifest.frameHeight;
+      this._frameCount = Math.max(1, manifest.frameCount | 0);
+      this._sheet = { img, manifest };
+      this._advanceSheet();
+    } catch (err) {
       // Leave `ready` false forever — the caller's <img> fallback keeps showing the
       // first frame, which is the pre-fix behavior, just without the animation.
       console.warn(`[gif] animated decode failed for "${url}" (falling back to static frame):`, err?.message ?? err);
     }
+  }
+
+  _advanceSheet() {
+    const { img, manifest } = this._sheet;
+    const i = this._frameIndex;
+    const sx = (i % manifest.cols) * manifest.frameWidth;
+    const sy = Math.floor(i / manifest.cols) * manifest.frameHeight;
+    // Every sheet cell is a complete pre-composited frame (ffmpeg handles gif disposal),
+    // but cells can carry transparency — clear so alpha doesn't accumulate across frames.
+    this._ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this._ctx.drawImage(img, sx, sy, manifest.frameWidth, manifest.frameHeight, 0, 0, manifest.frameWidth, manifest.frameHeight);
+    this.ready = true;
+    if (this._frameCount <= 1) { this._sheet = null; return; } // single-frame gif: done
+    const ms = manifest.delaysMs?.[i] ?? 0;
+    this._frameIndex = (this._frameIndex + 1) % this._frameCount;
+    // Same timing convention as the ImageDecoder path below.
+    this._timer = setTimeout(() => {
+      if (!this._disposed && this._sheet) this._advanceSheet();
+    }, ms < 20 ? 100 : ms);
   }
 
   async _advance() {
@@ -86,6 +146,7 @@ export class GifPlayer {
   dispose() {
     this._disposed = true;
     if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    this._sheet = null;
     this._teardownDecoder();
   }
 }

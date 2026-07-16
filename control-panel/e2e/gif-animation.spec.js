@@ -110,3 +110,58 @@ test("an animated gif layer actually changes pixels over time on the render outp
   expect(seen.has("10,12,17,255")).toBe(false);
   expect(seen.size).toBeGreaterThan(1);
 });
+
+// Same assertion, but with WebCodecs ImageDecoder REMOVED — simulating a real projector
+// reached over plain http on a LAN IP, where the insecure context hides ImageDecoder in
+// every browser (localhost is a "trustworthy origin", which is why only this simulation
+// can catch it from an e2e run). GifPlayer must fall back to the server's ffmpeg-extracted
+// spritesheet (/media/<file>/frames) and still animate. Requires ffmpeg on the machine
+// running the control server (the deployment image ships it).
+test("an animated gif still animates when ImageDecoder is unavailable (insecure-context fallback)", async ({ page }) => {
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      id: "layer-gif-fallback", name: "gif fallback test", order: 101,
+      source: { type: "video", url: `/media/${FIXTURE_FILE}` }, opacity: 1, blendMode: "normal",
+      mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0 },
+      fx: null,
+      warp: { mode: "corner", corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], mesh: { size: 4, points: [] } },
+    },
+  });
+  socket.close();
+
+  // Hide the platform API before any module runs — the exact condition of an
+  // insecure-context (http LAN IP) page.
+  await page.addInitScript(() => {
+    try { delete window.ImageDecoder; } catch { /* not configurable in this engine */ }
+    if ("ImageDecoder" in window) Object.defineProperty(window, "ImageDecoder", { get: () => undefined });
+  });
+
+  const pageErrors = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+
+  await page.goto(`http://localhost:${RENDER_PORT}/index.html?screen=screen-1&ws=ws://localhost:${WS_PORT}`);
+  const hasDecoder = await page.evaluate(() => typeof window.ImageDecoder !== "undefined" && window.ImageDecoder !== undefined);
+  expect(hasDecoder).toBe(false); // the simulation must actually hold, or this test proves nothing
+  await page.waitForTimeout(2500); // server-side ffmpeg extraction + sheet fetch on first request
+
+  const canvas = page.locator("canvas");
+  const seen = new Set();
+  for (let i = 0; i < 8; i++) {
+    const px = await canvas.evaluate((el) => {
+      const gl = el.getContext("webgl2");
+      const data = new Uint8Array(4);
+      gl.readPixels(el.width >> 1, el.height >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      return Array.from(data);
+    });
+    seen.add(px.join(","));
+    await page.waitForTimeout(150);
+  }
+
+  expect(pageErrors).toEqual([]);
+  expect(seen.has("10,12,17,255")).toBe(false);
+  expect(seen.size).toBeGreaterThan(1);
+});
