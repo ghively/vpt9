@@ -1,7 +1,7 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createTexture, createFramebuffer } from "./gl-utils.js";
 import { applyVideoTransport, nativeLoop, clearTransportState } from "./transport.js";
 import { cameraConstraints, cameraKey } from "./camera.js";
-import { GifPlayer, gifPlayerSupported } from "./gif.js";
+import { acquireGifPlayer, releaseGifPlayer, gifPlayerSupported } from "./gif.js";
 
 // A slot with no transport in state (older state that predates task A9, or an
 // impossible pre-backfill edge) falls back to the pre-A9 behavior — auto-play, whole-clip
@@ -151,7 +151,7 @@ export class SourceBank {
       entry.stream = null;
     }
     if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
-    if (entry.gifPlayer) { entry.gifPlayer.dispose(); entry.gifPlayer = null; }
+    if (entry.gifPlayer) { releaseGifPlayer(entry.gifPlayer); entry.gifPlayer = null; }
     entry.imgKind = null;
     entry.imgUploaded = false;
   }
@@ -208,7 +208,7 @@ export class SourceBank {
         // Animated gif in a slot: decode frames with a GifPlayer (a GL upload of an
         // animated <img> only ever takes the FIRST frame — see gif.js); the <img>
         // stays as the static fallback when ImageDecoder is unavailable/fails.
-        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = new GifPlayer(url);
+        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = acquireGifPlayer(url);
       }
     }
     if (entry.videoEl) {

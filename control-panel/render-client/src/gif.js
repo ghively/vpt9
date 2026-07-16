@@ -150,3 +150,34 @@ export class GifPlayer {
     this._teardownDecoder();
   }
 }
+
+// Shared, refcounted GifPlayers keyed by URL (perf 2026-07-16). The same gif referenced by
+// a layer AND a slot AND a matte used to spin up THREE independent GifPlayers — three full
+// spritesheet fetches + three decode timers for identical pixels. acquire/release share one
+// player across all references; the sheet is fetched and advanced ONCE, and every consumer
+// samples the same `player.canvas`. Disposed only when the last reference releases.
+const _sharedGifPlayers = new Map(); // url -> { player, refs }
+
+export function acquireGifPlayer(url) {
+  let entry = _sharedGifPlayers.get(url);
+  if (!entry) {
+    entry = { player: new GifPlayer(url), refs: 0 };
+    _sharedGifPlayers.set(url, entry);
+  }
+  entry.refs += 1;
+  return entry.player;
+}
+
+export function releaseGifPlayer(player) {
+  if (!player) return;
+  for (const [url, entry] of _sharedGifPlayers) {
+    if (entry.player !== player) continue;
+    entry.refs -= 1;
+    if (entry.refs <= 0) {
+      entry.player.dispose();
+      _sharedGifPlayers.delete(url);
+    }
+    return;
+  }
+  player.dispose?.(); // not shared (defensive) — dispose directly
+}

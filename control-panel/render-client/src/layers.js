@@ -3,7 +3,7 @@ import { FxPasses, FxChain, fxNeedsChain } from "./fx.js";
 import { SourceBank } from "./source-bank.js";
 import { applyVideoTransport, clearTransportState } from "./transport.js";
 import { cameraConstraints, cameraKey } from "./camera.js";
-import { GifPlayer, gifPlayerSupported } from "./gif.js";
+import { acquireGifPlayer, releaseGifPlayer, gifPlayerSupported } from "./gif.js";
 
 // Order is load-bearing: BLEND_INDEX derives each mode's shader-side integer from
 // array position, and panel/src/components/types.ts's BLEND_MODES must list the exact
@@ -251,7 +251,7 @@ export class LayerStack {
       entry.imgEl.remove();
       entry.imgEl = null;
     }
-    if (entry.gifPlayer) { entry.gifPlayer.dispose(); entry.gifPlayer = null; }
+    if (entry.gifPlayer) { releaseGifPlayer(entry.gifPlayer); entry.gifPlayer = null; }
     entry.imgKind = null;
     entry.imgUploaded = false;
   }
@@ -310,7 +310,7 @@ export class LayerStack {
         entry.imgEl = img;
         entry.imgKind = kind; // "gif" | "image"
         entry.imgUploaded = false;
-        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = new GifPlayer(url);
+        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = acquireGifPlayer(url);
       }
     } else if (source?.type === "camera") {
       // Live camera input (VPT8's cam1/cam2). Chrome requires a secure context
@@ -518,7 +518,7 @@ export class LayerStack {
       entry.currentUrl = url;
       if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); entry.videoEl = null; }
       if (entry.imgEl) { entry.imgEl.remove(); entry.imgEl = null; }
-      if (entry.gifPlayer) { entry.gifPlayer.dispose(); entry.gifPlayer = null; }
+      if (entry.gifPlayer) { releaseGifPlayer(entry.gifPlayer); entry.gifPlayer = null; }
       entry.imgKind = null;
       entry.imgUploaded = false;
       const kind = item.kind ?? "video";
@@ -544,7 +544,7 @@ export class LayerStack {
         entry.imgKind = kind; // "gif" | "image"
         // Animated matte: same GifPlayer as the source paths — a GL upload of an
         // animated <img> only ever takes the first frame.
-        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = new GifPlayer(url);
+        if (kind === "gif" && gifPlayerSupported()) entry.gifPlayer = acquireGifPlayer(url);
       }
     }
     this._uploadSourceFrame(entry);
@@ -558,7 +558,7 @@ export class LayerStack {
       if (activeMatteMediaIds.has(mediaId)) continue;
       if (entry.videoEl) { entry.videoEl.pause(); entry.videoEl.remove(); }
       if (entry.imgEl) entry.imgEl.remove();
-      entry.gifPlayer?.dispose();
+      releaseGifPlayer(entry.gifPlayer);
       if (entry.texture) this.gl.deleteTexture(entry.texture);
       this.matteEntries.delete(mediaId);
     }

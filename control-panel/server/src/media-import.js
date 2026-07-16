@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { applyCreate } from "./state.js";
 import { MEDIA_TYPES, extOf } from "./media.js";
 import { readFileTags } from "./media-tags.js";
+import { createThumbProvider } from "./media-thumbs.js";
 
 // Import-by-link for the media library: paste a URL on the panel and the SERVER pulls it
 // into MEDIA_DIR (the panel may be a phone — the file must land where the render clients
@@ -25,6 +26,7 @@ import { readFileTags } from "./media-tags.js";
 // index.js's top-level listen() — tests inject fetchImpl / ytDlpBin.
 export function createMediaImporter({ mediaDir, state, broadcast, scheduleSave, maxBytes, ytDlpBin = "yt-dlp", fetchImpl = fetch }) {
   const active = new Set(); // urls currently importing — dedupes double-pastes
+  const thumbs = createThumbProvider({ mediaDir }); // shares the on-disk .thumbs cache with the router
 
   const status = (url, s, extra = {}) => broadcast({ type: "mediaImportStatus", url, status: s, ...extra });
 
@@ -48,6 +50,7 @@ export function createMediaImporter({ mediaDir, state, broadcast, scheduleSave, 
     };
     applyCreate(state, "media", entry);
     scheduleSave();
+    thumbs.warm(filename); // extract the bin poster up front, same as the upload path
     broadcast({ type: "create", path: "media", key: id, value: entry });
     return entry;
   }
