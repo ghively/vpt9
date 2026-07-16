@@ -353,6 +353,13 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
       send({ type: "update", path: `media.${id}.tags`, value: tags });
     },
 
+    // "Start fresh" (owner request 2026-07-16): the server wipes the show back to
+    // defaults in one atomic step — keeping the media library + screen registry — and
+    // rebroadcasts full state to every client.
+    resetShow() {
+      send({ type: "resetShow" });
+    },
+
     // ── Source bank ──────────────────────────────────────────────────────────
     // `sourceBank` is a fixed-length array addressed positionally by the existing
     // applyUpdate dotted-path convention, so writes go by `index`; `slotId` is kept as

@@ -3,6 +3,7 @@ import { TextField } from "./primitives/TextField";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
 import type { MediaItem, MediaKind } from "./types";
+import { parseTags } from "./tags";
 
 const KIND_TAG: Record<MediaKind, string> = { video: "MP4", gif: "GIF", image: "JPG" };
 
@@ -13,20 +14,6 @@ function formatSize(bytes: number): string {
   return `${bytes} B`;
 }
 
-// Tags are edited as one comma-separated line per row; parse tolerantly (trim, drop
-// empties, dedupe case-insensitively but keep the first spelling typed).
-function parseTags(raw: string): string[] {
-  const seen = new Set<string>();
-  const tags: string[] = [];
-  for (const part of raw.split(",")) {
-    const tag = part.trim();
-    const key = tag.toLowerCase();
-    if (!tag || seen.has(key)) continue;
-    seen.add(key);
-    tags.push(tag);
-  }
-  return tags;
-}
 
 export interface MediaLibraryProps {
   media: MediaItem[];

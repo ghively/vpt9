@@ -36,6 +36,9 @@ export interface InspectorLayerProps {
   sourceBank?: SourceBankSlot[];
   /** Enumerated video-input devices (task A14) for a camera layer source's device picker. */
   cameraDevices?: CameraDevice[];
+  /** The screen registry, for the per-layer screen-routing chips (owner request
+   *  2026-07-16): which physical outputs this layer composites on. */
+  allScreens?: { id: string; name?: string }[];
   /** Live playback position (seconds) for the selected layer — the FX drawer's Transport
    *  scrub readout (task A11). From the transportStatus telemetry relay. */
   transportPosition?: number;
@@ -566,6 +569,7 @@ export function Inspector(props: InspectorProps) {
     media,
     sourceBank,
     cameraDevices,
+    allScreens,
     transportPosition,
     onUpdate,
     onSetSourceMode,
@@ -623,6 +627,36 @@ export function Inspector(props: InspectorProps) {
             onChange={(v) => onUpdate?.("blendMode", v)}
           />
         </div>
+        {(allScreens?.length ?? 0) > 1 && (
+          <div className="field">
+            <span className="label">Screens</span>
+            <div className="row">
+              {allScreens!.map((s) => {
+                // null/absent routing = every screen (the default); an array = only those.
+                const routed = layer.screens == null || layer.screens.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="chip mono"
+                    data-active={routed}
+                    title={routed ? `Shown on ${s.name ?? s.id} — click to remove` : `Hidden on ${s.name ?? s.id} — click to add`}
+                    onClick={() => {
+                      const all = allScreens!.map((x) => x.id);
+                      const current = layer.screens == null ? all : layer.screens;
+                      const next = routed ? current.filter((id) => id !== s.id) : [...current, s.id];
+                      // Covering every screen normalizes back to null so future screens
+                      // are included automatically, matching the default's semantics.
+                      onUpdate?.("screens", all.every((id) => next.includes(id)) ? null : next);
+                    }}
+                  >
+                    {s.name ?? s.id}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="insp-sections">
           <InspectorSection title="Warp" summary={warpSummary(layer.warp)} active={mode === "warp"} onActivate={() => onModeChange("warp")}>

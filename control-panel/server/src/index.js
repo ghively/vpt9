@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { mkdirSync } from "node:fs";
 import { WebSocketServer } from "ws";
-import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent } from "./state.js";
+import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent, resetShowState } from "./state.js";
 import { createAutomationEngine } from "./automation.js";
 import { startOsc } from "./osc.js";
 import { createOscOut } from "./osc-out.js";
@@ -295,6 +295,17 @@ wss.on("connection", (socket) => {
           scheduleSave();
           broadcast({ type: "update", path: message.path, value: message.value });
         }
+        return;
+      }
+      case "resetShow": {
+        // Start fresh (owner request): wipe the show, keep the media library + screen
+        // registry. Route a blind=false through the session first so a snapshot held by
+        // an active blind session is dropped as a commit rather than resurrecting the
+        // pre-reset show on the next blind toggle.
+        blindSession.noteUpdate("blind", false);
+        resetShowState(state);
+        scheduleSave();
+        broadcast({ type: "state", state });
         return;
       }
       case "blindDiscard":
