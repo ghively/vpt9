@@ -1,5 +1,6 @@
-import { useState, type DragEvent, type KeyboardEvent } from "react";
+import { memo, useState, type DragEvent, type KeyboardEvent } from "react";
 import { ToggleSquare } from "../primitives/ToggleSquare";
+import { Fader } from "../primitives/Fader";
 import { rgbToHex } from "../color";
 import { MediaThumb } from "./MediaThumb";
 import { useContextMenu, type MenuItem } from "./ContextMenu";
@@ -38,6 +39,11 @@ export interface LayerStackProps {
   onDropMedia?: (id: string, payload: MediaDragPayload) => void;
   /** The visibility eye: toggle whether the layer is composited at all. */
   onToggleVisible?: (id: string, visible: boolean) => void;
+  /** Row play/pause for a video/gif layer — writes layers.<id>.transport.playing.
+   *  (Previously only reachable via Inspector → FX → Transport, three levels deep.) */
+  onSetLayerPlaying?: (id: string, playing: boolean) => void;
+  /** Row opacity fader — writes layers.<id>.opacity. (Previously read-only on the row.) */
+  onSetLayerOpacity?: (id: string, value: number) => void;
   /** Drag-to-reorder (rows are draggable): writes the dragged layer's new `order`. */
   onSetLayerOrder?: (id: string, order: number) => void;
   /** Context menu "Duplicate": clone the layer to the top of the stack. */
@@ -151,7 +157,7 @@ function LayerName({
  *  (driving the stage handles + inspector), accept media drops as source assignment,
  *  and carry reorder/remove/copy/paste affordances that call straight into the
  *  existing write path — no new message types. */
-export function LayerStack({
+function LayerStackView({
   layers,
   selectedId,
   onSelect,
@@ -160,6 +166,8 @@ export function LayerStack({
   onRemoveLayer,
   onCopyLayer,
   onPasteLayer,
+  onSetLayerPlaying,
+  onSetLayerOpacity,
   hasClipboard,
   onRenameLayer,
   onDropMedia,
@@ -312,15 +320,31 @@ export function LayerStack({
                     onEditDone={() => setRenamingId((cur) => (cur === layer.id ? null : cur))}
                   />
                   <span className="meta">
-                    {layer.blendMode ?? "normal"} · L{stackIndex}
+                    {layer.blendMode ?? "normal"} · Layer {stackIndex}
                   </span>
                 </span>
-                <span className="layer-op">
-                  <span className="op mono">{opacityPct}%</span>
-                  <span className="opbar">
-                    <i style={{ width: `${opacityPct}%` }} />
-                  </span>
-                </span>
+              </div>
+              {/* Quick controls on EVERY row (not buried in the Inspector): play/pause for a
+               *  video/gif layer + a draggable opacity fader. Outside the .layer-hit click
+               *  area (stopPropagation) so using them doesn't also select/deselect the row. */}
+              <div className="layer-quick" onPointerDown={(e) => e.stopPropagation()}>
+                {layer.source?.type === "video" && onSetLayerPlaying && (
+                  <button
+                    type="button"
+                    className="layer-play"
+                    title={layer.transport?.playing ? "Pause" : "Play"}
+                    aria-label={layer.transport?.playing ? "Pause layer" : "Play layer"}
+                    onClick={(e) => { e.stopPropagation(); onSetLayerPlaying(layer.id, !(layer.transport?.playing ?? false)); }}
+                  >
+                    {layer.transport?.playing ? "⏸" : "▶"}
+                  </button>
+                )}
+                <Fader
+                  value={layer.opacity ?? 1}
+                  ariaLabel={`${layer.name || layer.id} opacity`}
+                  onChange={(v) => onSetLayerOpacity?.(layer.id, v)}
+                />
+                <span className="op mono">{opacityPct}%</span>
               </div>
               {/* Controls for the SELECTED layer only (GIMP shows tools for the active
                *  layer, not five buttons on every row) — selection is one click away. */}
@@ -370,3 +394,5 @@ export function LayerStack({
     </>
   );
 }
+
+export const LayerStack = memo(LayerStackView);

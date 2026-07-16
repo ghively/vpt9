@@ -9,9 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import {
-  AudioOwner,
   CueList,
   Faceplate,
+  HelpPanel,
   Inspector,
   LayerStack,
   LfoRack,
@@ -71,6 +71,7 @@ const LAYER_TARGET_FIELDS: Array<[string, string]> = [
   ["fx.brightness", "brightness"],
   ["fx.contrast", "contrast"],
   ["fx.saturation", "saturation"],
+  ["fx.hue", "hue"],
   ["fx.tileX", "tile x"],
   ["fx.tileY", "tile y"],
   ["fx.edgeBlend.left", "edge left"],
@@ -111,7 +112,11 @@ export function App() {
   // Show drawer (Task 8): which secondary panel is active + whether the bottom sheet
   // is expanded. Collapsed by default so it doesn't compete with the deck above it.
   const [showTab, setShowTab] = useState<ShowTab>("presets");
-  const [showDrawerOpen, setShowDrawerOpen] = useState(false);
+  // Open by default: collapsed, the strip read as a mystery bar of words. Operators can
+  // still collapse it with the "Show" toggle to reclaim vertical space.
+  const [showDrawerOpen, setShowDrawerOpen] = useState(true);
+  // Keyboard-shortcuts / hidden-gestures reference (opened from the "?" in the faceplate).
+  const [helpOpen, setHelpOpen] = useState(false);
   // Mobile pass (Task 9): below the useIsMobile() breakpoint the 3-zone `.body` grid
   // collapses to a single column with the Stage dominant at top; the left rail
   // (Layers/Slots), Inspector, and Show drawer become bottom-sheet tabs picked by
@@ -194,6 +199,19 @@ export function App() {
     });
   }, []);
 
+  // Coarser cousin of rerender() for high-frequency, low-importance streams (the 30 Hz LFO
+  // batch, ~2 Hz transport telemetry): at most one render per THROTTLE_MS. The projector
+  // output is imperative (preview bus), so these only refresh sliders/readouts, which is
+  // fine at ~8 Hz. Same drag-guard as rerender() so it never yanks the DOM mid-gesture.
+  const throttleTimerRef = useRef<number | null>(null);
+  const rerenderThrottled = useCallback(() => {
+    if (isDraggingRef.current || throttleTimerRef.current != null) return;
+    throttleTimerRef.current = window.setTimeout(() => {
+      throttleTimerRef.current = null;
+      if (!isDraggingRef.current) forceRender();
+    }, 120); // ~8 Hz
+  }, []);
+
   const { send: rawSend } = useSocket(wsUrl, {
     onState(next) {
       stateRef.current = next;
@@ -220,7 +238,11 @@ export function App() {
       if (applyDelete(stateRef.current, path)) rerender();
     },
     onBatch(updates) {
-      if (applyBatch(stateRef.current, updates)) rerender();
+      // The automation engine broadcasts a batch at 30 Hz whenever an LFO/fade/cue runs.
+      // The projector output already updates imperatively via the preview bus; the panel
+      // only needs these to keep sliders reflecting modulated values, which is fine at ~8
+      // Hz. Throttling here cuts full-tree render pressure ~4x while a show is running.
+      if (applyBatch(stateRef.current, updates)) rerenderThrottled();
     },
     onPreview(screenId, frame) {
       preview.push(screenId, frame);
@@ -245,10 +267,10 @@ export function App() {
     },
     onTransportStatus(layerId, position) {
       transportPositionsRef.current[layerId] = position;
-      // The Inspector's Transport scrub readout renders this value, so an otherwise-idle
-      // panel needs a repaint or the seconds counter freezes. rerender() is rAF-coalesced
-      // and drag-guarded, so this ~2 Hz telemetry costs at most one render per frame.
-      rerender();
+      // A playing clip streams a position ~2 Hz. The scrub readout flows as a prop into the
+      // (now memoized) Inspector, so a throttled render repaints just that subtree — not the
+      // whole deck every telemetry tick as before.
+      rerenderThrottled();
     },
     onStatus(state, url) {
       setStatus({ state, label: `${state} · ${url}` });
@@ -432,24 +454,35 @@ export function App() {
   );
 
   const state = stateRef.current;
-  const screens = Object.values(state.screens ?? {});
-  // Show drawer (Task 8) derived state — recovered verbatim from the pre-Task-1
-  // App.tsx (git show 3dcc100): presets/automation/media feed the six relocated panels,
-  // targetOptions feeds LfoRack's and MidiMapPanel's target pickers.
-  const presets = Object.values(state.presets ?? {});
+  // Derived arrays are memoized on their state SLICE. The store now copy-on-writes each
+  // mutated container (store.ts), so e.g. `state.media` only changes identity when media
+  // changed — these memos then hand STABLE references to the memoized children below, so
+  // an unrelated update (a 30 Hz LFO nudging one layer's opacity) no longer rebuilds every
+  // option array and re-reconciles the whole tree. (perf 2026-07-16)
+  const screens = useMemo(() => Object.values(state.screens ?? {}), [state.screens]);
+  const presets = useMemo(() => Object.values(state.presets ?? {}), [state.presets]);
   const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
-  const media = Object.values(state.media ?? {});
-  const targetOptions = buildTargetOptions(state);
+  const media = useMemo(() => Object.values(state.media ?? {}), [state.media]);
+  // buildTargetOptions reads only state.layers (+ a constant master option). Keyed on
+  // state.layers, NOT state: the store's copy-on-write keeps the ROOT `state` ref stable
+  // (only mutated children get new identity), so `[state]` would compute once and never
+  // update. eslint's exhaustive-deps can't see that invariant.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const targetOptions = useMemo(() => buildTargetOptions(state), [state.layers]);
   // Source-bank snapshots (task A12) + the recall cursor Next/Prev step from.
-  const sourceBankPresets = Object.values(state.sourceBankPresets ?? {});
+  const sourceBankPresets = useMemo(() => Object.values(state.sourceBankPresets ?? {}), [state.sourceBankPresets]);
   const sourceBankPresetCursor = state.sourceBankPresetCursor ?? -1;
-  // Task 13: PiP (picture-in-picture cast) windows for the currently selected screen —
-  // recovered verbatim from the pre-Task-1 App.tsx (git show 3dcc100), where these fed a
-  // permanently-mounted <PipWindows> next to WarpEditor in the screen aside. `sid` mirrors
-  // that original's `selectedScreenId ?? ""` fallback so screenId/onAddPip never see null.
-  const pips = Object.values(state.pip ?? {}).filter((p) => p.screenId === selectedScreenId);
+  // Task 13: PiP (picture-in-picture cast) windows for the currently selected screen.
+  const pips = useMemo(
+    () => Object.values(state.pip ?? {}).filter((p) => p.screenId === selectedScreenId),
+    [state.pip, selectedScreenId],
+  );
   const sid = selectedScreenId ?? "";
 
+  // Top faceplate = identity + status only. The master/blackout/blind controls moved to a
+  // persistent bottom strip (masterBarEl) where a VJ expects a master/transport bar, and
+  // the audio-owner picker is gone entirely (audio was removed — vpt9 is a silent
+  // instrument). A "?" opens the shortcuts/gestures help.
   const faceplate = (
     <Faceplate
       screenSelect={
@@ -460,25 +493,33 @@ export function App() {
           onAdd={actions.addScreen}
         />
       }
-      center={
-        <div className="faceplate-center">
-          <AudioOwner screens={screens} ownerId={state.audioOwnerScreenId} onSelect={actions.setAudioOwner} />
-          <MasterControl
-            master={state.master ?? 1}
-            onChange={actions.setMaster}
-            onToggleBlackout={toggleBlackout}
-            blind={state.blind ?? false}
-            onToggleBlind={toggleBlind}
-            onDiscardBlind={discardBlind}
-          />
+      center={null}
+      right={
+        <div className="faceplate-right">
+          <button type="button" className="help-btn" title="Keyboard shortcuts & hidden gestures" onClick={() => setHelpOpen(true)}>?</button>
+          <StatusLamp state={status.state} label={status.label} />
         </div>
       }
-      right={<StatusLamp state={status.state} label={status.label} />}
     />
   );
 
-  const layersTopFirst = Object.values(stateRef.current.layers).sort(
-    (a, b) => (b.order ?? 0) - (a.order ?? 0), // top-of-stack first
+  // Persistent bottom master/transport strip.
+  const masterBarEl = (
+    <div className="master-bar">
+      <MasterControl
+        master={state.master ?? 1}
+        onChange={actions.setMaster}
+        onToggleBlackout={toggleBlackout}
+        blind={state.blind ?? false}
+        onToggleBlind={toggleBlind}
+        onDiscardBlind={discardBlind}
+      />
+    </div>
+  );
+
+  const layersTopFirst = useMemo(
+    () => Object.values(state.layers).sort((a, b) => (b.order ?? 0) - (a.order ?? 0)), // top-of-stack first
+    [state.layers],
   );
   const selection = useSelection(layersTopFirst[0]?.id ?? null);
 
@@ -524,12 +565,14 @@ export function App() {
     },
     [selection],
   );
-  // Not memoized: layersTopFirst is itself a fresh array every render (see above), so
-  // there'd be nothing stable to key a memo off; this is a cheap map over a handful of
-  // layers, not worth the added complexity. Suppressed in screen mode (Task 12) — the
-  // per-layer hover outline would be misleading when hovering/clicking a layer's region
-  // doesn't do anything (see onBackgroundPointerDown above).
-  const hitLayers = selection.editTarget === "screen" ? [] : layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }));
+  // layersTopFirst is now a stable memoized reference (store COW + useMemo above), so the
+  // warp-quad geometry memoizes cleanly instead of recomputing every render. Suppressed in
+  // screen mode (Task 12) — the per-layer hover outline would be misleading when
+  // hovering/clicking a layer's region doesn't do anything (see onBackgroundPointerDown).
+  const hitLayers = useMemo(
+    () => (selection.editTarget === "screen" ? [] : layersTopFirst.map((layer) => ({ id: layer.id, quad: layerQuad(layer) }))),
+    [selection.editTarget, layersTopFirst],
+  );
   const selectedLayer = layersTopFirst.find((l) => l.id === selection.selectedLayerId) ?? null;
   const selectedScreen = (selectedScreenId && state.screens?.[selectedScreenId]) || null;
 
@@ -876,6 +919,8 @@ export function App() {
       onRemoveLayer={actions.removeLayer}
       onCopyLayer={copyLayer}
       onPasteLayer={pasteLayer}
+      onSetLayerPlaying={(id, playing) => actions.updateLayer(id, "transport.playing", playing)}
+      onSetLayerOpacity={(id, v) => actions.updateLayer(id, "opacity", v)}
       hasClipboard={hasClipboard}
       onRenameLayer={renameLayer}
       onDropMedia={assignMediaToLayer}
@@ -1059,13 +1104,14 @@ export function App() {
               {mobileTab === "inspector" && <aside className="rail rail-r insp">{inspectorEl}</aside>}
               {mobileTab === "show" && showDrawerEl}
             </div>
+            {masterBarEl}
           </div>
           <MobileTabBar active={mobileTab} onSelect={selectMobileTab} />
         </>
       ) : (
         <>
-          {/* Desktop: UNCHANGED 3-zone body (left rail / stage / right inspector) + the
-              always-mounted Show drawer below it. */}
+          {/* Desktop: 3-zone body (left rail / stage / right inspector), the Show drawer,
+              then the persistent master/transport strip pinned at the very bottom. */}
           <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
             <aside className="rail rail-l">
               {layerStackEl}
@@ -1079,8 +1125,10 @@ export function App() {
             <aside className="rail rail-r insp">{inspectorEl}</aside>
           </div>
           {showDrawerEl}
+          {masterBarEl}
         </>
       )}
+      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

@@ -5,17 +5,18 @@ import { useEffect, useState, type ReactNode } from "react";
  *  restores the PiP (picture-in-picture) window manager that Task 1 dropped entirely. */
 export type ShowTab = "presets" | "sources" | "cues" | "timers" | "lfo" | "midi" | "media" | "pip";
 
-// Labels speak operator, not implementation: "Looks" are the scene presets the look bar
-// fires, "Motion" is the LFO rack, "Cast" is the PiP/cast-window manager. Keys unchanged.
+// Tab labels match the feature the panel actually is, so the word tells you what opens
+// (the old "Motion"/"Cast" gave no hint they were the LFO rack / PiP-cast manager). Keys
+// unchanged.
 const SHOW_DRAWER_TABS: Array<[ShowTab, string]> = [
   ["presets", "Looks"],
-  ["sources", "Source sets"],
+  ["sources", "Sources"],
   ["cues", "Cues"],
   ["timers", "Timers"],
-  ["lfo", "Motion"],
-  ["midi", "MIDI"],
+  ["lfo", "LFO"],
+  ["midi", "MIDI/OSC"],
   ["media", "Media"],
-  ["pip", "Cast"],
+  ["pip", "PiP"],
 ];
 
 export interface ShowDrawerProps {

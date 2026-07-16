@@ -24,6 +24,7 @@ export { Faceplate } from "./Faceplate";
 export type { FaceplateProps } from "./Faceplate";
 export { AudioOwner } from "./AudioOwner";
 export type { AudioOwnerProps, AudioOwnerScreen } from "./AudioOwner";
+export { HelpPanel } from "./HelpPanel";
 export { ScreenSelect } from "./ScreenSelect";
 export type { ScreenSelectProps } from "./ScreenSelect";
 export { LayerStack } from "./deck/LayerStack";
