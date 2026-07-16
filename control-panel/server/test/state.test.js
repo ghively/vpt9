@@ -267,13 +267,15 @@ test("ensureStateDefaults backfills sourceBank as 8 empty slots on an older stat
   assert.equal(state.sourceBank.length, 8);
 });
 
-test("defaultTransport returns a paused, forward, un-looped, centered transport with a null scrub seek", () => {
+test("defaultTransport returns a playing, looping, forward, centered transport with a null scrub seek", () => {
+  // playing+loop by default (owner decision 2026-07-16): a silent video instrument must
+  // show motion the moment media lands on a layer, not a frozen/black paused frame.
   const t = defaultTransport();
-  assert.equal(t.playing, false);
+  assert.equal(t.playing, true);
   assert.equal(t.rate, 1);
   assert.equal(t.loopIn, null);
   assert.equal(t.loopOut, null);
-  assert.equal(t.loopMode, "off");
+  assert.equal(t.loopMode, "loop");
   assert.equal(t.pan, 0);
   assert.equal(t.vol, 1);
   assert.equal(t.seek, null); // task A11: no pending scrub
