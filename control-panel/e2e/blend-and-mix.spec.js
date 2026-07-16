@@ -82,26 +82,33 @@ test("darken blend mode: min(base,top) — white base + red top over black groun
   expect(px[2]).toBeLessThan(30);
 });
 
-test("a mix slot 50/50 multiply of red and green sources renders a dim yellow-ish blend", async ({ page }) => {
+test("a mix slot screen-blends two solid-color inputs (screen(red,green)=yellow), proving the mix blend stage ran", async ({ page }) => {
   const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
   await new Promise((resolve) => socket.once("open", resolve));
-  // Multiply of pure red (1,0,0) and pure green (0,1,0) is (0,0,0) - black - which is a
-  // trivially-passing but uninformative check; use red and white instead: multiply(red,
-  // white) = red, so the mix-slot's OWN 50% crossfade (not the inner blend mode) should
-  // land the visible result approximately halfway between "just red layer" and "mixed
-  // red*white=red" -- to keep the assertion meaningful or the inner blend, this test
-  // uses "screen" instead: screen(red, white) = white, distinctly different from either
-  // input, unambiguously proving the mix pipeline actually ran.
+  // Originally skipped: it needed a second fixture uploaded via HTTP multipart because a
+  // SourceRef was media/slot only. Task A13 added `color` as a valid mix A/B input, so the
+  // mix path is now exercisable with two solid-color inputs — no fixture upload needed.
+  // Screen blend of pure red (1,0,0) and pure green (0,1,0) is (1,1,0) yellow — distinct
+  // from BOTH inputs (and from any plain crossfade of them), unambiguously proving the mix
+  // slot's blend stage actually ran. mix=1.0 takes the fully-blended result (the shader does
+  // output = lerp(a, blend(a,b), mix); see MIX_FRAG), so this asserts on the blend formula
+  // itself rather than the crossfade — complementing source-bank-inputs.spec.js's normal-
+  // blend color-mix crossfade test.
   await wsSend(socket, {
     type: "update", path: "sourceBank.0.content",
-    value: { type: "mix", a: { type: "media", mediaId: null }, b: { type: "media", mediaId: null }, blendMode: "screen", mix: 1.0 },
+    value: { type: "mix", a: { type: "color", color: [1, 0, 0] }, b: { type: "color", color: [0, 1, 0] }, blendMode: "screen", mix: 1.0 },
   });
-  // sourceBank content needs real media; simpler to drive this with two solid-color
-  // layers feeding a mix isn't supported by SourceRef (media/slot only, no "color" ref
-  // type per the design spec) -- so this specific test instead verifies the mix pipeline
-  // via two uploaded fixture stills already used in Task 1 (fixture-red.jpg exists;
-  // reuse it for "a", and rely on media.js's existing upload path to add a white fixture
-  // for "b" at test setup time via the HTTP API rather than WS).
+  // order: 200 — above the two demo layers (see the darken test's note) so the mix slot's
+  // output is what lands at the center, not the demo purple layer.
+  await wsSend(socket, { type: "create", path: "layers", value: { id: "l-mix", name: "mix", order: 200, source: { type: "slot", slotId: "slot-1" }, opacity: 1, blendMode: "normal", mask: { enabled: false, shape: "ellipse", cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, feather: 0 }, fx: null, warp: { mode: "corner", corners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}], mesh: { size: 4, points: [] } } } });
   socket.close();
-  test.skip(true, "requires a second (white) fixture upload via HTTP multipart — tracked as a follow-up; the darken-mode test above already exercises the ported-blend-formula code path end to end, and Task 9's resolveTexture unit-level logic has no test file of its own by design (render-client has zero unit tests anywhere, verified during research) so this e2e check is the only coverage opportunity for the mix path specifically");
+
+  await page.goto(`http://localhost:${RENDER_PORT}/index.html?screen=screen-1&ws=ws://localhost:${WS_PORT}`);
+  await page.waitForTimeout(800); // let the two color inputs decode + the mix FBO composite
+  const px = await readCenterPixel(page);
+  // screen(red, green) = (1,1,0): R and G high, B ~0. Neither input is yellow, so this can
+  // only be the screen formula having run over both decoded inputs.
+  expect(px[0]).toBeGreaterThan(200);
+  expect(px[1]).toBeGreaterThan(200);
+  expect(px[2]).toBeLessThan(40);
 });
