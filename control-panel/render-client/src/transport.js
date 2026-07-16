@@ -106,7 +106,24 @@ export function applyVideoTransport(video, transport, entry) {
   // sits paused at its last frame with `playing` still true — re-calling play() here would
   // restart it from the top (the browser rewinds an ended element on play), turning "once"
   // into an accidental loop. Leave it stopped; scrubbing (which clears `ended`) resumes it.
-  if (t.playing && video.paused && !video.ended) video.play().catch(() => {});
+  //
+  // The rejection handler covers Chromium's autoplay policy on a never-interacted page
+  // (exactly a projector): unmuting the audio-owner's video PAUSES the element, and the
+  // re-play() attempted here is then rejected because the element is unmuted. Without the
+  // fallback that killed the PICTURE permanently. Re-mute and play again — video always
+  // survives; audio waits for the first gesture (layers.js's _armGestureUnlock).
+  if (t.playing && video.paused && !video.ended) {
+    video.play().catch((err) => {
+      if (video.muted || err?.name !== "NotAllowedError") return;
+      entry._audioBlocked = true;
+      video.muted = true;
+      video.play().catch(() => {});
+      if (!entry._audioBlockWarned) {
+        entry._audioBlockWarned = true;
+        console.warn("[transport] browser blocked unmuted autoplay — playing muted; click/tap the page once to enable audio");
+      }
+    });
+  }
   if (!t.playing && !video.paused) video.pause();
   video.playbackRate = Math.max(0.0625, t.rate ?? 1); // browsers reject 0 and clamp very small values inconsistently; floor it
 

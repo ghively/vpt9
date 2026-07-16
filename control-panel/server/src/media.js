@@ -31,6 +31,7 @@ import { createReadStream, createWriteStream, statSync, existsSync, unlinkSync }
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { applyCreate, applyDelete, resolveDanglingSourceRefs } from "./state.js";
+import { createFramesProvider } from "./media-frames.js";
 
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
 
@@ -38,6 +39,7 @@ const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB
 // X-File-Name, mirroring how readJsonBody is hand-rolled in index.js. Factored out as a
 // router so it's testable without index.js's top-level listen().
 export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, maxBytes = DEFAULT_MAX_BYTES, importer = null }) {
+  const frames = createFramesProvider({ mediaDir });
   // The panel itself (a separate origin from this server, e.g. :8082 vs :8080) calls
   // upload/delete directly via fetch(), so every JSON response needs the same wildcard
   // CORS policy the GET/serve path already carries for the render-client.
@@ -155,11 +157,32 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     createReadStream(filePath).pipe(res);
   }
 
+  // GET /media/<file>.gif/frames(.png) — spritesheet fallback for render clients whose
+  // insecure (http LAN) context hides WebCodecs ImageDecoder. See media-frames.js.
+  async function handleFrames(res, filename, wantsSheet) {
+    if (!SAFE_FILENAME.test(filename) || extOf(filename) !== "gif" || !existsSync(join(mediaDir, filename))) {
+      res.writeHead(404, { "access-control-allow-origin": "*" });
+      res.end();
+      return;
+    }
+    try {
+      const { manifest, sheetPath } = await frames.get(filename);
+      if (!wantsSheet) { sendJson(res, 200, manifest); return; }
+      const { size } = statSync(sheetPath);
+      res.writeHead(200, { "access-control-allow-origin": "*", "content-type": "image/png", "content-length": size });
+      createReadStream(sheetPath).pipe(res);
+    } catch (err) {
+      console.warn(`[media-frames] extraction failed for "${filename}":`, err?.message);
+      sendJson(res, 500, { error: "frame extraction failed (is ffmpeg installed on the server?)" });
+    }
+  }
+
   function handleDelete(res, id) {
     const entry = state.media?.[id];
     if (!entry) { sendJson(res, 404, { error: `no media with id "${id}"` }); return; }
     if (SAFE_FILENAME.test(entry.filename)) {
       try { unlinkSync(join(mediaDir, entry.filename)); } catch { /* already gone */ }
+      frames.evict(entry.filename);
     }
     applyDelete(state, `media.${id}`);
     resolveDanglingSourceRefs(state, "media", id);
@@ -213,6 +236,8 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
       }
       if (req.method === "POST" && url === "/api/media/import") { handleImport(req, res); return true; }
       if (req.method === "POST" && url === "/api/media") { handleUpload(req, res); return true; }
+      const framesMatch = req.method === "GET" && /^\/media\/([^/?]+)\/frames(\.png)?$/.exec(url);
+      if (framesMatch) { await handleFrames(res, decodeURIComponent(framesMatch[1]), !!framesMatch[2]); return true; }
       const serve = req.method === "GET" && /^\/media\/([^/?]+)/.exec(url);
       if (serve) { handleServe(req, res, decodeURIComponent(serve[1])); return true; }
       const del = req.method === "DELETE" && /^\/api\/media\/([^/?]+)$/.exec(url);

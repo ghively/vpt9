@@ -1,0 +1,118 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
+import { execFile } from "node:child_process";
+
+// Animated-gif frame extraction for render clients WITHOUT WebCodecs.
+//
+// The render-client's GifPlayer decodes gif frames with ImageDecoder — but WebCodecs is
+// [SecureContext]-only, and this stack is deliberately served over plain http on a LAN IP
+// (see the runbook: it's a LAN instrument). On http://<lan-ip> EVERY browser hides
+// ImageDecoder, so gifs froze on their first frame on every projector while localhost
+// (a "trustworthy origin") — and therefore the e2e suite — animated fine.
+//
+// Fix: the server (which already ships ffmpeg for import-by-link) decodes the gif ONCE
+// into a spritesheet PNG + a JSON manifest of per-frame delays, cached next to the media
+// dir. GifPlayer falls back to fetching these and animating from the sheet — pixel-exact,
+// alpha-preserving, and dependent on nothing the insecure context takes away.
+//
+//   GET /media/<file>.gif/frames      -> manifest JSON (frame count/size, grid, delaysMs)
+//   GET /media/<file>.gif/frames.png  -> the spritesheet
+//
+// Both are generated together on first request and cached on disk; concurrent requests
+// for the same gif share one in-flight generation.
+
+const MAX_SHEET_DIM = 8192; // stay well under canvas/texture limits on modest hardware
+
+function run(bin, args) {
+  return new Promise((resolve, reject) => {
+    execFile(bin, args, { maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+      if (err) reject(new Error(`${bin} failed: ${err.message}`));
+      else resolve(stdout);
+    });
+  });
+}
+
+// Frame delays + dimensions via ffprobe. Newer ffmpeg reports `duration_time` per frame,
+// older builds `pkt_duration_time` — read whichever exists; a missing/zero delay falls
+// back to the GifPlayer's own <20ms -> 100ms convention on the client.
+async function probeGif(filePath) {
+  const raw = await run("ffprobe", [
+    "-v", "error", "-select_streams", "v:0",
+    "-show_entries", "stream=width,height",
+    "-show_entries", "frame=duration_time,pkt_duration_time",
+    "-of", "json", filePath,
+  ]);
+  const parsed = JSON.parse(raw);
+  const stream = parsed.streams?.[0];
+  const frames = parsed.frames ?? [];
+  if (!stream?.width || !stream?.height || frames.length === 0) throw new Error("unreadable gif");
+  const delaysMs = frames.map((f) => {
+    const s = Number(f.duration_time ?? f.pkt_duration_time ?? 0);
+    return Number.isFinite(s) && s > 0 ? Math.round(s * 1000) : 0;
+  });
+  return { width: stream.width, height: stream.height, delaysMs };
+}
+
+// Grid layout: pack N frames into a sheet whose sides stay under MAX_SHEET_DIM, scaling
+// frames down (never up) if even the best grid would overflow.
+function layoutSheet(n, w, h) {
+  const rowsMax = Math.max(1, Math.floor(MAX_SHEET_DIM / h));
+  let cols = Math.ceil(n / rowsMax);
+  let scale = 1;
+  if (cols * w > MAX_SHEET_DIM) scale = MAX_SHEET_DIM / (cols * w);
+  const frameWidth = Math.max(2, Math.floor(w * scale));
+  const frameHeight = Math.max(2, Math.floor(h * scale));
+  cols = Math.min(n, Math.max(1, Math.floor(MAX_SHEET_DIM / frameWidth)));
+  const rows = Math.ceil(n / cols);
+  return { cols, rows, frameWidth, frameHeight };
+}
+
+export function createFramesProvider({ mediaDir }) {
+  const cacheDir = join(mediaDir, ".frames");
+  const inflight = new Map(); // filename -> Promise<manifest>
+
+  async function generate(filename) {
+    const filePath = join(mediaDir, filename);
+    const { width, height, delaysMs } = await probeGif(filePath);
+    const n = delaysMs.length;
+    const { cols, rows, frameWidth, frameHeight } = layoutSheet(n, width, height);
+    mkdirSync(cacheDir, { recursive: true });
+    const sheetPath = join(cacheDir, `${filename}.png`);
+    const tmpPath = join(cacheDir, `${filename}.tmp.png`);
+    // scale first (no-op at scale 1), then tile the full grid into one RGBA png. ffmpeg's
+    // gif decoder pre-composites disposal/patch frames, so every cell is a complete image.
+    await run("ffmpeg", [
+      "-y", "-v", "error", "-i", filePath,
+      "-vf", `scale=${frameWidth}:${frameHeight},tile=${cols}x${rows}`,
+      "-frames:v", "1", tmpPath,
+    ]);
+    renameSync(tmpPath, sheetPath);
+    const manifest = { frameCount: n, frameWidth, frameHeight, cols, rows, delaysMs };
+    writeFileSync(join(cacheDir, `${filename}.json`), JSON.stringify(manifest));
+    return manifest;
+  }
+
+  // Returns { manifest, sheetPath }. Generation errors propagate to the caller (mapped to
+  // a 500 by the route) and are not cached, so a transient failure can be retried.
+  async function get(filename) {
+    const manifestPath = join(cacheDir, `${filename}.json`);
+    const sheetPath = join(cacheDir, `${filename}.png`);
+    if (existsSync(manifestPath) && existsSync(sheetPath)) {
+      return { manifest: JSON.parse(readFileSync(manifestPath, "utf8")), sheetPath };
+    }
+    if (!inflight.has(filename)) {
+      inflight.set(filename, generate(filename).finally(() => inflight.delete(filename)));
+    }
+    const manifest = await inflight.get(filename);
+    return { manifest, sheetPath };
+  }
+
+  // Uploaded gif deleted from the library: drop its cached sheet too.
+  function evict(filename) {
+    for (const suffix of [".json", ".png"]) {
+      try { unlinkSync(join(cacheDir, `${filename}${suffix}`)); } catch { /* not cached */ }
+    }
+  }
+
+  return { get, evict };
+}
