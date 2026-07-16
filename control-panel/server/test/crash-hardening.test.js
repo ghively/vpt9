@@ -48,6 +48,48 @@ test("other top-level collections are pinned to objects too", () => {
   }
 });
 
+// A layer's fixed-shape structural containers. ensureLayerDefaults normalizes an explicit
+// null back to defaults at create/load, but applyUpdate had no equivalent guard — so a
+// post-creation `{path:"layers.<id>.fx", value:null}` re-introduced a null the panel then
+// dereferenced (mask.feather.toFixed → crash) and every later `layers.<id>.fx.*` update
+// silently no-op'd against. Now pinned to a plain object; valid object replacement stays OK.
+test("layer fx/warp/mask/transport/playlist containers reject null/scalar/array but allow objects", () => {
+  const layer = {
+    id: "layer-1",
+    mask: { enabled: false, feather: 0 },
+    fx: { zoom: 1 },
+    warp: { mode: "corner" },
+    transport: { playing: false },
+    playlist: { items: [], cursor: -1 },
+  };
+  const state = { layers: { "layer-1": layer } };
+  for (const key of ["mask", "fx", "warp", "transport", "playlist"]) {
+    assert.equal(applyUpdate(state, `layers.layer-1.${key}`, null), false, `${key} accepted null`);
+    assert.equal(applyUpdate(state, `layers.layer-1.${key}`, 3), false, `${key} accepted a scalar`);
+    assert.equal(applyUpdate(state, `layers.layer-1.${key}`, []), false, `${key} accepted an array`);
+  }
+  // The containers are untouched by the rejected writes...
+  assert.deepEqual(state.layers["layer-1"].fx, { zoom: 1 });
+  // ...and sub-leaf writes + whole-object replacement (setPlaylist's shape) still work.
+  assert.equal(applyUpdate(state, "layers.layer-1.fx.zoom", 2), true);
+  assert.equal(applyUpdate(state, "layers.layer-1.playlist", { items: [{ ref: null }], cursor: 0 }), true);
+});
+
+// House master dim: the one leaf that scales every screen's final output. The render
+// client's setMaster guards non-numbers but NOT NaN (typeof NaN === "number"), so a NaN/
+// Infinity master (reachable via an OSC float arg) blacks the whole wall and persists as
+// JSON null. Pinned to a finite number at the sole enforcement point.
+test("master is pinned to a finite number (NaN/Infinity/wrong-type rejected)", () => {
+  const state = { master: 1 };
+  assert.equal(applyUpdate(state, "master", NaN), false);
+  assert.equal(applyUpdate(state, "master", Infinity), false);
+  assert.equal(applyUpdate(state, "master", "1"), false);
+  assert.equal(applyUpdate(state, "master", null), false);
+  assert.equal(state.master, 1);
+  assert.equal(applyUpdate(state, "master", 0.5), true);
+  assert.equal(state.master, 0.5);
+});
+
 test("A17: oscOut is pinned to an object but its leaves stay writable", () => {
   const state = { oscOut: { enabled: false, host: "127.0.0.1", port: 9001 } };
   assert.equal(applyUpdate(state, "oscOut", "x"), false); // structural guard

@@ -463,6 +463,13 @@ function corruptsStructure(keys, last, value) {
     // to decide whether to freeze the projector. Pin it to a boolean so a LAN client can't
     // wedge a scalar/object into it (the render-client coerces, but keep the leaf honest).
     if (last === "blind") return typeof value !== "boolean";
+    // House master dim: the ONE leaf that scales every screen's final output. The render
+    // client's setMaster guards non-numbers but not NaN (typeof NaN === "number"), so a NaN
+    // master (reachable via an OSC float arg, or a raw WS write) multiplies the whole wall to
+    // NaN → black, and JSON.stringify(NaN) then persists it as `null`. Pin it to a finite
+    // number here — the sole enforcement point — like tempoBpm. (Ordinary per-layer numeric
+    // leaves like opacity stay deliberately unrestricted; master is uniquely whole-output.)
+    if (last === "master") return !(typeof value === "number" && Number.isFinite(value));
     return false;
   }
   if (keys.length === 1) {
@@ -483,6 +490,21 @@ function corruptsStructure(keys, last, value) {
   // to null-or-source-ref. Keyed on the immediate parent, so a layer's OWN top-level
   // `source` (parent = the layer id, not "mask") stays unrestricted and freely swappable.
   if (last === "source" && keys[keys.length - 1] === "mask") return !isValidMaskSource(value);
+  // A layer's fixed-shape structural containers (layers.<id>.{mask,fx,warp,transport,
+  // playlist}): ensureLayerDefaults guarantees each is always a present object — it even
+  // normalizes an explicit `null` back to defaults at create/load (see its comment).
+  // applyUpdate had no matching guard, so a later `{path:"layers.<id>.fx", value:null}`
+  // write re-introduced the exact corruption the loader repairs: the panel Inspector then
+  // dereferences the null (mask.feather.toFixed → crash) and every subsequent
+  // `layers.<id>.fx.*` sub-leaf update silently no-ops against the missing parent. Pin them
+  // to a plain object — whole-object replacement with a valid object stays allowed (e.g.
+  // setPlaylist sends a fresh {items,cursor}); only null/scalar/array is rejected.
+  if (
+    keys.length === 2 && keys[0] === "layers" &&
+    (last === "mask" || last === "fx" || last === "warp" || last === "transport" || last === "playlist")
+  ) {
+    return !isPlainObject(value);
+  }
   // A layer's visibility eye (layers.<id>.visible): every render client reads it per
   // frame to decide whether to composite the layer — pin it to a boolean like `blind`.
   if (last === "visible" && keys.length === 2 && keys[0] === "layers") return typeof value !== "boolean";
@@ -551,6 +573,23 @@ function refResolvesToMix(ref, candidateSourceBank) {
   return false;
 }
 
+// Does a candidate sourceBank slot array violate the "no mix references a mix" invariant?
+// Factored out of wouldCreateMixCycle so the source-bank-preset RECALL path can reuse the
+// exact same check — recall assigns a whole snapshot straight to state.sourceBank, a second
+// write path into the bank that never flows through applyUpdate's guard below. A non-array
+// (a client can send any JSON) can't contain a mix-of-mix and would throw if iterated, so
+// treat it as cycle-free here; well-formedness is a separate structural concern.
+export function sourceBankHasMixCycle(slots) {
+  if (!Array.isArray(slots)) return false;
+  for (const slot of slots) {
+    if (slot?.content?.type !== "mix") continue;
+    if (refResolvesToMix(slot.content.a, slots) || refResolvesToMix(slot.content.b, slots)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function wouldCreateMixCycle(state, path, value) {
   // Every write that can affect sourceBank content must be reconstructed and
   // re-validated — not just "sourceBank.<n>.content..." sub-paths. Nothing on the wire
@@ -567,20 +606,7 @@ export function wouldCreateMixCycle(state, path, value) {
   if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   node[last] = value;
 
-  // A whole-array replacement's value isn't necessarily even an array — a client can
-  // send any JSON as `value`. A non-array candidate can't contain a mix-of-mix as this
-  // invariant defines it, and iterating a non-iterable would throw. Whether sourceBank
-  // stays shaped like a well-formed slot array at all is a different, broader
-  // structural concern this check isn't chartered to enforce.
-  if (!Array.isArray(candidateState.sourceBank)) return false;
-
-  for (const slot of candidateState.sourceBank) {
-    if (slot?.content?.type !== "mix") continue;
-    if (refResolvesToMix(slot.content.a, candidateState.sourceBank) || refResolvesToMix(slot.content.b, candidateState.sourceBank)) {
-      return true;
-    }
-  }
-  return false;
+  return sourceBankHasMixCycle(candidateState.sourceBank);
 }
 
 // Patches an EXISTING leaf ("layers.layer-1.opacity"). Never creates new keys —

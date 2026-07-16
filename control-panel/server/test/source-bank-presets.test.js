@@ -156,3 +156,39 @@ test("ensureStateDefaults backfills sourceBankPresets + cursor onto older state"
   assert.deepEqual(state.sourceBankPresets, {});
   assert.equal(state.sourceBankPresetCursor, -1);
 });
+
+// Regression: recall is a second write path into state.sourceBank that historically skipped
+// applyUpdate's wouldCreateMixCycle guard. A client can hand-write a preset's `slots` (create
+// on sourceBankPresets / update on sourceBankPresets.<id>.slots both store the array verbatim,
+// pinning only "is an array"), so recall must re-validate or it smuggles a mix-of-mix cycle
+// into the live bank — the exact invariant the guard exists to protect.
+test("recall REFUSES a hand-crafted preset whose slots form a mix-of-mix cycle (guard bypass closed)", () => {
+  const { state, engine, broadcasts } = fixture();
+  const before = structuredClone(state.sourceBank);
+  // Inject a malicious preset directly (mirrors a client `create` on sourceBankPresets).
+  state.sourceBankPresets["evil"] = {
+    id: "evil",
+    name: "evil",
+    slots: [
+      slot("slot-1", { type: "mix", a: { type: "slot", slotId: "slot-2" }, b: null }),
+      slot("slot-2", { type: "mix", a: { type: "slot", slotId: "slot-1" }, b: null }),
+    ],
+  };
+  assert.equal(engine.recall("evil"), false, "recall rejects a cycle-forming snapshot");
+  assert.deepEqual(state.sourceBank, before, "live bank is untouched by the refused recall");
+  assert.equal(broadcasts.some((m) => m.type === "state"), false, "no state broadcast on refusal");
+});
+
+test("recall accepts a preset with a lone (non-cyclic) mix slot", () => {
+  const { state, engine } = fixture();
+  state.sourceBankPresets["ok"] = {
+    id: "ok",
+    name: "ok",
+    slots: [
+      slot("slot-1", { type: "mix", a: { type: "slot", slotId: "slot-2" }, b: { type: "media", mediaId: "m-1" } }),
+      slot("slot-2", { type: "media", mediaId: "m-2" }),
+    ],
+  };
+  assert.equal(engine.recall("ok"), true);
+  assert.equal(state.sourceBank[0].content.type, "mix");
+});
