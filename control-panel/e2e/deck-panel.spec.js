@@ -258,6 +258,8 @@ test("media bin: uploaded media renders as a thumbnail and drags onto a layer ro
 
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
 
+  // The bin is folders-first: enter "All" to see the thumbnail grid.
+  await page.locator(".media-folder", { hasText: "All" }).click();
   // The bin shows the item as a real thumbnail cell.
   const cell = page.locator(".media-cell", { hasText: "drag-fixture" });
   await expect(cell).toBeVisible();
@@ -309,7 +311,9 @@ test("import-by-link: a media URL entered in the bin downloads server-side into 
         return Object.values(state.media).find((m) => m.name === "media-fixture-clip.mp4")?.kind;
       })
       .toBe("video");
-    // …and the bin shows it as a real cell (create broadcast → thumbnail).
+    // …and the bin shows it as a real cell (create broadcast → thumbnail). Folders-first:
+    // enter "All" to reach the grid.
+    await page.locator(".media-folder", { hasText: "All" }).click();
     await expect(page.locator(".media-cell", { hasText: "media-fixture-clip" })).toBeVisible();
   } finally {
     fileServer.close();
@@ -498,6 +502,8 @@ test("media bin: the view toolbar filters by kind, searches by name, and sorts",
 
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
   const bin = page.locator(".media-bin");
+  // Folders-first: enter "All" for the flat grid the toolbar operates on.
+  await bin.locator(".media-folder", { hasText: "All" }).click();
   const cells = bin.locator(".media-cell");
   await expect(bin.locator(".media-cell", { hasText: "beta.gif" })).toBeVisible();
 

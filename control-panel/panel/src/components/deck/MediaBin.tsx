@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type DragEvent } from "react";
+import { memo, useMemo, useRef, useState, type DragEvent } from "react";
 import { MediaThumb } from "./MediaThumb";
 import { useContextMenu } from "./ContextMenu";
 import { setMediaDrag, hasMediaDrag, getMediaDrag } from "./dnd";
@@ -102,7 +102,7 @@ export interface MediaBinProps {
  *  and loose-tag chips operating inside it. Membership = `collection:<Name>` entries in
  *  the item's own keyword list, so it travels with the files. Items are draggable onto
  *  a layer row, a source-bank slot, the stage — or onto a folder row to file them. */
-export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onSetTags, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
+function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onSetTags, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -532,3 +532,5 @@ export function MediaBin({ media, mediaBase, uploadUrl, onUseOnSelected, onRemov
     </div>
   );
 }
+
+export const MediaBin = memo(MediaBinView);

@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { memo, useState, type DragEvent } from "react";
 import { SourceBankSlotEditor } from "../SourceBankSlotEditor";
 import { otherSlotOptions } from "../sourceBank";
 import { MediaThumb } from "./MediaThumb";
@@ -46,7 +46,7 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
  *  editor inline below the grid — `SourceBankSlotEditor`, extracted from
  *  `SourceBankPanel` — so editing keeps using the existing `onRename`/`onSetContent`
  *  write paths unchanged rather than a second, drifting implementation. */
-export function SlotGrid({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot, mediaBase }: SlotGridProps) {
+function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot, mediaBase }: SlotGridProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const editingSlot = editingIndex != null ? slots[editingIndex] : undefined;
@@ -140,3 +140,5 @@ export function SlotGrid({ slots, media = [], cameraDevices = [], onRename, onSe
     </>
   );
 }
+
+export const SlotGrid = memo(SlotGridView);
