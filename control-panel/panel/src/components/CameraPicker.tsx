@@ -28,6 +28,12 @@ export function CameraPicker({ deviceId, resolution, devices, onDevice, onResolu
         options={[
           { value: "", label: "Default camera" },
           ...devices.map((d, i) => ({ value: d.deviceId, label: d.label || `Camera ${i + 1}` })),
+          // A configured deviceId not in the enumerated list (list empty pre-permission, or
+          // a rotated id) would make the controlled <select> silently show "Default camera"
+          // and misrepresent the live config — keep it as its own option instead.
+          ...(deviceId && !devices.some((d) => d.deviceId === deviceId)
+            ? [{ value: deviceId, label: "Configured camera (not detected)" }]
+            : []),
         ]}
         onChange={(v) => onDevice(v || undefined)}
       />

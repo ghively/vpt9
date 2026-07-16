@@ -39,36 +39,48 @@ export function useContextMenu() {
   return { open, openAt, close, menu };
 }
 
+// Long-press state is MODULE-LEVEL (not per-closure): longPressHandlers is called inline
+// inside .map() so a re-render mid-hold used to bind a NEW closure whose clear() couldn't
+// cancel the previous closure's still-pending timer — the timer fired a phantom menu after
+// finger-up/scroll. One finger = one long-press at a time, so a single shared timer is
+// correct and survives re-renders.
+let _lpTimer: number | null = null;
+let _lpStart: { x: number; y: number } | null = null;
+let _lpEater: ((e: Event) => void) | null = null;
+const _lpClearTimer = () => { if (_lpTimer != null) { clearTimeout(_lpTimer); _lpTimer = null; } _lpStart = null; };
+const _lpArmEater = () => {
+  if (_lpEater) return;
+  _lpEater = (e: Event) => { e.stopPropagation(); e.preventDefault(); _lpDisarmEater(); };
+  window.addEventListener("click", _lpEater, true);
+};
+const _lpDisarmEater = () => { if (_lpEater) { window.removeEventListener("click", _lpEater, true); _lpEater = null; } };
+// End of the gesture (finger lift/cancel): cancel any pending timer, then disarm the click
+// eater a beat LATER so the synthesized click (which fires right after pointerup, no matter
+// how long the finger was held) is still suppressed — fixing the old fixed-700ms-from-arm
+// window that leaked the click on holds longer than ~1.2s.
+const _lpEndGesture = () => { _lpClearTimer(); if (_lpEater) window.setTimeout(_lpDisarmEater, 400); };
+
 /** Touch long-press → fires `onLongPress(x, y)` after a hold, so a phone can open the same
  *  context menus a mouse gets from right-click. Mouse pointers are ignored (they keep
- *  right-click). Cancels on move (>tolerance) or lift, and eats the trailing click so the
- *  hold doesn't ALSO select the row / open the slot editor. A plain factory (not a hook)
- *  so it can be called per-item inside a .map(); each call closes over its own timer.
- *  Spread the returned handlers onto the same element that carries `onContextMenu`. */
+ *  right-click). Cancels on move (>tolerance) or lift; eats the trailing synthesized click
+ *  so the hold doesn't ALSO select the row / open the slot editor. Spread onto the same
+ *  element that carries `onContextMenu`. */
 export function longPressHandlers(onLongPress: (x: number, y: number) => void, ms = 500, moveTolerance = 12) {
-  let timer: number | null = null;
-  let start: { x: number; y: number } | null = null;
-  const clear = () => { if (timer != null) { clearTimeout(timer); timer = null; } start = null; };
-  const eatNextClick = () => {
-    const s = (e: Event) => { e.stopPropagation(); e.preventDefault(); cleanup(); };
-    const cleanup = () => window.removeEventListener("click", s, true);
-    window.addEventListener("click", s, true);
-    window.setTimeout(cleanup, 700); // safety: never leave a dangling suppressor
-  };
   return {
     onPointerDown: (e: ReactPointerEvent) => {
       if (e.pointerType === "mouse") return; // desktop keeps right-click
-      start = { x: e.clientX, y: e.clientY };
+      _lpClearTimer();
+      _lpStart = { x: e.clientX, y: e.clientY };
       const x = e.clientX, y = e.clientY;
-      timer = window.setTimeout(() => { timer = null; start = null; eatNextClick(); onLongPress(x, y); }, ms);
+      _lpTimer = window.setTimeout(() => { _lpTimer = null; _lpStart = null; _lpArmEater(); onLongPress(x, y); }, ms);
     },
     onPointerMove: (e: ReactPointerEvent) => {
-      if (!start) return;
-      if (Math.abs(e.clientX - start.x) > moveTolerance || Math.abs(e.clientY - start.y) > moveTolerance) clear();
+      if (!_lpStart) return;
+      if (Math.abs(e.clientX - _lpStart.x) > moveTolerance || Math.abs(e.clientY - _lpStart.y) > moveTolerance) _lpClearTimer();
     },
-    onPointerUp: clear,
-    onPointerCancel: clear,
-    onPointerLeave: clear,
+    onPointerUp: _lpEndGesture,
+    onPointerCancel: _lpEndGesture,
+    onPointerLeave: _lpClearTimer,
   };
 }
 

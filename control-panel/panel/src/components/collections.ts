@@ -92,7 +92,9 @@ export function removeFromCollection(tags: string[] | undefined, name: string): 
 
 /** Replace ONLY the loose tags, preserving collection entries — what the inline tag
  *  editor and the Show-drawer table must do so editing keywords never ejects an item
- *  from its collections. */
+ *  from its collections. Any `collection:`-prefixed keyword typed into the loose editor is
+ *  dropped (collections are managed via folders/menu, not by typing the raw prefix), so the
+ *  loose editor can never silently add/keep a collection membership. */
 export function withLooseTags(tags: string[] | undefined, loose: string[]): string[] {
-  return [...loose, ...(tags ?? []).filter(isCollectionTag)];
+  return [...loose.filter((t) => !isCollectionTag(t)), ...(tags ?? []).filter(isCollectionTag)];
 }

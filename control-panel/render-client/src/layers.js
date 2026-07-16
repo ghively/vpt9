@@ -273,6 +273,13 @@ export class LayerStack {
         // a duration-less playlist video must NOT loop, or its native `ended` event never
         // fires and the playlist can't advance. Keep the element's loop flag in sync.
         if (entry.videoEl && entry.videoEl.loop !== loop) entry.videoEl.loop = loop;
+        // A playlist whose next item resolves to the SAME url as the one that just ended:
+        // the source doesn't change, so without this the ended <video> is never restarted
+        // and the playlist stalls. Rewind + replay a non-looping clip that has ended.
+        if (entry.videoEl && entry.videoEl.ended && !loop) {
+          entry.videoEl.currentTime = 0;
+          entry.videoEl.play().catch(() => {});
+        }
         return;
       }
       entry.currentUrl = url;

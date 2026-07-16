@@ -476,6 +476,30 @@
 }
 .media-bin__back:hover { border-color: rgba(138, 143, 152, 0.7); }
 
+/* Drag-to-folder drop strip (appears in the grid while dragging a thumbnail). */
+.media-bin__file-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(138, 143, 152, 0.4);
+  border-radius: 4px;
+  font-size: 9px;
+  color: var(--text-dim, #8a8f98);
+}
+.media-file-chip {
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(138, 143, 152, 0.35);
+  border-radius: 3px;
+}
+.media-file-chip[data-dragover] { border-color: var(--beam-line, #e7e9ef); background: rgba(255, 255, 255, 0.1); }
+
 /* Inline tag editor (context menu "Edit tags…"): sits where the name strip sits. */
 .media-cell__tags-input {
   position: absolute;

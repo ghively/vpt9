@@ -234,8 +234,14 @@ export function createAutomationEngine({
 
   function cueJump(index) {
     if (!Number.isInteger(index)) return;
+    // Preserve the auto-run: cancelActivity() clears autoAdvance (right for an in-flight
+    // fade/wait), but if the list was RUNNING, arming a cue must let the loop resume from
+    // the new cursor — otherwise `running` stays true while nothing ever advances (frozen
+    // show until a manual GO). Re-arm autoAdvance when it was on.
+    const wasAdvancing = autoAdvance;
     cancelActivity();
     auto().cursor = index - 1; // next GO (or the running loop) executes cues[index]
+    if (wasAdvancing) autoAdvance = true;
     pushTransport();
   }
 

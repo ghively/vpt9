@@ -85,7 +85,14 @@ export function SourceBankPresets({ presets, cursor, onSave, onRecall, onRename,
   const [name, setName] = useState("");
 
   const save = () => {
-    onSave?.(name.trim() || `Sources ${presets.length + 1}`);
+    let auto = "";
+    if (!name.trim()) {
+      const names = new Set(presets.map((p) => p.name));
+      let n = 1;
+      while (names.has(`Sources ${n}`)) n++; // smallest free — `length+1` collided after a delete
+      auto = `Sources ${n}`;
+    }
+    onSave?.(name.trim() || auto);
     setName("");
   };
 

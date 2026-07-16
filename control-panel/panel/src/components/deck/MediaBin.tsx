@@ -122,6 +122,8 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
   // Which cell is "live" (animating its real gif): the hovered one on desktop, the pressed
   // one on touch. Only that cell swaps its poster for the full file, so the grid stays fast.
   const [liveId, setLiveId] = useState<string | null>(null);
+  // True while a grid thumbnail is being dragged — reveals the collection drop-strip.
+  const [draggingMedia, setDraggingMedia] = useState(false);
   const ctx = useContextMenu();
 
   // Cell interaction: right-click / long-press → menu, PLUS hover(mouse)/press(touch) →
@@ -427,13 +429,35 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
         </div>
       ) : (
         <div className="media-bin__grid">
+          {/* Drag-to-folder is reachable again: while dragging a thumbnail in the grid, a
+              drop-strip of the collections appears so you can file it into one (folders-first
+              otherwise never shows the grid + folder rows at the same time). */}
+          {draggingMedia && collections.length > 0 && (
+            <div className="media-bin__file-strip">
+              <span className="mono">file into:</span>
+              {collections.map((c) => (
+                <span
+                  key={c.name.toLowerCase()}
+                  className="media-file-chip"
+                  data-dragover={dragOverFolder === c.name || undefined}
+                  {...folderDropProps(c.name)}
+                >
+                  {c.name}
+                </span>
+              ))}
+            </div>
+          )}
           {visible.map((item) => (
             <div
               key={item.id}
               className="media-cell"
               title={`${item.name} — drag onto a layer, slot, or the stage · double-click = use on selected layer`}
               draggable
-              onDragStart={(e) => setMediaDrag(e, item)}
+              // Native HTML5 drag suppresses pointer events, so pointerleave/up never fire
+              // to clear `liveId` — without this a hovered gif stays animating forever after
+              // you drag it onto a layer. Clear it as the drag begins.
+              onDragStart={(e) => { setLiveId(null); setDraggingMedia(true); setMediaDrag(e, item); }}
+              onDragEnd={() => setDraggingMedia(false)}
               onDoubleClick={() => onUseOnSelected?.(item)}
               {...cellInteraction(item)}
             >

@@ -230,9 +230,15 @@ function PlaylistEditor({
         <div className="playlist-row" key={index}>
           <span className="playlist-idx mono">{String(index).padStart(2, "0")}</span>
           <Select
-            value={item.ref?.type === "media" ? (item.ref.mediaId ?? "") : ""}
-            options={media.length ? media.map((m) => ({ value: m.id, label: m.name })) : [{ value: "", label: "(no media)" }]}
-            onChange={(v) => patchItem(index, { ref: v ? { type: "media", mediaId: v } : null })}
+            // A slot-type item can't be represented by the media list — show its own option
+            // (so the select doesn't misleadingly display the first media as selected) and
+            // don't overwrite the slot binding unless the operator actually picks a media.
+            value={item.ref?.type === "media" ? (item.ref.mediaId ?? "") : item.ref?.type === "slot" ? "__slot__" : ""}
+            options={[
+              ...(item.ref?.type === "slot" ? [{ value: "__slot__", label: playlistItemLabel(item, media) }] : []),
+              ...(media.length ? media.map((m) => ({ value: m.id, label: m.name })) : [{ value: "", label: "(no media)" }]),
+            ]}
+            onChange={(v) => { if (v === "__slot__") return; patchItem(index, { ref: v ? { type: "media", mediaId: v } : null }); }}
           />
           <NumField
             className="playlist-duration"
@@ -362,9 +368,12 @@ export function FxDrawer({
             onClick={() => onUpdate?.("mask.enabled", !mask.enabled)}
           />
           <ToggleSquare
-            label={mask.shape === "rect" ? "□" : "○"}
-            title="Mask shape"
-            onClick={() => onUpdate?.("mask.shape", mask.shape === "rect" ? "ellipse" : "rect")}
+            label={mask.shape === "polygon" ? "▽" : mask.shape === "rect" ? "□" : "○"}
+            title={mask.shape === "polygon" ? "Polygon mask — edit shape in the Inspector's Mask section" : "Mask shape (rect / ellipse)"}
+            // This quick toggle only knows rect/ellipse. A polygon mask has its own point
+            // editor in the Mask section — clicking here used to silently convert it to a
+            // rect and orphan its points. Do nothing for polygon; only flip rect<->ellipse.
+            onClick={() => { if (mask.shape !== "polygon") onUpdate?.("mask.shape", mask.shape === "rect" ? "ellipse" : "rect"); }}
           />
           {onEditMask && <Button label="Edit on canvas" onClick={onEditMask} />}
           {MASK_SLIDERS.map((spec) => (

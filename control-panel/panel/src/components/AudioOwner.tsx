@@ -12,11 +12,14 @@ export interface AudioOwnerProps {
   onSelect?: (screenId: string) => void;
 }
 
-/** Picks the one screen that owns audio (every other render client mutes itself). */
+/** Picks the one "playback owner" screen. Audio was removed, but this screen still drives
+ *  playlist advance (clip-ended relay), transport/scrub telemetry, and camera record — so
+ *  on a multi-screen show it must be set to a screen that actually shows the routed content,
+ *  or those go dead. (Was mislabeled "Audio on:".) */
 export function AudioOwner({ screens, ownerId, onSelect }: AudioOwnerProps) {
   return (
-    <div id="audio-owner">
-      <span className="label">Audio on:&nbsp;</span>
+    <div id="audio-owner" title="Screen that drives playlist advance, transport telemetry, and camera record">
+      <span className="label">Playback:&nbsp;</span>
       {screens.map((s) => (
         <Chip
           key={s.id}

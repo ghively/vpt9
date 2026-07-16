@@ -302,6 +302,16 @@ export function ensureLayerDefaults(layer) {
 
 export function ensureStateDefaults(state) {
   fillMissing(state, {
+    // Core containers: a loaded state.json missing any of these yielded UNDEFINED
+    // containers (fillMissing only guaranteed the leaves below; the fresh-boot path got
+    // them from DEFAULT_STATE, but a partial/older file was never repaired). Missing `pip`
+    // then threw at index.js's Object.hasOwn(state.pip, …) (cast 500s); missing `presets`
+    // silently dropped preset saves; missing `layers`/`screens` broke the render entirely.
+    layers: {},
+    screens: {},
+    pip: {},
+    presets: {},
+    audioOwnerScreenId: "screen-1",
     automation: { cues: [], cursor: -1, running: false, timers: {} },
     lfos: {},
     midiMap: {},

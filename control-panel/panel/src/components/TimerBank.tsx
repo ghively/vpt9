@@ -4,6 +4,17 @@ import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
 import type { Timer, Preset } from "./types";
 
+/** Zero-pad an "H:MM"/"HH:MM" wall-clock string to "HH:MM" (what the server tick compares
+ *  against). Non-matching input is returned unchanged so the user can keep typing. */
+function normalizeHhmm(v: string): string {
+  const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(v);
+  if (!m) return v;
+  const hh = Math.min(23, Number(m[1]));
+  const mm = Number(m[2]);
+  if (mm > 59) return v;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
 export interface TimerBankProps {
   timers: Timer[];
   presets: Preset[];
@@ -40,7 +51,10 @@ export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate
             className="timer-time"
             value={timer.time ?? ""}
             placeholder="HH:MM"
-            onCommit={(v) => onUpdate?.(timer.id, "time", v)}
+            // Normalize to zero-padded HH:MM — the server compares against a padded clock
+            // string, so "9:30" would never equal "09:30" and the timer would silently never
+            // fire. Leaves anything that doesn't parse as H:MM untouched (still visible/editable).
+            onCommit={(v) => onUpdate?.(timer.id, "time", normalizeHhmm(v))}
           />
           <Select
             value={timer.action ?? "cueGo"}

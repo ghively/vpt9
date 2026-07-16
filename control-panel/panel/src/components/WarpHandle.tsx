@@ -36,6 +36,10 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const el = ref.current;
     if (!el) return;
+    // Ignore a SECOND touch on an already-dragging handle — a second pointerdown used to
+    // stack a second set of move/up listeners with no pointerId filtering, so both fingers'
+    // moves thrashed the position and the first release fired onDragEnd twice.
+    if (el.dataset.active === "true") return;
     const stage = el.parentElement; // .stage
     if (!stage) return;
     onSelect?.();
@@ -58,6 +62,7 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
       onDragTo?.(px, py);
     };
     const onMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== event.pointerId) return; // only the captured pointer drives this handle
       const rect = stage.getBoundingClientRect();
       let nx = Math.min(1, Math.max(0, (moveEvent.clientX - rect.left) / rect.width));
       let ny = Math.min(1, Math.max(0, (moveEvent.clientY - rect.top) / rect.height));
@@ -74,7 +79,8 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
       pending = [nx, ny];
       if (!raf) raf = requestAnimationFrame(flush);
     };
-    const onUp = () => {
+    const onUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== event.pointerId) return; // ignore the other finger's release
       if (raf) cancelAnimationFrame(raf);
       flush(); // the release position must always go out, coalesced or not
       el.dataset.active = "false";
