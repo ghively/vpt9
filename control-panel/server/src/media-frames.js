@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 
@@ -90,7 +91,7 @@ export function createFramesProvider({ mediaDir }) {
     const { cols, rows, frameWidth, frameHeight } = layoutSheet(n, width, height);
     mkdirSync(cacheDir, { recursive: true });
     const sheetPath = join(cacheDir, `${filename}.png`);
-    const tmpPath = join(cacheDir, `${filename}.tmp.png`);
+    const tmpPath = join(cacheDir, `${filename}.tmp-${randomBytes(6).toString("hex")}.png`);
     // scale first (no-op at scale 1), then tile the full grid into one RGBA png. ffmpeg's
     // gif decoder pre-composites disposal/patch frames, so every cell is a complete image.
     await run("ffmpeg", [

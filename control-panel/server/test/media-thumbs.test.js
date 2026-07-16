@@ -66,3 +66,20 @@ test("deleting media evicts its thumb cache", { skip: !HAVE_FFMPEG }, withServer
   assert.equal(del.status, 200);
   assert.ok(!existsSync(join(dir, ".thumbs", "media-poster.gif.jpg")), "thumb evicted");
 }));
+
+test("Range: suffix bytes=-N returns the LAST N bytes; over-EOF end clamps to 206", { skip: !HAVE_FFMPEG }, withServer(async ({ base, dir }) => {
+  const { statSync } = await import("node:fs");
+  const size = statSync(join(dir, "media-clip.mp4")).size;
+  // suffix range → last 10 bytes
+  const suffix = await fetch(`${base}/media/media-clip.mp4`, { headers: { Range: "bytes=-10" } });
+  assert.equal(suffix.status, 206);
+  assert.equal(suffix.headers.get("content-range"), `bytes ${size - 10}-${size - 1}/${size}`);
+  assert.equal((await suffix.arrayBuffer()).byteLength, 10);
+  // explicit end beyond EOF → clamp, still 206 (not 416)
+  const over = await fetch(`${base}/media/media-clip.mp4`, { headers: { Range: `bytes=0-${size + 5000}` } });
+  assert.equal(over.status, 206);
+  assert.equal(over.headers.get("content-range"), `bytes 0-${size - 1}/${size}`);
+  // genuinely unsatisfiable (start >= size) → 416
+  const bad = await fetch(`${base}/media/media-clip.mp4`, { headers: { Range: `bytes=${size + 1}-` } });
+  assert.equal(bad.status, 416);
+}));

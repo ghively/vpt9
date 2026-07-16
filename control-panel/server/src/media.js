@@ -186,9 +186,20 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
     const range = req.headers.range;
     const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
     if (m) {
-      const start = m[1] ? Number(m[1]) : 0;
-      const end = m[2] ? Number(m[2]) : size - 1;
-      if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || end >= size) {
+      let start, end;
+      if (m[1] === "" && m[2] !== "") {
+        // Suffix range `bytes=-N`: the LAST N bytes (a player reading a trailer). The old
+        // code read the FIRST N+1 bytes here — wrong data.
+        const n = Number(m[2]);
+        start = Math.max(0, size - n);
+        end = size - 1;
+      } else {
+        start = m[1] ? Number(m[1]) : 0;
+        // Clamp an over-EOF last-byte-pos to size-1 (RFC 7233) instead of 416-rejecting a
+        // range that is actually satisfiable — clients requesting a big explicit end failed.
+        end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+      }
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || start >= size) {
         res.writeHead(416, { ...headers, "content-range": `bytes */${size}` });
         res.end();
         return;

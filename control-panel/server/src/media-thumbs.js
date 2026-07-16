@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, renameSync, statSync, unlinkSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { extOf } from "./media.js";
@@ -35,7 +36,7 @@ export function createThumbProvider({ mediaDir }) {
     const src = join(mediaDir, filename);
     mkdirSync(cacheDir, { recursive: true });
     const out = join(cacheDir, `${filename}.jpg`);
-    const tmp = join(cacheDir, `${filename}.tmp.jpg`);
+    const tmp = join(cacheDir, `${filename}.tmp-${randomBytes(6).toString("hex")}.jpg`);
     // First frame (`-frames:v 1`) scaled so the LONGEST side is THUMB_MAX, never upscaled
     // (the min() guard), preserving aspect. `force_original_aspect_ratio=decrease` +
     // the min() keep small sources untouched. Works for mp4/webm/gif/jpg alike.
