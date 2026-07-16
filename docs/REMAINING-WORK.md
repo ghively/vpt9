@@ -1,9 +1,39 @@
 # Remaining work to finish the control-panel (VPT8 full parity + divorce)
 
-**Status as of 2026-07-12.** Branch: `feat/full-parity` (off `master`, which holds the shipped
-deck redesign). This is the running status of the finish plan
+> **⚠️ STATUS SUPERSEDED — 2026-07-16. Phases A, B, and C are all CLOSED; only Phase D
+> (real-hardware verification) genuinely remains, and it cannot be done from this environment.**
+> The task-by-task body below is preserved as a historical record of the finish plan; it is **no
+> longer a live to-do list**. When this doc was last given a running status ("Remaining: 23 tasks"),
+> the work was still in flight — it has since all landed on `master`. Verified 2026-07-16 against the
+> actual code, not the ROADMAP's claims:
+>
+> - **Phase A (A1–A21) — all closed.** Every parity gap is implemented and reachable in the code:
+>   e.g. A5 luminance matte (`Mask.source` in `types.ts` + `fx.js`), A6 edge-blend invert (`fx.js`),
+>   A9/A10/A11 slot transport + `"once"` loop + scrub seek (`render-client/src/transport.js`,
+>   `TransportControls.tsx`), A12 source-bank presets (`server/src/source-bank-presets.js`,
+>   `SourceBankPresets.tsx`), A13 camera/color as slot/mix inputs, A16 `source`/`paramFade` cue
+>   types (`automation.js`), A17 OSC output (`server/src/osc-out.js`), A18 cue manual-GO
+>   (`autoContinue` in `automation.js` + `CueList.tsx`), A19 LFO mixers + tempo-sync + phase +
+>   invert (`automation.js`), A20 blind mode (`server/src/blind.js`, `state.blind`), A21 cursor-hide
+>   (`main.js`) + timer `source` action (`TimerBank.tsx`).
+> - **Phase B (docs) — done.** `README.md` / `OPERATOR_GUIDE.md` describe the projection deck; the
+>   `ROADMAP.md` 2026-07-12 entry records the redesign + audit + gap closure.
+> - **Phase C (divorce) — done.** The `vpt8 source code/` tree is removed, preserved at tag
+>   `vpt8-source-archive` (present on `origin`); `git worktree list` is clean; `SHADER-CREDITS.md`
+>   exists; `CLAUDE.md` is re-centered on the control-panel.
+> - **Phase D (real-world verification) — still open, unchanged.** D1 Docker/GPU bring-up, D2
+>   physical camera + MIDI controller, D3 Chromecast + YouTube-in-PiP all require hardware / a
+>   non-sandboxed host and remain the genuine remainder. See `control-panel/README.md`'s
+>   "Not verifiable from this environment" list.
+>
+> **Gates green as of 2026-07-16:** `server/` `node --test` 230 pass / 10 skipped (documented
+> environment skips); `panel/` `tsc --noEmit` + `eslint .` both clean; every `render-client/src/*.js`
+> passes `node --check`.
+
+**Status as of 2026-07-12 (historical).** Branch: `feat/full-parity` (off `master`, which holds the
+shipped deck redesign). This was the running status of the finish plan
 (`docs/superpowers/plans/2026-07-12-full-parity-finish-plan.md`), grounded in the parity audit
-(`docs/VPT8-PARITY-GAPS.md`). It lists every remaining item and what needs to be done.
+(`docs/VPT8-PARITY-GAPS.md`). It listed every remaining item and what needed to be done.
 
 **Done so far (7 tasks, all verified - green gates + e2e):**
 - ✅ **A1** — fixed the bug where jpg/gif in a source-bank slot rendered black.
@@ -16,8 +46,9 @@ deck redesign). This is the running status of the finish plan
 
 - ✅ **A4b** — on-canvas polygon vertex editor (drag, insert-on-outline, delete-selected).
 
-**Remaining: 23 tasks** — Phase A (16 parity), Phase B (3 docs), Phase C (4 divorce),
-Phase D (3 real-world verification). Effort tags: **S** ≤ half-day, **M** ~1 day, **L** multi-day.
+**Remaining at the time of that status: 23 tasks** — Phase A (16 parity), Phase B (3 docs), Phase C
+(4 divorce), Phase D (3 real-world verification). Effort tags: **S** ≤ half-day, **M** ~1 day,
+**L** multi-day. *(All of Phase A/B/C have since landed — see the superseding banner above.)*
 
 ---
 
