@@ -25,7 +25,14 @@ export function pathToOscAddress(path) {
 export function createOscOut({ state, send, log = console.log, flushMs = 25 } = {}) {
   let socket = null;
   const realSend = (buf, port, host) => {
-    if (!socket) socket = dgram.createSocket("udp4");
+    if (!socket) {
+      socket = dgram.createSocket("udp4");
+      // A dgram socket emits async, socket-level 'error' events (network unreachable, a
+      // permission error) OUT OF BAND from the per-send callback below. An 'error' event
+      // with no listener is thrown as an uncaughtException — mirror osc.js's receive socket
+      // and swallow-with-log so the OSC-out path can never crash the control plane.
+      socket.on("error", (err) => log("[osc-out] socket error:", err.message));
+    }
     socket.send(buf, port, host, (err) => {
       if (err) log("[osc-out] send error:", err.message);
     });

@@ -14,6 +14,7 @@ import os from "node:os";
 import { mkdirSync, copyFileSync, rmSync } from "node:fs";
 import handler from "serve-handler";
 import WebSocket from "ws";
+import { videoCanAdvance } from "./video-capability.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -94,6 +95,14 @@ test("a source-bank slot's own transport.playing drives whether the slot texture
 
   await page.goto(`http://localhost:${RENDER_PORT}/index.html?screen=screen-1&ws=ws://localhost:${WS_PORT}`);
   await page.waitForTimeout(800); // let the slot video decode + start advancing
+
+  // Skip cleanly where headless Chromium can't decode/advance mp4 <video> (readyState stays
+  // 0) — the slot-texture-advance/pause checks below are then unobservable, not failing. A
+  // documented environment limit, not an app bug; on a real GPU the probe passes and it runs.
+  test.skip(
+    !(await videoCanAdvance(page, `http://localhost:${WS_PORT}/media/${FIXTURE_FILE}`)),
+    "headless Chromium can't decode/advance mp4 <video> here — documented environment limit, not an app bug",
+  );
 
   const canvas = page.locator("canvas");
   const isFrozen = async () => {

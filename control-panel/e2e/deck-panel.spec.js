@@ -468,7 +468,11 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
 
   const stage = page.locator(".deck-stage");
   const box = await stage.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  // Select this layer DETERMINISTICALLY via its LayerStack row, not a stage-center click:
+  // in a full-file run, earlier tests leave overlapping layers in the shared server state,
+  // so a geometric center-click can land on the wrong layer. Assert the selection landed.
+  await page.locator('.layer[data-id="layer-poly-insert"] .layer-hit').first().click();
+  await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-poly-insert");
   await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
@@ -479,9 +483,67 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
 
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.25);
   await expect.poll(async () => (await readMaskPoints()).length).toBe(5);
+  // Wait for the CLIENT overlay to actually render all 5 vertices before pressing Delete.
+  // The poll above only confirms the SERVER has 5 points; if Delete fires while the overlay
+  // still holds the pre-insert 4-point array, its keydown handler deletes a clamped index
+  // and echoes a 3-point array back — the intermittent "Received: 3" that made this flaky.
+  await expect(page.locator(".mask-point")).toHaveCount(5);
 
   await page.keyboard.press("Delete");
   await expect.poll(async () => (await readMaskPoints()).length).toBe(4);
+});
+
+test("dragging a rect mask body translates by the drag delta (grab offset), not snapping center to the cursor", async ({ page }) => {
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+  await wsSend(socket, {
+    type: "create",
+    path: "layers",
+    value: {
+      id: "layer-rectmask-drag",
+      name: "rect mask drag",
+      order: 123,
+      source: { type: "color", color: [0.2, 0.8, 0.4] },
+      opacity: 1,
+      blendMode: "normal",
+      mask: { enabled: true, shape: "rect", cx: 0.5, cy: 0.5, rx: 0.25, ry: 0.25, feather: 0, points: [], invert: false },
+      fx: null,
+      warp: { mode: "corner", corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], mesh: { size: 4, points: [] } },
+    },
+  });
+  socket.close();
+
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  const stage = page.locator(".deck-stage");
+  await expect(stage).toBeVisible();
+  const box = await stage.boundingBox();
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-rectmask-drag");
+  await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
+
+  const body = page.locator(".mask-shape__body");
+  await expect(body).toBeVisible();
+
+  const readMask = async () => {
+    const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
+    return state.layers["layer-rectmask-drag"].mask;
+  };
+
+  // Grab the body OFF-CENTER at stage (0.6, 0.6) — inside the [0.25..0.75] body, +0.1/+0.1
+  // from its 0.5/0.5 center — and drag by a +0.05/+0.05 delta to (0.65, 0.65). With the grab
+  // offset the center follows the delta to ~0.55/0.55; the pre-fix bug snapped it to the
+  // cursor (~0.65/0.65). Assert it moved by the delta and did NOT jump to the release point.
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.65, { steps: 5 });
+  await page.mouse.up();
+
+  await expect.poll(async () => (await readMask()).cx).toBeGreaterThan(0.5);
+  const m = await readMask();
+  expect(m.cx).toBeLessThan(0.6); // NOT snapped to the cursor (~0.65)
+  expect(m.cy).toBeLessThan(0.6);
+  expect(Math.abs(m.cx - 0.55)).toBeLessThan(0.04); // translated by the drag delta
+  expect(Math.abs(m.cy - 0.55)).toBeLessThan(0.04);
 });
 
 test("media bin: the view toolbar filters by kind, searches by name, and sorts", async ({ page }) => {

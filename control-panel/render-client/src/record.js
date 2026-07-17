@@ -5,10 +5,13 @@
 // media library like any uploaded file. Nothing here is persisted in control-plane state;
 // the record start/stop trigger is a relay-only WS message (see server index.js `record`).
 //
-// UNVERIFIABLE HEADLESS: getUserMedia yields no camera and MediaRecorder is unsupported in
-// headless CI, so this seam needs Phase-D hardware verification. It is written defensively
-// (every entry point guards for missing MediaRecorder / stream) so that, wired but never
-// exercised, it degrades to a logged no-op rather than throwing into the render loop.
+// VERIFIED with a SYNTHETIC camera (e2e/camera-record.spec.js): on localhost (a secure
+// context) with Chromium's `--use-fake-device-for-media-stream`, getUserMedia yields a fake
+// stream and MediaRecorder DOES encode it, so the full seam — record → encode → POST →
+// media-library entry — runs headless end to end. Only a REAL camera's footage is the
+// irreducible remainder. Still written defensively (every entry point guards for missing
+// MediaRecorder / stream) so on a browser that lacks them it degrades to a logged no-op
+// rather than throwing into the render loop.
 
 // Prefer an mp4 container when the browser can produce one (Safari/some Chrome builds), else
 // fall back to webm (Chrome's default). The server accepts both (media.js MEDIA_TYPES).

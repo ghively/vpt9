@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 // Same server/static-serve bootstrap as source-bank-media-kind.spec.js (inlined per
 // file for test independence — see media-compositing.spec.js for the fuller comments).
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import http from "node:http";
@@ -21,6 +21,20 @@ const STATE_FILE = `${TMP_BASE}.json`;
 const MEDIA_DIR = `${TMP_BASE}-media`;
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
 const FIXTURE_FILE = "media-fixture-blink.gif"; // 10 frames, 40ms each (~400ms cycle)
+
+// The ImageDecoder-unavailable FALLBACK path (test below) animates a gif from a server-built
+// PNG spritesheet, which the server extracts with ffmpeg (see render-client/src/gif.js +
+// server media routes). Where ffmpeg is absent the sheet can't be built and the fallback has
+// nothing to animate — the same gate the server's media-frames/media-thumbs tests use.
+function ffmpegAvailable() {
+  try {
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const HAVE_FFMPEG = ffmpegAvailable();
 
 async function startServer() {
   mkdirSync(MEDIA_DIR, { recursive: true });
@@ -118,6 +132,10 @@ test("an animated gif layer actually changes pixels over time on the render outp
 // spritesheet (/media/<file>/frames) and still animate. Requires ffmpeg on the machine
 // running the control server (the deployment image ships it).
 test("an animated gif still animates when ImageDecoder is unavailable (insecure-context fallback)", async ({ page }) => {
+  // The fallback animates from a server-built ffmpeg spritesheet; with no ffmpeg the sheet
+  // can't be built, so skip cleanly (documented environment gate, like the server's
+  // media-frames tests) rather than red-fail. Runs for real where ffmpeg is installed.
+  test.skip(!HAVE_FFMPEG, "ffmpeg not installed — the gif-fallback spritesheet can't be extracted; documented environment gate, not an app bug");
   const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
   await new Promise((resolve) => socket.once("open", resolve));
   await wsSend(socket, {

@@ -1,4 +1,4 @@
-import { applyCreate } from "./state.js";
+import { applyCreate, sourceBankHasMixCycle } from "./state.js";
 
 // Source-bank presets (task A12 — VPT8's `pattrstorage sources` bank with
 // `sourcenext`/`sourceprev`). Factored into its own factory (like createAutomationEngine /
@@ -33,6 +33,14 @@ export function createSourceBankPresets({ state, broadcast, scheduleSave }) {
   function recall(presetId) {
     const preset = state.sourceBankPresets?.[presetId];
     if (!preset || !Array.isArray(preset.slots)) return false;
+    // The live sourceBank is the SOLE enforcement point for the "no mix references a mix"
+    // invariant (see wouldCreateMixCycle in state.js). A preset SAVED from a valid bank can
+    // never violate it, but a preset's `slots` are independently client-writable — `create`
+    // on `sourceBankPresets` and `update` on `sourceBankPresets.<id>.slots` both store the
+    // array verbatim (they only pin it to *an array*, never its content). Recall is a second
+    // write path into state.sourceBank that bypasses applyUpdate's guard, so it must re-check
+    // here or a hand-crafted preset could smuggle a mix-cycle into the live bank on recall.
+    if (sourceBankHasMixCycle(preset.slots)) return false;
     state.sourceBank = structuredClone(preset.slots);
     state.sourceBankPresetCursor = Object.keys(state.sourceBankPresets).indexOf(presetId);
     scheduleSave();

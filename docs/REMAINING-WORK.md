@@ -1,9 +1,42 @@
 # Remaining work to finish the control-panel (VPT8 full parity + divorce)
 
-**Status as of 2026-07-12.** Branch: `feat/full-parity` (off `master`, which holds the shipped
-deck redesign). This is the running status of the finish plan
+> **⚠️ STATUS SUPERSEDED — 2026-07-16. Phases A, B, and C are all CLOSED; only Phase D
+> (real-hardware verification) genuinely remains, and it cannot be done from this environment.**
+> The task-by-task body below is preserved as a historical record of the finish plan; it is **no
+> longer a live to-do list**. When this doc was last given a running status ("Remaining: 23 tasks"),
+> the work was still in flight — it has since all landed on `master`. Verified 2026-07-16 against the
+> actual code, not the ROADMAP's claims:
+>
+> - **Phase A (A1–A21) — all closed.** Every parity gap is implemented and reachable in the code:
+>   e.g. A5 luminance matte (`Mask.source` in `types.ts` + `fx.js`), A6 edge-blend invert (`fx.js`),
+>   A9/A10/A11 slot transport + `"once"` loop + scrub seek (`render-client/src/transport.js`,
+>   `TransportControls.tsx`), A12 source-bank presets (`server/src/source-bank-presets.js`,
+>   `SourceBankPresets.tsx`), A13 camera/color as slot/mix inputs, A16 `source`/`paramFade` cue
+>   types (`automation.js`), A17 OSC output (`server/src/osc-out.js`), A18 cue manual-GO
+>   (`autoContinue` in `automation.js` + `CueList.tsx`), A19 LFO mixers + tempo-sync + phase +
+>   invert (`automation.js`), A20 blind mode (`server/src/blind.js`, `state.blind`), A21 cursor-hide
+>   (`main.js`) + timer `source` action (`TimerBank.tsx`).
+> - **Phase B (docs) — done.** `README.md` / `OPERATOR_GUIDE.md` describe the projection deck; the
+>   `ROADMAP.md` 2026-07-12 entry records the redesign + audit + gap closure.
+> - **Phase C (divorce) — done.** The `vpt8 source code/` tree is removed, preserved at tag
+>   `vpt8-source-archive` (present on `origin`); `git worktree list` is clean; `SHADER-CREDITS.md`
+>   exists; `CLAUDE.md` is re-centered on the control-panel.
+> - **Phase D (real-world verification) — software portions now VERIFIED in Docker (2026-07-16);
+>   only true hardware remains.** A Docker daemon was available, so the stack was actually brought
+>   up: all 4 images build, all 4 containers run and serve, the dockerized render-client obtains a
+>   WebGL2 context and composites (D1), a synthetic camera drives the full camera path (D2 camera),
+>   and a simulated DIAL launch relays through the cast-receiver to a visible PiP (D3). Irreducible
+>   remainder: hardware-GPU accel, a physical camera, a hardware MIDI controller, a real phone
+>   casting, and live YouTube-in-PiP playback. See the Phase D section below for the full record.
+>
+> **Gates green as of 2026-07-16:** `server/` `node --test` 230 pass / 10 skipped (documented
+> environment skips); `panel/` `tsc --noEmit` + `eslint .` both clean; every `render-client/src/*.js`
+> passes `node --check`.
+
+**Status as of 2026-07-12 (historical).** Branch: `feat/full-parity` (off `master`, which holds the
+shipped deck redesign). This was the running status of the finish plan
 (`docs/superpowers/plans/2026-07-12-full-parity-finish-plan.md`), grounded in the parity audit
-(`docs/VPT8-PARITY-GAPS.md`). It lists every remaining item and what needs to be done.
+(`docs/VPT8-PARITY-GAPS.md`). It listed every remaining item and what needed to be done.
 
 **Done so far (7 tasks, all verified - green gates + e2e):**
 - ✅ **A1** — fixed the bug where jpg/gif in a source-bank slot rendered black.
@@ -16,8 +49,9 @@ deck redesign). This is the running status of the finish plan
 
 - ✅ **A4b** — on-canvas polygon vertex editor (drag, insert-on-outline, delete-selected).
 
-**Remaining: 23 tasks** — Phase A (16 parity), Phase B (3 docs), Phase C (4 divorce),
-Phase D (3 real-world verification). Effort tags: **S** ≤ half-day, **M** ~1 day, **L** multi-day.
+**Remaining at the time of that status: 23 tasks** — Phase A (16 parity), Phase B (3 docs), Phase C
+(4 divorce), Phase D (3 real-world verification). Effort tags: **S** ≤ half-day, **M** ~1 day,
+**L** multi-day. *(All of Phase A/B/C have since landed — see the superseding banner above.)*
 
 ---
 
@@ -146,14 +180,63 @@ widgets subsume it).
   (v001/Vade via `shaders/v001 Mixers/`, `shaders/shared/licenses/`); add `render-client/SHADER-CREDITS.md`
   if useful. (Standard blend math isn't copyrightable — low risk — but keep attribution for a clean MIT.)
 
-## Phase D — real-world verification (needs the user / hardware) *(cannot be done from this environment)*
+## Phase D — real-world verification *(software portions now VERIFIED in Docker; only true hardware remains)*
 
-- **D1 — Docker/GPU bring-up:** `docker compose up` the 4 services on a real machine; confirm the
-  render-client gets a GPU context and composites; panel + cast-receiver reachable. Record in the README.
-- **D2 — physical camera + MIDI controller:** a real camera source (device picker from A14) and a
-  hardware MIDI controller (CC-learn) driving parameters live.
-- **D3 — Chromecast + YouTube-in-PiP:** cast a phone's YouTube to the DIAL/SSDP cast-receiver; confirm
-  it appears as a PiP window and plays in the render-client iframe.
+**2026-07-16 update.** A Docker daemon turned out to be available in the build environment, so the
+software-verifiable core of D1/D3 (and the camera half of D2) was actually exercised end-to-end —
+not just reasoned about. The only sandbox-specific wrinkle was that container builds need this
+environment's proxy CA injected for `apk`/`npm` (a transparent-MITM-proxy artifact, **not** a
+Dockerfile bug — the committed Dockerfiles are correct for a real network); verified by building
+with a throwaway CA-injected Dockerfile. What was confirmed:
+
+- **D1 — Docker/GPU bring-up: VERIFIED (software).** `docker compose config` validates; all **4
+  images build**; all **4 containers run and serve** — control-plane returns live JSON `/state`,
+  render-client serves its canvas page (HTTP 200), panel serves the built Vite dist, cast-receiver
+  serves the DIAL `dd.xml`. Driving the **dockerized** render-client with a real browser confirmed it
+  **obtains a WebGL2 context (1280×720) and composites** the demo layer against the dockerized
+  control-plane with **zero page errors**. *Irreducible remainder:* hardware-GPU acceleration (the
+  verified path uses software WebGL, which proves the code; hardware is a performance detail).
+- **D2 — camera path + record-to-disk + MIDI CC all VERIFIED (synthetic devices).** With Chromium's
+  `--use-fake-device-for-media-stream`, the full camera path — `getUserMedia` → stream → WebGL
+  texture upload → composite — ran in the dockerized render-client and rendered the synthetic camera
+  frame (`[74,255,20]`), and **record-to-disk** (A14b) ran end to end — the audio-owner render-client
+  wrapped MediaRecorder around the fake stream and POSTed a `video` clip into the media library
+  (`e2e/camera-record.spec.js`; MediaRecorder turned out to work headless on localhost, correcting the
+  old "unverifiable headless" note in `record.js`). The **MIDI CC** decode → channel/controller-match →
+  0–127→[min,max] write path is verified with a synthetic WebMIDI device (`e2e/midi-cc-mapping.spec.js`).
+  *Irreducible remainder:* a real camera's live footage and a physical MIDI controller emitting the CC.
+- **D3 — SSDP discovery + DIAL relay + PiP iframe all VERIFIED (minus the phone).** The cast-receiver
+  answers an **M-SEARCH** for the DIAL service with a 200 OK carrying LOCATION + USN
+  (`cast-receiver/test/ssdp.test.js` — the discovery a phone does *before* casting); a simulated DIAL
+  launch (`POST /apps/YouTube v=<id>`, the exact request a phone sends) relayed through the
+  cast-receiver to the control-plane and flipped `pip-1` to `{ videoId, visible: true }`; and a visible
+  PiP mounts the correct YouTube-embed **iframe** (`e2e/pip-youtube-iframe.spec.js`). *Irreducible
+  remainder:* a real phone's YouTube app initiating the launch, and youtube.com actually playing in the
+  cross-origin iframe.
+
+**What genuinely still needs a human + hardware:** hardware-GPU accel (perf only), a physical camera,
+a hardware MIDI controller, a real phone casting, and live YouTube-in-PiP playback. Everything
+software-reachable in Phase D is now exercised, not just claimed.
+
+### Hardware acceptance checklist (for the operator, when the devices are in the room)
+
+Each residual item is now a single plug-in-and-observe step — the software path behind it is already
+verified (synthetically), so this is pure device acceptance, not debugging. Bring the stack up first
+(`docker compose up` from `control-panel/`, or the no-Docker node steps in `control-panel/README.md`).
+
+1. **Hardware GPU** — open the render-client in a browser on the projector machine; in devtools run
+   `document.querySelector("canvas").getContext("webgl2").getParameter(0x9246)` (UNMASKED_RENDERER) and
+   confirm it names the real GPU (not "SwiftShader"/"llvmpipe"). *Expected:* a hardware renderer string;
+   the Stage composites smoothly at the show's resolution.
+2. **Physical camera** — set a layer's source to Camera in the Inspector; pick the device + resolution.
+   *Expected:* the live feed composites on the Stage; the record button writes a clip into the media bin.
+3. **Hardware MIDI controller** — plug it in (Chrome), open the MIDI panel, arm a mapping (learn), wiggle a
+   knob to bind it, then move that knob. *Expected:* the learned CC fills channel/controller, and moving it
+   drives the bound parameter live (the exact decode/scale path `midi-cc-mapping.spec.js` verifies).
+4. **Real phone cast + live YouTube** — on a phone on the same LAN (set `CAST_RECEIVER_HOST` to the
+   machine's LAN IP first), open YouTube → Cast → pick "Room Cast"; play a video. *Expected:* it appears as
+   a PiP window on the target screen and plays (the DIAL relay + iframe wiring are already verified; this
+   confirms the real YouTube Leanback launch flow + youtube.com playback).
 
 ---
 

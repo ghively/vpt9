@@ -588,10 +588,15 @@ export class LayerStack {
 
     for (const layer of layers) {
       const entry = this._entry(layer.id);
-      const isColor = layer.source?.type === "color";
       // Read from entry.sourceType/slotId (set by setLayerSource from the resolved
       // effective source), not layer.source — for playlist layers the two can differ, and
-      // entry is the single source of truth for what's actually currently loaded.
+      // entry is the single source of truth for what's actually currently loaded. A playlist
+      // layer whose single-mode fallback `source` is a color but whose current clip is a
+      // video would otherwise be flagged isColor here, skipping its frame upload + transport
+      // and painting the static fallback color instead of playing the clip. entry.sourceType
+      // is only ever "color" in single mode (effectiveSource never yields color for a
+      // playlist), so layer.source.color stays valid wherever isColor gates its access below.
+      const isColor = entry.sourceType === "color";
       const isSlot = entry.sourceType === "slot";
       // The visibility eye (layers.<id>.visible === false): skip compositing entirely —
       // no texture upload, no fx chain, no blend — but keep the transport ticking so

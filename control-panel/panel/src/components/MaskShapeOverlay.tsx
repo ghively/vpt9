@@ -238,7 +238,29 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
              *  looks for it, to keep it from firing underneath a drag handle. */}
             <div
               className="mask-shape__body deck-handle"
-              onPointerDown={(e) => startDrag(e, (nx, ny) => { geom.current.cx = nx; geom.current.cy = ny; return { cx: nx, cy: ny }; })}
+              onPointerDown={(e) => {
+                // Grab offset: translate the mask by the drag DELTA, not snap its center to
+                // the cursor. The body spans the whole shape (inset:0), so without this,
+                // grabbing anywhere off-center made the mask lurch to recenter under the
+                // pointer. Capture the pointer→center offset at pointerdown (from the grab
+                // position itself — NOT lazily on the first move, or a single-step drag would
+                // capture the offset at the move target and leave the mask unmoved), then
+                // every move keeps the grabbed spot under the cursor.
+                const stage = rootRef.current?.parentElement;
+                if (!stage) return;
+                const rect = stage.getBoundingClientRect();
+                const grabX = clamp01((e.clientX - rect.left) / rect.width);
+                const grabY = clamp01((e.clientY - rect.top) / rect.height);
+                const offX = grabX - geom.current.cx;
+                const offY = grabY - geom.current.cy;
+                startDrag(e, (nx, ny) => {
+                  const cx = clamp01(nx - offX);
+                  const cy = clamp01(ny - offY);
+                  geom.current.cx = cx;
+                  geom.current.cy = cy;
+                  return { cx, cy };
+                });
+              }}
             />
             <div
               className="mask-shape__edge mask-shape__edge--right deck-handle"

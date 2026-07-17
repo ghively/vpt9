@@ -25,8 +25,14 @@ export function arrowNudge(event: KeyboardEvent): { dx: number; dy: number } | n
 }
 
 /** True when the event originated in a form control the arrows should keep operating
- *  (text caret movement, select cycling) — shared guard for every stage-nudge listener. */
+ *  (text caret movement, select cycling) — shared guard for every stage-nudge listener.
+ *  Deliberately does NOT include `button`: arrow/Delete keys carry no native behavior on a
+ *  plain button, so a focused mode chip (Warp/Mask/FX, a <button>) has no reason to suppress
+ *  a stage point's arrow-nudge / Delete. Current Chromium blurs a focused button to <body>
+ *  when a non-focusable stage handle is tapped, so this rarely bites in practice — but a
+ *  browser that RETAINS button focus would drop the nudge, and the guard is documented as
+ *  covering only controls with real native arrow behavior, which a button isn't. */
 export function isEditableTarget(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
-  return !!target?.closest("input, textarea, select, button, [contenteditable='true']");
+  return !!target?.closest("input, textarea, select, [contenteditable='true']");
 }
