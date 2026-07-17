@@ -620,6 +620,21 @@ export function applyUpdate(state, path, value) {
   const node = walkToParent(state, keys);
   if (node == null || typeof node !== "object" || !Object.hasOwn(node, last)) return false;
   if (node[last] === value) return false;
+  // Complete a partial/empty whole-object write to a fixed-shape layer container before
+  // storing it. corruptsStructure pins these to isPlainObject, so `{}` or a partial object
+  // passes — but the panel + render-client dereference nested leaves unconditionally
+  // (fx.edgeBlend.invert, mask.feather.toFixed, warp.corners.map), so a partial object
+  // white-screened every connected panel. Backfill absent keys from the defaults, exactly
+  // as ensureLayerDefaults does at create/load. Mutating `value` in place also fixes the
+  // broadcast: index.js re-sends this same object, so other panels get the completed shape
+  // too (not the raw partial). Only layer containers — screens/pip/etc. have their own pins.
+  if (keys.length === 2 && keys[0] === "layers" && isPlainObject(value)) {
+    if (last === "fx") fillMissing(value, defaultFx());
+    else if (last === "mask") fillMissing(value, defaultMask());
+    else if (last === "warp") fillMissing(value, defaultWarp());
+    else if (last === "transport") fillMissing(value, defaultTransport());
+    else if (last === "playlist") fillMissing(value, { items: [], cursor: -1 });
+  }
   node[last] = value;
   return true;
 }

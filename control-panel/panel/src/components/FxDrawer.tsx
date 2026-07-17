@@ -307,7 +307,7 @@ export function FxDrawer({
         ))}
       </FxSection>
       <FxSection
-        caption="Color"
+        caption="Color & blur"
         enabled={fx.enabled?.color ?? true}
         onToggleEnabled={() => onUpdate?.("fx.enabled.color", !(fx.enabled?.color ?? true))}
       >
@@ -405,7 +405,7 @@ export function FxDrawer({
         </FxSection>
       )}
       {downscale !== undefined && (
-        <FxSection caption="Adapt">
+        <FxSection caption="Render quality">
           <label className="fx-control" data-neutral={(downscale ?? 1) === 1}>
             <span className="fx-label">DOWNSCALE</span>
             <Select

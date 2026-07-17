@@ -47,11 +47,20 @@ export function syncNoteToRate(note, bpm) {
 
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
+// Numeric leaves that must land DISCRETELY, never interpolate: z-order (fractional order
+// re-sorts the whole stack every frame → layers visibly restack mid-fade), mesh grid size
+// (fractional size vs. a fixed-length points array deforms the mesh toward a wrong shape),
+// integer tile counts, and the render downscale divisor (a 1.5x divisor is meaningless).
+// The full recall at fade completion (scene fade) sets these exactly; excluding them here
+// only affects scene fades — a paramFade targets one explicit path and never uses this.
+const DISCRETE_FADE_KEYS = new Set(["order", "size", "tileX", "tileY", "downscale"]);
+
 // Collect every numeric leaf that differs between the live state and a preset snapshot
 // — those interpolate during a fade. Strings/booleans/structural differences are NOT
 // faded; the full recall at fade completion lands them exactly.
 function collectNumericDiffs(current, target, basePath, out) {
   for (const [key, targetValue] of Object.entries(target ?? {})) {
+    if (DISCRETE_FADE_KEYS.has(key)) continue; // lands discretely at fade completion
     const path = basePath ? `${basePath}.${key}` : key;
     const currentValue = current?.[key];
     if (typeof targetValue === "number" && typeof currentValue === "number") {

@@ -452,7 +452,14 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
             <div
               key={item.id}
               className="media-cell"
-              title={`${item.name} — drag onto a layer, slot, or the stage · double-click = use on selected layer`}
+              // Keyboard parity for the double-click "use on selected layer" action (drag
+              // itself can't be keyboarded, but the primary tap action can): focusable,
+              // named, and Enter/Space assigns it. Guarded to the cell itself so Enter in
+              // the inline tags editor doesn't also fire the assignment.
+              role="button"
+              tabIndex={0}
+              aria-label={`${item.name} — press Enter to use on the selected layer`}
+              title={`${item.name} — drag onto a layer, slot, or the stage · double-click / Enter = use on selected layer`}
               draggable
               // Native HTML5 drag suppresses pointer events, so pointerleave/up never fire
               // to clear `liveId` — without this a hovered gif stays animating forever after
@@ -460,6 +467,13 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
               onDragStart={(e) => { setLiveId(null); setDraggingMedia(true); setMediaDrag(e, item); }}
               onDragEnd={() => setDraggingMedia(false)}
               onDoubleClick={() => onUseOnSelected?.(item)}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return; // ignore keys from the inner tags input
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onUseOnSelected?.(item);
+                }
+              }}
               {...cellInteraction(item)}
             >
               <MediaThumb item={item} mediaBase={mediaBase} live={liveId === item.id} />

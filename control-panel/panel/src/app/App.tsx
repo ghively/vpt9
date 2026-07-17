@@ -518,24 +518,33 @@ export function App() {
   // persistent bottom strip (masterBarEl) where a VJ expects a master/transport bar, and
   // the audio-owner picker is gone entirely (audio was removed — vpt9 is a silent
   // instrument). A "?" opens the shortcuts/gestures help.
-  const faceplate = (
-    <Faceplate
-      screenSelect={
-        <ScreenSelect
-          screens={screens}
-          selectedId={selectedScreenId}
-          onSelect={setSelectedScreenId}
-          onAdd={actions.addScreen}
-        />
-      }
-      center={null}
-      right={
-        <div className="faceplate-right">
-          <button type="button" className="help-btn" title="Keyboard shortcuts & hidden gestures" onClick={() => setHelpOpen(true)}>?</button>
-          <StatusLamp state={status.state} label={status.label} />
-        </div>
-      }
-    />
+  //
+  // Memoized so a ~8 Hz automation tick doesn't rebuild the ScreenSelect/StatusLamp
+  // subtree: it only depends on the screen list, the selection, and the connection status
+  // (setSelectedScreenId / actions.addScreen are stable), so the element identity is reused
+  // — and React bails out reconciling it — on every unrelated re-render. (The Faceplate's
+  // own React.memo couldn't help: these element props were fresh every render.)
+  const faceplate = useMemo(
+    () => (
+      <Faceplate
+        screenSelect={
+          <ScreenSelect
+            screens={screens}
+            selectedId={selectedScreenId}
+            onSelect={setSelectedScreenId}
+            onAdd={actions.addScreen}
+          />
+        }
+        center={null}
+        right={
+          <div className="faceplate-right">
+            <button type="button" className="help-btn" title="Keyboard shortcuts & hidden gestures" onClick={() => setHelpOpen(true)}>?</button>
+            <StatusLamp state={status.state} label={status.label} />
+          </div>
+        }
+      />
+    ),
+    [screens, selectedScreenId, status.state, status.label, actions.addScreen],
   );
 
   // Persistent bottom master/transport strip. The "Playback owner" picker (multi-screen

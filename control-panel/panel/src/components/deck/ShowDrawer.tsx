@@ -10,7 +10,11 @@ export type ShowTab = "presets" | "sources" | "cues" | "timers" | "lfo" | "midi"
 // unchanged.
 const SHOW_DRAWER_TABS: Array<[ShowTab, string]> = [
   ["presets", "Looks"],
-  ["sources", "Sources"],
+  // "Snapshots" (not "Sources"): this tab opens the source-BANK SNAPSHOT store (its own
+  // panel heading is "Source snapshots"), NOT where you set up sources — that's the
+  // left-rail "Shared slots" grid + the "Media" library. "Sources" read as the latter and
+  // sent operators to the wrong place.
+  ["sources", "Snapshots"],
   ["cues", "Cues"],
   ["timers", "Timers"],
   ["lfo", "LFO"],

@@ -137,6 +137,34 @@ test("a 'fade' cue interpolates numeric leaves toward the preset and lands exact
   engine.dispose();
 });
 
+test("a 'fade' cue does NOT interpolate discrete leaves (order/mesh size) — they land at completion", async () => {
+  const { state, engine } = makeHarness({
+    layers: { a: { opacity: 0.2, order: 2, warp: { mode: "mesh", mesh: { size: 4, points: [] } } } },
+    presets: {
+      "preset-1": {
+        id: "preset-1", name: "P1",
+        snapshot: { layers: { a: { opacity: 1.0, order: 5, warp: { mode: "mesh", mesh: { size: 8, points: [] } } } } },
+      },
+    },
+    automation: { cues: [{ type: "fade", presetId: "preset-1", seconds: 0.1 }], cursor: -1, running: false, timers: {} },
+  });
+  engine.cueGo();
+
+  // Mid-fade: opacity moves smoothly, but order and mesh size must stay put (a fractional
+  // order re-sorts the stack every frame; a fractional mesh size deforms the grid).
+  await wait(40);
+  assert.ok(state.layers.a.opacity > 0.2, "opacity should be interpolating");
+  assert.equal(state.layers.a.order, 2, "order must not interpolate mid-fade");
+  assert.equal(state.layers.a.warp.mesh.size, 4, "mesh size must not interpolate mid-fade");
+
+  // At completion the full recall lands the discrete leaves exactly.
+  await wait(150);
+  assert.equal(state.layers.a.opacity, 1.0);
+  assert.equal(state.layers.a.order, 5);
+  assert.equal(state.layers.a.warp.mesh.size, 8);
+  engine.dispose();
+});
+
 test("an enabled LFO oscillates its target and stays within [min,max]", async () => {
   const { state, engine } = makeHarness({
     layers: { a: { opacity: 0.5 } },

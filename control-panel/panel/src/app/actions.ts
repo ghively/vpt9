@@ -418,7 +418,13 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
       send({ type: "update", path: `layers.${id}.sourceMode`, value: mode });
     },
     setPlaylist(id: string, items: PlaylistItem[]) {
-      send({ type: "update", path: `layers.${id}.playlist`, value: { items, cursor: 0 } });
+      // Preserve the live cursor (clamped to the new length) instead of forcing 0 — every
+      // playlist edit (reorder, add, remove, duration tweak) funnels through here, and
+      // snapping the cursor to 0 restarted the whole playlist on the wall mid-show. The
+      // server keys its per-clip timer to the cursor, so keeping it holds the current clip.
+      const prev = getState().layers[id]?.playlist?.cursor ?? 0;
+      const cursor = items.length ? Math.min(Math.max(0, prev), items.length - 1) : 0;
+      send({ type: "update", path: `layers.${id}.playlist`, value: { items, cursor } });
     },
     // Manual clip trigger (task A15 — VPT8's /trig /last /random): advance/retreat/randomize
     // a playlist layer's cursor live. The server's tickPlaylists/clipEnded advance it

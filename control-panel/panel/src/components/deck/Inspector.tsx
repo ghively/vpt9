@@ -534,7 +534,7 @@ function MaskBody({
                 </span>
               </div>
               <div className="coord">
-                <span className="t">RADIUS</span>
+                <span className="t">SIZE</span>
                 <span className="v mono">
                   {mask.rx.toFixed(2)} · {mask.ry.toFixed(2)}
                 </span>

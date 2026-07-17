@@ -223,7 +223,23 @@ function handleCreate(socket, message) {
 }
 
 function handleDelete(message) {
+  // The source-bank recall cursor is an INDEX into Object.keys(sourceBankPresets); capture
+  // which snapshot it points at BEFORE the delete shifts that key order underneath it, so
+  // next/prev don't step from a stale index and skip or repeat a snapshot.
+  const cursorTargetId =
+    /^sourceBankPresets\.[^.]+$/.test(message.path) && Number.isInteger(state.sourceBankPresetCursor)
+      ? Object.keys(state.sourceBankPresets ?? {})[state.sourceBankPresetCursor] ?? null
+      : undefined;
   if (!applyDelete(state, message.path)) return;
+  if (cursorTargetId !== undefined) {
+    // Re-point the cursor at the SAME snapshot by id (−1 if it was the one just deleted),
+    // and broadcast it so every panel's mirror stays in sync with the server.
+    const next = cursorTargetId === null ? -1 : Object.keys(state.sourceBankPresets ?? {}).indexOf(cursorTargetId);
+    if (next !== state.sourceBankPresetCursor) {
+      state.sourceBankPresetCursor = next;
+      broadcast({ type: "update", path: "sourceBankPresetCursor", value: next });
+    }
+  }
   scheduleSave();
   broadcast({ type: "delete", path: message.path });
 }
