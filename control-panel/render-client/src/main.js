@@ -228,7 +228,11 @@ compositor.onContextRestored = () => {
 setInterval(() => {
   if (!isAudioOwner || socket.readyState !== WebSocket.OPEN) return;
   for (const [layerId, entry] of compositor.layerStack.entries) {
-    if (entry.videoEl && !entry.videoEl.paused) {
+    // Only real clip timelines report a position. A live camera has an Infinite
+    // videoEl.duration (no timeline); emitting for it drove an ever-growing, meaningless
+    // scrub position in the panel. A finite duration is the "this is a seekable clip"
+    // signal — it also skips a video whose metadata hasn't loaded yet (duration NaN).
+    if (entry.videoEl && !entry.videoEl.paused && Number.isFinite(entry.videoEl.duration)) {
       socket.send(JSON.stringify({ type: "transportStatus", layerId, position: entry.videoEl.currentTime, duration: entry.videoEl.duration }));
     }
   }

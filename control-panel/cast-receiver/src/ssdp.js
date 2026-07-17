@@ -58,7 +58,16 @@ export function startSsdp({ deviceUrl, uuid, log = console.log }) {
   socket.on("error", (err) => log("[ssdp] socket error:", err.message));
 
   socket.bind(SSDP_PORT, () => {
-    socket.addMembership(SSDP_ADDRESS);
+    // addMembership throws SYNCHRONOUSLY (EADDRNOTAVAIL/ENODEV) on hosts/interfaces with no
+    // multicast-capable route — common in some container/host-network setups. A throw here
+    // is inside the bind callback, so socket.on('error') never sees it; unguarded it takes
+    // down the process. Degrade gracefully: unicast M-SEARCH replies still work without the
+    // multicast group, so log and carry on.
+    try {
+      socket.addMembership(SSDP_ADDRESS);
+    } catch (err) {
+      log(`[ssdp] could not join multicast group ${SSDP_ADDRESS} (${err.message}); unicast discovery only`);
+    }
     log(`[ssdp] listening on ${SSDP_ADDRESS}:${SSDP_PORT}, advertising ${location}`);
   });
 

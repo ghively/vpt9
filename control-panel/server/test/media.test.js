@@ -113,6 +113,19 @@ test("DELETE of an unknown id is a 404", withServer(async ({ base }) => {
   assert.equal(res.status, 404);
 }));
 
+// Regression: an inherited property name ("__proto__"/"constructor"/"toString") reads back
+// a truthy Object.prototype member via plain `state.media[id]`, so it used to slip past the
+// !entry 404 check and phantom-succeed — replying 200 and broadcasting a FULL state snapshot
+// to every client on a delete of nothing (request-amplification). Must 404 with no broadcast.
+test("DELETE of an inherited property name 404s and does not broadcast a state snapshot", withServer(async ({ base, broadcasts }) => {
+  for (const id of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    const before = broadcasts.length;
+    const res = await fetch(`${base}/api/media/${id}`, { method: "DELETE" });
+    assert.equal(res.status, 404, `${id} should 404`);
+    assert.equal(broadcasts.slice(before).some((m) => m.type === "state"), false, `${id} must not rebroadcast state`);
+  }
+}));
+
 // The panel calls POST/DELETE cross-origin (its own origin, distinct from this server's),
 // so the browser preflights with OPTIONS and every JSON response needs CORS headers too —
 // otherwise the panel's upload/delete buttons fail with net::ERR_FAILED before the real

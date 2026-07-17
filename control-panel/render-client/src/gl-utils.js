@@ -45,6 +45,12 @@ export function createTexture(gl, { filter = gl.LINEAR } = {}) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  // Seed a 1x1 transparent-black pixel so sampling a texture that hasn't had a real frame
+  // uploaded yet — a layer whose source is still resolving or is unresolvable (deleted
+  // media / empty playlist) — is well-defined (transparent) instead of undefined GPU
+  // contents. FBO textures immediately re-spec this with their real dimensions, so the
+  // placeholder is harmless there.
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
   return texture;
 }
 

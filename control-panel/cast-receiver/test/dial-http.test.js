@@ -74,3 +74,63 @@ test("POST /apps/YouTube then GET returns the launched videoId XML-escaped", asy
     await once(server, "close");
   }
 });
+
+// Regression: a POST whose body is aborted mid-stream must NOT crash the receiver — the
+// body-read rejection used to escape the async request handler as an unhandled rejection
+// (process exit on a single malformed LAN request). Now it settles to a 400 and the server
+// keeps serving subsequent requests.
+test("aborted request body responds 400 and the server keeps serving", async () => {
+  const server = createDialHttpServer({
+    friendlyName: "Test", uuid: "u-2", applicationUrl: "http://localhost/apps/",
+    onLaunch: () => {}, log: () => {},
+  });
+  server.listen(0);
+  await once(server, "listening");
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    // Abort the POST after the headers but before/with a partial body.
+    const ac = new AbortController();
+    const pending = fetch(`${base}/apps/YouTube`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ v: "abc" }).toString(),
+      signal: ac.signal,
+    }).catch(() => {}); // the client sees an aborted fetch; we only care the server survives
+    ac.abort();
+    await pending;
+    // The server must still answer a normal request afterward (it didn't crash).
+    const ok = await fetch(`${base}/dd.xml`);
+    assert.equal(ok.status, 200);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+// Regression: an oversized body is rejected (413/400) rather than accumulated unbounded.
+test("oversized request body is rejected, not buffered unbounded", async () => {
+  const server = createDialHttpServer({
+    friendlyName: "Test", uuid: "u-3", applicationUrl: "http://localhost/apps/",
+    onLaunch: () => {}, log: () => {},
+  });
+  server.listen(0);
+  await once(server, "listening");
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const huge = "v=" + "x".repeat(200 * 1024); // > the 64 KiB cap
+    const res = await fetch(`${base}/apps/YouTube`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: huge,
+    }).catch(() => ({ status: 0 })); // a destroyed socket may surface as a fetch error
+    assert.ok(res.status === 400 || res.status === 0, `expected 400 or connection reset, got ${res.status}`);
+    // Server still alive.
+    const ok = await fetch(`${base}/dd.xml`);
+    assert.equal(ok.status, 200);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});

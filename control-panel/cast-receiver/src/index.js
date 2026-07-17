@@ -1,6 +1,16 @@
 import { startSsdp } from "./ssdp.js";
 import { createDialHttpServer } from "./dial-http.js";
 
+// Crash nets (parity with the control-plane server, which installs both). The receiver
+// takes unauthenticated LAN traffic; a single malformed/aborted request must never be able
+// to exit the process. Log and keep serving rather than dying.
+process.on("unhandledRejection", (reason) => {
+  console.error("[cast-receiver] unhandled rejection:", reason instanceof Error ? reason.message : reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[cast-receiver] uncaught exception:", err?.message ?? err);
+});
+
 const PORT = Number(process.env.PORT || 8090);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADVERTISE_HOST = process.env.CAST_RECEIVER_HOST || "localhost";

@@ -70,19 +70,27 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   });
 }
 
-function readJsonBody(req) {
+// These endpoints carry tiny JSON control bodies (a videoId, a URL). Cap accumulation so a
+// LAN client can't stream an unbounded body and exhaust memory — the file-upload path
+// already enforces its own byte cap; the JSON bodies didn't. Settle on premature close too.
+function readJsonBody(req, maxBytes = 256 * 1024) {
   return new Promise((resolve, reject) => {
     let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
-    req.on("end", () => {
-      if (!raw) return resolve({});
-      try {
-        resolve(JSON.parse(raw));
-      } catch (err) {
-        reject(err);
-      }
+    let size = 0;
+    let settled = false;
+    const settle = (fn, arg) => { if (settled) return; settled = true; fn(arg); };
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) { settle(reject, new Error("request body too large")); req.destroy(); return; }
+      raw += chunk;
     });
-    req.on("error", reject);
+    req.on("end", () => {
+      if (settled) return;
+      if (!raw) return settle(resolve, {});
+      try { settle(resolve, JSON.parse(raw)); } catch (err) { settle(reject, err); }
+    });
+    req.on("error", (err) => settle(reject, err));
+    req.on("close", () => { if (!req.complete) settle(reject, new Error("connection closed before body complete")); });
   });
 }
 
@@ -266,6 +274,11 @@ function handlePresetSave(message) {
 // Shared by the WS message handler, the automation engine (recall/fade cues, timers)
 // and OSC. Returns false when the preset doesn't exist so callers can warn.
 function recallPreset(presetId) {
+  // Object.hasOwn: an inherited name ("__proto__"/"constructor"/"toString"/…) reads back a
+  // truthy Object.prototype member and would slip past `!preset`, then scheduleSave +
+  // broadcast a full state snapshot to every client for a recall of nothing (reachable via
+  // WS presetRecall and OSC /preset/recall). Treat it as "not found".
+  if (!Object.hasOwn(state.presets, presetId)) return false;
   const preset = state.presets[presetId];
   if (!preset) return false;
   // A legacy/partial snapshot may lack a field; structuredClone(undefined) is undefined
