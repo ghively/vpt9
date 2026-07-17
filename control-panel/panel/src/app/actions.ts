@@ -37,10 +37,20 @@ function defaultFx(): Fx {
   };
 }
 
+/** VPT8's mesh order range is 2–10; clamp so a stored `size` (and its point grid) can never
+ *  be a divide-by-zero (<=1) or an absurd value from a non-UI write path. */
+function clampMeshSize(size: number): number {
+  return Math.max(2, Math.min(10, Math.round(size) || 2));
+}
+
 function identityMeshPoints(size: number): Point[] {
+  // Guard the divisor: size <= 1 makes `col / (size - 1)` divide by 0 → NaN coordinates,
+  // which blank the layer's geometry (the render mesh and warpQuad's Math.min go NaN). The
+  // Inspector Select only offers 2–10, but a programmatic/OSC path could pass anything.
+  const n = clampMeshSize(size);
   const points: Point[] = [];
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) points.push({ x: col / (size - 1), y: row / (size - 1) });
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) points.push({ x: col / (n - 1), y: row / (n - 1) });
   }
   return points;
 }
@@ -108,7 +118,7 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     },
     resetWarp(screenId: string) {
       const warp = getState().screens[screenId]?.warp;
-      if (warp?.mode === "mesh") {
+      if (warp?.mode === "mesh" && warp.mesh) {
         send({ type: "update", path: `screens.${screenId}.warp.mesh.points`, value: identityMeshPoints(warp.mesh.size) });
       } else {
         send({ type: "update", path: `screens.${screenId}.warp.corners`, value: IDENTITY_CORNERS.map((p) => ({ ...p })) });
@@ -127,7 +137,7 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     },
     resetLayerWarp(id: string) {
       const warp = getState().layers[id]?.warp;
-      if (warp?.mode === "mesh") {
+      if (warp?.mode === "mesh" && warp.mesh) {
         send({ type: "update", path: `layers.${id}.warp.mesh.points`, value: identityMeshPoints(warp.mesh.size) });
       } else {
         send({ type: "update", path: `layers.${id}.warp.corners`, value: IDENTITY_CORNERS.map((p) => ({ ...p })) });
@@ -139,7 +149,8 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
       send({ type: "update", path: `${base}.${index}`, value: { x, y } });
     },
     setLayerMeshSize(id: string, size: number) {
-      send({ type: "update", path: `layers.${id}.warp.mesh`, value: { size, points: identityMeshPoints(size) } });
+      const n = clampMeshSize(size);
+      send({ type: "update", path: `layers.${id}.warp.mesh`, value: { size: n, points: identityMeshPoints(n) } });
     },
     // VPT8's activelayer.maxpat "p cornerpin_templates" preset menu (full/center/thirds/
     // rotations), applied to layers.<id>.warp.corners as one atomic write.
@@ -254,10 +265,11 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     setMeshSize(screenId: string, size: number) {
       // A different grid size makes the old points meaningless — reset to identity.
       // One atomic update: size and points must never disagree, even for a frame.
+      const n = clampMeshSize(size);
       send({
         type: "update",
         path: `screens.${screenId}.warp.mesh`,
-        value: { size, points: identityMeshPoints(size) },
+        value: { size: n, points: identityMeshPoints(n) },
       });
     },
 
@@ -418,7 +430,13 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
       send({ type: "update", path: `layers.${id}.sourceMode`, value: mode });
     },
     setPlaylist(id: string, items: PlaylistItem[]) {
-      send({ type: "update", path: `layers.${id}.playlist`, value: { items, cursor: 0 } });
+      // Preserve the live cursor (clamped to the new length) instead of forcing 0 — every
+      // playlist edit (reorder, add, remove, duration tweak) funnels through here, and
+      // snapping the cursor to 0 restarted the whole playlist on the wall mid-show. The
+      // server keys its per-clip timer to the cursor, so keeping it holds the current clip.
+      const prev = getState().layers[id]?.playlist?.cursor ?? 0;
+      const cursor = items.length ? Math.min(Math.max(0, prev), items.length - 1) : 0;
+      send({ type: "update", path: `layers.${id}.playlist`, value: { items, cursor } });
     },
     // Manual clip trigger (task A15 — VPT8's /trig /last /random): advance/retreat/randomize
     // a playlist layer's cursor live. The server's tickPlaylists/clipEnded advance it

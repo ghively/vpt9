@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useRef, type PointerEvent as ReactPointerEvent } from "react";
 
 export interface WarpHandleProps {
   /** Normalised 0–1 position on the stage. */
@@ -29,9 +29,12 @@ export interface WarpHandleProps {
  *  that marker to make background clicks/hover-outline ignore drag handles; carrying it
  *  unconditionally is a no-op everywhere else (WarpEditor's rail-side monitor doesn't
  *  look for it). */
-export function WarpHandle({ x, y, active = false, selected = false, cornerTag, coordTag, className, onSelect, onDragStart, onDragTo, onDragEnd }: WarpHandleProps) {
+function WarpHandleView({ x, y, active = false, selected = false, cornerTag, coordTag, className, onSelect, onDragStart, onDragTo, onDragEnd }: WarpHandleProps) {
   const ref = useRef<HTMLDivElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
+  // Accessible name: the point's own tag (corner TL/TR/BR/BL or mesh R·C) plus its live
+  // coordinates, so a screen reader announces which registration point has focus.
+  const label = `Warp point ${cornerTag ?? coordTag ?? ""} at x ${x.toFixed(2)}, y ${y.toFixed(2)}`.replace(/\s+/g, " ").trim();
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const el = ref.current;
@@ -105,6 +108,17 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
       data-active={active}
       data-selected={selected}
       style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
+      // Keyboard access (parity with the pointer path): focusing a handle arms it as the
+      // selected point — the same thing a pointer-down does via onSelect — so the
+      // overlay's existing arrow-key nudge (WarpHandles' window keydown) then moves it.
+      // Without this a keyboard-only operator could never select, and so never nudge, a
+      // corner — the exact "aligning a projector alone at the venue" case the nudge exists
+      // for. role/aria-label name it for assistive tech.
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      aria-pressed={selected}
+      onFocus={onSelect}
       onPointerDown={onPointerDown}
     >
       {cornerTag && <span className="handle__tag mono">{cornerTag}</span>}
@@ -113,3 +127,7 @@ export function WarpHandle({ x, y, active = false, selected = false, cornerTag, 
     </div>
   );
 }
+
+/** Memoized: when the overlay re-renders on a tick that didn't move THIS handle, an
+ *  unchanged x/y (+ stable callbacks) lets it skip. */
+export const WarpHandle = memo(WarpHandleView);

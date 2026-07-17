@@ -101,7 +101,14 @@ export function createFramesProvider({ mediaDir }) {
     ]);
     renameSync(tmpPath, sheetPath);
     const manifest = { frameCount: n, frameWidth, frameHeight, cols, rows, delaysMs };
-    writeFileSync(join(cacheDir, `${filename}.json`), JSON.stringify(manifest));
+    // Write the manifest atomically (tmp + rename), like the sheet above. A direct
+    // writeFileSync could leave a TRUNCATED .json if the process is killed mid-write, and
+    // get() below would then JSON.parse it into a throw → a permanent 500 for that gif that
+    // never self-heals (the existence check keeps finding the corrupt file).
+    const manifestPath = join(cacheDir, `${filename}.json`);
+    const manifestTmp = join(cacheDir, `${filename}.tmp-${randomBytes(6).toString("hex")}.json`);
+    writeFileSync(manifestTmp, JSON.stringify(manifest));
+    renameSync(manifestTmp, manifestPath);
     return manifest;
   }
 
@@ -111,7 +118,11 @@ export function createFramesProvider({ mediaDir }) {
     const manifestPath = join(cacheDir, `${filename}.json`);
     const sheetPath = join(cacheDir, `${filename}.png`);
     if (existsSync(manifestPath) && existsSync(sheetPath)) {
-      return { manifest: JSON.parse(readFileSync(manifestPath, "utf8")), sheetPath };
+      // A manifest corrupted by an older non-atomic write (or any external cause) must not
+      // 500 forever — fall through to regeneration instead of letting the parse throw.
+      try {
+        return { manifest: JSON.parse(readFileSync(manifestPath, "utf8")), sheetPath };
+      } catch { /* corrupt manifest — regenerate below */ }
     }
     if (!inflight.has(filename)) {
       inflight.set(filename, generate(filename).finally(() => inflight.delete(filename)));

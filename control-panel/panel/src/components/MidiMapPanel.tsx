@@ -50,12 +50,16 @@ export function MidiMapPanel({ mappings, learningId, midiAvailable = true, targe
             className="midi-num"
             value={String(mapping.min ?? 0)}
             placeholder="min"
+            ariaLabel="Mapped range minimum"
+            inputMode="decimal"
             onCommit={(v) => onUpdate?.(mapping.id, "min", parseNumberOr(v, 0))}
           />
           <TextField
             className="midi-num"
             value={String(mapping.max ?? 1)}
             placeholder="max"
+            ariaLabel="Mapped range maximum"
+            inputMode="decimal"
             onCommit={(v) => onUpdate?.(mapping.id, "max", parseNumberOr(v, 1))}
           />
           <TargetField

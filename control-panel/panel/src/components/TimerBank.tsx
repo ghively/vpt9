@@ -9,9 +9,12 @@ import type { Timer, Preset } from "./types";
 function normalizeHhmm(v: string): string {
   const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(v);
   if (!m) return v;
-  const hh = Math.min(23, Number(m[1]));
+  const hh = Number(m[1]);
   const mm = Number(m[2]);
-  if (mm > 59) return v;
+  // Reject out-of-range hours (like minutes) rather than silently clamping — "24:00"
+  // clamped to "23:00" would arm the timer for a different time than the operator typed.
+  // Returning the raw string leaves it visibly uncommitted so they can correct it.
+  if (hh > 23 || mm > 59) return v;
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
@@ -57,6 +60,7 @@ export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate
             onCommit={(v) => onUpdate?.(timer.id, "time", normalizeHhmm(v))}
           />
           <Select
+            ariaLabel="Timer action"
             value={timer.action ?? "cueGo"}
             options={[
               { value: "cueGo", label: "Cue GO" },
@@ -67,6 +71,7 @@ export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate
           />
           {timer.action === "recall" && (
             <Select
+              ariaLabel="Preset"
               value={timer.presetId ?? ""}
               options={presetOptions.length ? presetOptions : [{ value: "", label: "(no presets)" }]}
               onChange={(v) => onUpdate?.(timer.id, "presetId", v)}
@@ -74,6 +79,7 @@ export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate
           )}
           {timer.action === "source" && (
             <Select
+              ariaLabel="Source snapshot"
               value={timer.presetId ?? ""}
               options={sourceOptions.length ? sourceOptions : [{ value: "", label: "(no snapshots)" }]}
               onChange={(v) => onUpdate?.(timer.id, "presetId", v)}

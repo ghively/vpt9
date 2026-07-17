@@ -79,9 +79,14 @@ function NumField({ value, placeholder, onCommit }: { value: number | null | und
 }
 
 /** Shared clip-transport control cluster (VPT8 parity, tasks A9/A10/A11): Play/Pause,
- *  rate, pan, vol, a loop-mode cycle (off/loop/palindrome/once), loop in/out, and a
- *  normalized 0..1 scrub. Used by both the layer FX drawer's Transport section and the
- *  source-bank slot editor so the two never drift. */
+ *  rate, a loop-mode cycle (off/loop/palindrome/once), loop in/out, and a normalized 0..1
+ *  scrub. Used by both the layer FX drawer's Transport section and the source-bank slot
+ *  editor so the two never drift.
+ *
+ *  No VOL/PAN: vpt9 is a silent video instrument — the render-client keeps every media
+ *  element muted (transport.vol/pan remain in the state schema for compatibility but drive
+ *  nothing, see server/src/state.js), so surfacing audio faders here only misled operators
+ *  into thinking they did something. Dropped 2026-07-17. */
 export function TransportControls({ transport, onUpdate, position, duration }: TransportControlsProps) {
   const loopMode = transport.loopMode ?? "off";
   const seek = transport.seek ?? 0;
@@ -103,8 +108,6 @@ export function TransportControls({ transport, onUpdate, position, duration }: T
     <>
       <Button label={transport.playing ? "Pause" : "Play"} onClick={() => onUpdate("playing", !transport.playing)} />
       <TransportFader label="RATE" value={transport.rate ?? 1} min={0.1} max={4} step={0.05} neutral={1} digits={2} onChange={(v) => onUpdate("rate", v)} />
-      <TransportFader label="PAN" value={transport.pan ?? 0} min={-1} max={1} step={0.01} neutral={0} digits={2} onChange={(v) => onUpdate("pan", v)} />
-      <TransportFader label="VOL" value={transport.vol ?? 1} min={0} max={1} step={0.01} neutral={1} digits={2} onChange={(v) => onUpdate("vol", v)} />
       <ToggleSquare
         label={LOOP_LABEL[loopMode]}
         title="Cycle loop mode: off / loop / palindrome / once"

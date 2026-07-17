@@ -2,7 +2,10 @@
  * presentational components. */
 /* React mounts into #root, so the app-shell flex column lives here (not on body). */
 html, body { height: 100%; }
-#root { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+/* 100dvh (dynamic viewport) so the mobile browser's collapsing URL bar can't hide the
+ * bottom master strip / tab bar behind it; 100vh stays as the fallback for browsers
+ * without dvh support. */
+#root { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 
   /* ── Faceplate ────────────────────────────────────────────────────────────
      The header reads as the top edge of a piece of AV gear: a nameplate on the
@@ -399,6 +402,12 @@ html, body { height: 100%; }
   }
   .preset-chip:hover .preset-remove { display: inline-flex; }
   .preset-remove:hover { border-color: var(--live); color: var(--live); }
+  /* Touch has no hover — reveal the delete × permanently under coarse pointers (the
+   * context-menu long-press is the other touch path) and enlarge it toward the tap
+   * minimum so it's actually hittable at the chip's corner. */
+  @media (any-pointer: coarse) {
+    .preset-remove { display: inline-flex; width: 22px; height: 22px; top: -8px; right: -8px; font-size: 12px; }
+  }
   .preset-rename-input, .preset-name-input { width: 120px; }
   .save-btn {
     padding: 7px 12px; border-radius: var(--radius-sm); border: 1px solid var(--hairline);
@@ -532,8 +541,10 @@ html, body { height: 100%; }
 
   /* ── Extra controls added by the automation cluster (A16–A19) ────────────────── */
   /* Cue rows and LFO rows now carry more per-row controls (new cue types, mixer/sync
-     fields), so let them wrap rather than overflow their narrow drawer column. */
-  .cue-row, .lfo-row { flex-wrap: wrap; }
+     fields), so let them wrap rather than overflow their narrow drawer column. Timer and
+     MIDI rows wrap too — in the ~360px mobile Show sheet their fixed-width binding/action
+     controls otherwise overflow and force a horizontal scrollbar on the whole sheet. */
+  .cue-row, .lfo-row, .timer-row, .midi-row { flex-wrap: wrap; }
   .cue-row select, .lfo-row select { min-width: 0; }
   .cue-target { flex: 1 1 120px; min-width: 0; }
   .cue-follow[data-active="true"] { color: var(--beam); border-color: var(--beam); }
@@ -557,6 +568,10 @@ html, body { height: 100%; }
   .mobile-tabbar {
     display: flex; flex-shrink: 0; height: 56px;
     border-top: 1px solid var(--hairline); background: var(--panel);
+    /* Keep the tappable row clear of the home indicator / rounded corner on notched
+     * phones (paired with index.html's viewport-fit=cover). Falls back to 0 elsewhere. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    box-sizing: content-box;
   }
   .mobile-tab {
     flex: 1; min-height: var(--tap-min, 44px);

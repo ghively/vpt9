@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { MediaThumb } from "./MediaThumb";
+import { SectionHead } from "./SectionHead";
 import { useContextMenu, longPressHandlers } from "./ContextMenu";
 import { setMediaDrag, hasMediaDrag, getMediaDrag } from "./dnd";
 import { Chip } from "../primitives/Chip";
@@ -93,6 +94,9 @@ export interface MediaBinProps {
   imports?: Array<{ url: string; status: string; error?: string }>;
   /** Clicking a failed import's cell dismisses it. */
   onDismissImport?: (url: string) => void;
+  /** Desktop rail collapse: when `onToggleCollapse` is set the header folds the section. */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 /** The media library (owner redesign 2026-07-16, spec: docs/superpowers/specs/
@@ -102,7 +106,7 @@ export interface MediaBinProps {
  *  and loose-tag chips operating inside it. Membership = `collection:<Name>` entries in
  *  the item's own keyword list, so it travels with the files. Items are draggable onto
  *  a layer row, a source-bank slot, the stage — or onto a folder row to file them. */
-function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onSetTags, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
+function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onSetTags, onImportUrl, imports = [], onDismissImport, collapsed = false, onToggleCollapse }: MediaBinProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -315,11 +319,13 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
       onDragLeave={() => setDropArmed(false)}
       onDrop={onDrop}
     >
-      <div className="sec-head label">
-        Media
-        <span className="count mono">{showFolderList ? media.length : filtered ? `${visible.length}/${scope.length}` : scope.length}</span>
-      </div>
-
+      <SectionHead
+        title="Media"
+        count={showFolderList ? media.length : filtered ? `${visible.length}/${scope.length}` : scope.length}
+        collapsed={collapsed}
+        onToggle={onToggleCollapse}
+      />
+      {!collapsed && (<>
       {/* Search lives above both views: on the folder list it searches EVERYTHING (the
           grid opens flat across the library); inside a folder it narrows that folder. */}
       {media.length > 0 && (
@@ -348,6 +354,7 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
             {!showFolderList && (
               <Select
                 className="media-bin__sort"
+                ariaLabel="Sort media by"
                 value={view.sort}
                 options={SORT_OPTIONS}
                 onChange={(sort) => saveView({ ...view, sort: sort as MediaSort })}
@@ -451,7 +458,14 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
             <div
               key={item.id}
               className="media-cell"
-              title={`${item.name} — drag onto a layer, slot, or the stage · double-click = use on selected layer`}
+              // Keyboard parity for the double-click "use on selected layer" action (drag
+              // itself can't be keyboarded, but the primary tap action can): focusable,
+              // named, and Enter/Space assigns it. Guarded to the cell itself so Enter in
+              // the inline tags editor doesn't also fire the assignment.
+              role="button"
+              tabIndex={0}
+              aria-label={`${item.name} — press Enter to use on the selected layer`}
+              title={`${item.name} — drag onto a layer, slot, or the stage · double-click / Enter = use on selected layer`}
               draggable
               // Native HTML5 drag suppresses pointer events, so pointerleave/up never fire
               // to clear `liveId` — without this a hovered gif stays animating forever after
@@ -459,6 +473,13 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
               onDragStart={(e) => { setLiveId(null); setDraggingMedia(true); setMediaDrag(e, item); }}
               onDragEnd={() => setDraggingMedia(false)}
               onDoubleClick={() => onUseOnSelected?.(item)}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return; // ignore keys from the inner tags input
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onUseOnSelected?.(item);
+                }
+              }}
               {...cellInteraction(item)}
             >
               <MediaThumb item={item} mediaBase={mediaBase} live={liveId === item.id} />
@@ -572,6 +593,7 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
         )}
         {error && <span className="media-bin__error mono">{error}</span>}
       </div>
+      </>)}
       {ctx.menu}
     </div>
   );

@@ -123,14 +123,16 @@ export function CueList({ cues, cursor, running, presets, sourcePresets, targetO
           >
             {String(index).padStart(2, "0")}
           </button>
-          <TextField value={cue.label ?? ""} placeholder="Label" onCommit={(v) => patchCue(index, { label: v })} />
+          <TextField value={cue.label ?? ""} placeholder="Label" ariaLabel="Cue label" onCommit={(v) => patchCue(index, { label: v })} />
           <Select
+            ariaLabel="Cue type"
             value={cue.type}
             options={CUE_TYPES}
             onChange={(v) => patchCue(index, { type: v as Cue["type"] })}
           />
           {(cue.type === "recall" || cue.type === "fade") && (
             <Select
+              ariaLabel="Preset"
               value={cue.presetId ?? ""}
               options={presetOptions.length ? presetOptions : [{ value: "", label: "(no presets)" }]}
               onChange={(v) => patchCue(index, { presetId: v })}
@@ -138,6 +140,7 @@ export function CueList({ cues, cursor, running, presets, sourcePresets, targetO
           )}
           {cue.type === "source" && (
             <Select
+              ariaLabel="Source snapshot"
               value={cue.presetId ?? ""}
               options={sourceOptions.length ? sourceOptions : [{ value: "", label: "(no snapshots)" }]}
               onChange={(v) => patchCue(index, { presetId: v })}
@@ -148,6 +151,8 @@ export function CueList({ cues, cursor, running, presets, sourcePresets, targetO
               className="cue-num"
               value={String(cue.seconds ?? 0)}
               placeholder="sec"
+              ariaLabel="Duration (seconds)"
+              inputMode="decimal"
               onCommit={(v) => patchCue(index, { seconds: Math.max(0, Number(v) || 0) })}
             />
           )}
@@ -163,12 +168,16 @@ export function CueList({ cues, cursor, running, presets, sourcePresets, targetO
                 className="cue-num"
                 value={String(cue.from ?? 0)}
                 placeholder="from"
+                ariaLabel="Fade from value"
+                inputMode="decimal"
                 onCommit={(v) => patchCue(index, { from: Number(v) || 0 })}
               />
               <TextField
                 className="cue-num"
                 value={String(cue.to ?? 0)}
                 placeholder="to"
+                ariaLabel="Fade to value"
+                inputMode="decimal"
                 onCommit={(v) => patchCue(index, { to: Number(v) || 0 })}
               />
             </>
@@ -178,11 +187,13 @@ export function CueList({ cues, cursor, running, presets, sourcePresets, targetO
               <TextField
                 value={cue.address ?? "/"}
                 placeholder="/osc/address"
+                ariaLabel="OSC address"
                 onCommit={(v) => patchCue(index, { address: v })}
               />
               <TextField
                 value={(cue.args ?? []).join(", ")}
                 placeholder="args (comma-sep)"
+                ariaLabel="OSC arguments (comma-separated)"
                 onCommit={(v) => patchCue(index, { args: parseOscArgs(v) })}
               />
             </>
@@ -192,6 +203,8 @@ export function CueList({ cues, cursor, running, presets, sourcePresets, targetO
               className="cue-num"
               value={String(cue.target ?? 0)}
               placeholder="cue #"
+              ariaLabel="Go to cue number"
+              inputMode="numeric"
               onCommit={(v) => patchCue(index, { target: Math.max(0, Math.trunc(Number(v) || 0)) })}
             />
           )}

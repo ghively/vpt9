@@ -44,12 +44,26 @@ function parseFormBody(raw) {
   return Object.fromEntries(params.entries());
 }
 
-function readBody(req) {
+// DIAL app-launch bodies are tiny form posts (`v=<videoId>`); anything larger is junk or a
+// memory-exhaustion attempt from a LAN client. Cap accumulation, and — crucially — settle
+// the promise on EVERY terminal event (end / error / premature close), so an aborted POST
+// can neither hang the awaiting handler forever nor reject with nobody catching it.
+function readBody(req, maxBytes = 64 * 1024) {
   return new Promise((resolve, reject) => {
     let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
-    req.on("end", () => resolve(raw));
-    req.on("error", reject);
+    let size = 0;
+    let settled = false;
+    const settle = (fn, arg) => { if (settled) return; settled = true; fn(arg); };
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) { settle(reject, new Error("request body too large")); req.destroy(); return; }
+      raw += chunk;
+    });
+    req.on("end", () => settle(resolve, raw));
+    req.on("error", (err) => settle(reject, err));
+    // A dropped connection (RST/ECONNRESET mid-body) may emit 'close' without 'end'; settle
+    // so the awaiting handler never wedges on an unresolved promise.
+    req.on("close", () => { if (!req.complete) settle(reject, new Error("connection closed before body complete")); });
   });
 }
 
@@ -59,6 +73,7 @@ export function createDialHttpServer({ friendlyName, uuid, applicationUrl, onLau
   let current = { state: "stopped", videoId: null };
 
   return createServer(async (req, res) => {
+    try {
     if (req.method === "GET" && req.url === "/dd.xml") {
       res.writeHead(200, {
         "content-type": "application/xml",
@@ -75,7 +90,16 @@ export function createDialHttpServer({ friendlyName, uuid, applicationUrl, onLau
         return;
       }
       if (req.method === "POST") {
-        const raw = await readBody(req);
+        let raw;
+        try {
+          raw = await readBody(req);
+        } catch (err) {
+          // Aborted/oversized body: respond 400 (if we still can) instead of letting the
+          // rejection escape the async handler and crash the receiver.
+          log("[dial] failed to read request body:", err.message);
+          if (!res.headersSent) { res.writeHead(400, { "content-type": "text/plain" }); res.end("bad request body"); }
+          return;
+        }
         const body = parseFormBody(raw);
         const videoId = body.v;
         if (!videoId) {
@@ -104,5 +128,12 @@ export function createDialHttpServer({ friendlyName, uuid, applicationUrl, onLau
 
     res.writeHead(404);
     res.end();
+    } catch (err) {
+      // Last-resort net: no request handler path should ever throw into the async
+      // createServer callback (that becomes an unhandled rejection → process exit), so
+      // catch everything and close the response.
+      log("[dial] request handler error:", err?.message ?? err);
+      try { if (!res.headersSent) res.writeHead(500); res.end(); } catch { /* socket already gone */ }
+    }
   });
 }

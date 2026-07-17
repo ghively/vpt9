@@ -30,12 +30,15 @@ export function OscOutSettings({ enabled, host, port, onUpdate }: OscOutSettings
           className="osc-out-host"
           value={host ?? ""}
           placeholder="host"
+          ariaLabel="OSC output host"
           onCommit={(v) => onUpdate?.("host", v)}
         />
         <TextField
           className="osc-out-port"
           value={String(port ?? 0)}
           placeholder="port"
+          ariaLabel="OSC output port"
+          inputMode="numeric"
           onCommit={(v) => onUpdate?.("port", Math.trunc(Math.max(0, parseNumberOr(v, 0))))}
         />
       </div>

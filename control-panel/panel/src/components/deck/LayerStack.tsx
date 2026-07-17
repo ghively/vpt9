@@ -3,6 +3,7 @@ import { ToggleSquare } from "../primitives/ToggleSquare";
 import { Fader } from "../primitives/Fader";
 import { rgbToHex } from "../color";
 import { MediaThumb } from "./MediaThumb";
+import { SectionHead } from "./SectionHead";
 import { useContextMenu, longPressHandlers, type MenuItem } from "./ContextMenu";
 import { hasMediaDrag, getMediaDrag, hasLayerDrag, getLayerDrag, setLayerDrag, type MediaDragPayload } from "./dnd";
 import type { Layer, MediaItem } from "../types";
@@ -58,6 +59,9 @@ export interface LayerStackProps {
   outputName?: string | null;
   outputSelected?: boolean;
   onSelectOutput?: () => void;
+  /** Desktop rail collapse: when `onToggleCollapse` is set the header folds the section. */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 /** The layer's thumbnail: its ACTUAL content wherever possible — a color layer shows
@@ -179,6 +183,8 @@ function LayerStackView({
   outputName,
   outputSelected = false,
   onSelectOutput,
+  collapsed = false,
+  onToggleCollapse,
 }: LayerStackProps) {
   const [dropId, setDropId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -248,10 +254,8 @@ function LayerStackView({
 
   return (
     <>
-      <div className="sec-head label">
-        Layer stack
-        <span className="count mono">top first</span>
-      </div>
+      <SectionHead title="Layer stack" count="top first" collapsed={collapsed} onToggle={onToggleCollapse} />
+      {!collapsed && (
       <div className="layers">
         {outputName != null && (
           <div className="layer layer-output" data-selected={outputSelected}>
@@ -388,9 +392,12 @@ function LayerStackView({
           );
         })}
       </div>
-      <button type="button" className="addbtn" onClick={() => onAddLayer()}>
-        + Add layer
-      </button>
+      )}
+      {!collapsed && (
+        <button type="button" className="addbtn" onClick={() => onAddLayer()}>
+          + Add layer
+        </button>
+      )}
       {ctx.menu}
     </>
   );

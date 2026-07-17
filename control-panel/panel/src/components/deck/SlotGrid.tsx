@@ -2,6 +2,7 @@ import { memo, useState, type DragEvent } from "react";
 import { SourceBankSlotEditor } from "../SourceBankSlotEditor";
 import { otherSlotOptions } from "../sourceBank";
 import { MediaThumb } from "./MediaThumb";
+import { SectionHead } from "./SectionHead";
 import { rgbToHex } from "../color";
 import { useContextMenu, longPressHandlers, type MenuItem } from "./ContextMenu";
 import { hasMediaDrag, getMediaDrag } from "./dnd";
@@ -27,6 +28,9 @@ export interface SlotGridProps {
    *  so a container can react (e.g. a future show drawer cross-highlighting the slot).
    *  The inline editor below the grid is opened/closed independently, from local state. */
   onEditSlot?: (index: number) => void;
+  /** Desktop rail collapse: when `onToggleCollapse` is set the header folds the section. */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
@@ -46,7 +50,7 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
  *  editor inline below the grid — `SourceBankSlotEditor`, extracted from
  *  `SourceBankPanel` — so editing keeps using the existing `onRename`/`onSetContent`
  *  write paths unchanged rather than a second, drifting implementation. */
-function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot, mediaBase }: SlotGridProps) {
+function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot, mediaBase, collapsed = false, onToggleCollapse }: SlotGridProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const editingSlot = editingIndex != null ? slots[editingIndex] : undefined;
@@ -85,10 +89,8 @@ function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetCo
 
   return (
     <>
-      <div className="sec-head label">
-        Shared slots
-        <span className="count mono">{slots.length}</span>
-      </div>
+      <SectionHead title="Shared slots" count={slots.length} collapsed={collapsed} onToggle={onToggleCollapse} />
+      {!collapsed && (
       <div className="slots">
         {slots.map((slot, i) => {
           const summary = slotSummary(slot, media);
@@ -127,7 +129,8 @@ function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetCo
           );
         })}
       </div>
-      {editingSlot && editingIndex != null && (
+      )}
+      {!collapsed && editingSlot && editingIndex != null && (
         <div className="slot-editor-inline">
           <SourceBankSlotEditor
             slot={editingSlot}

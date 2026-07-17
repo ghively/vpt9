@@ -265,14 +265,24 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
   }
 
   function handleDelete(res, id) {
-    const entry = state.media?.[id];
-    if (!entry) { sendJson(res, 404, { error: `no media with id "${id}"` }); return; }
+    // Object.hasOwn (not a plain `state.media[id]`): an inherited property name
+    // ("__proto__"/"constructor"/"toString"/…) reads back a truthy Object.prototype
+    // member and would slip past a `!entry` check, then phantom-succeed — replying 200,
+    // running resolveDanglingSourceRefs, and broadcasting a FULL {type:"state"} snapshot to
+    // every client on a request that deleted nothing (a cheap request-amplification DoS).
+    // Same guard the cast route already uses (index.js). Gate the deletes/broadcasts on the
+    // real delete landing.
+    if (!state.media || !Object.hasOwn(state.media, id)) {
+      sendJson(res, 404, { error: `no media with id "${id}"` });
+      return;
+    }
+    const entry = state.media[id];
     if (SAFE_FILENAME.test(entry.filename)) {
       try { unlinkSync(join(mediaDir, entry.filename)); } catch { /* already gone */ }
       frames.evict(entry.filename);
       thumbs.evict(entry.filename);
     }
-    applyDelete(state, `media.${id}`);
+    if (!applyDelete(state, `media.${id}`)) { sendJson(res, 404, { error: `no media with id "${id}"` }); return; }
     resolveDanglingSourceRefs(state, "media", id);
     scheduleSave();
     broadcast({ type: "delete", path: `media.${id}` });
@@ -287,8 +297,18 @@ export function createMediaRouter({ mediaDir, state, broadcast, scheduleSave, ma
   function handleImport(req, res) {
     if (!importer) { sendJson(res, 501, { error: "import-by-link is not enabled" }); return; }
     let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
+    let size = 0;
+    let aborted = false;
+    // The import body is just `{ url }`; cap accumulation so a LAN client can't stream an
+    // unbounded body and exhaust memory (the upload path already caps its own bytes).
+    req.on("data", (chunk) => {
+      if (aborted) return;
+      size += chunk.length;
+      if (size > 256 * 1024) { aborted = true; sendJson(res, 413, { error: "request body too large" }); req.destroy(); return; }
+      raw += chunk;
+    });
     req.on("end", () => {
+      if (aborted) return;
       let body;
       try {
         body = JSON.parse(raw || "{}");

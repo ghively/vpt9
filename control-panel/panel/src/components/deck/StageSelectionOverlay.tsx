@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { WarpHandle } from "../WarpHandle";
 import { MaskShapeOverlay } from "../MaskShapeOverlay";
 import { arrowNudge, isEditableTarget } from "../nudge";
@@ -174,7 +174,7 @@ function WarpHandles({
  *  on the stage, in the same normalized 0..1 space Task 5's hover outline uses.
  *  Presentational only: no `src/app/` import, no direct `send`/`actions` — the
  *  container (App) supplies narrow callbacks and maps them onto the real actions. */
-export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
+function StageSelectionOverlayView(props: StageSelectionOverlayProps) {
   // Common to both union members — safe to pull out before narrowing.
   const { onDragStart, onDragEnd } = props;
 
@@ -255,3 +255,12 @@ export function StageSelectionOverlay(props: StageSelectionOverlayProps) {
     </>
   );
 }
+
+/** Memoized so a passive show tick (an LFO/fade nudging a NON-selected layer, or a
+ *  master-only change) doesn't re-render the overlay and re-reconcile the whole warp
+ *  handle grid (up to size×size = 100 WarpHandles in mesh mode). App's callbacks
+ *  (onWarpCorner/onMask/onDragStart/onDragEnd) and the selected `layer`/`screen` object
+ *  keep stable identity while unrelated layers change (store copy-on-write), so the memo
+ *  skips exactly those ticks; it still re-renders when the selection or the selected
+ *  target's own geometry actually changes. */
+export const StageSelectionOverlay = memo(StageSelectionOverlayView);

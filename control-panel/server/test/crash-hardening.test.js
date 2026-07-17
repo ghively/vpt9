@@ -75,6 +75,44 @@ test("layer fx/warp/mask/transport/playlist containers reject null/scalar/array 
   assert.equal(applyUpdate(state, "layers.layer-1.playlist", { items: [{ ref: null }], cursor: 0 }), true);
 });
 
+// A PARTIAL object passes the isPlainObject pin (isPlainObject({}) === true) but would
+// leave nested leaves the panel/render-client dereference unconditionally
+// (fx.edgeBlend.invert, mask.feather.toFixed, warp.corners.map) undefined → a white-screen
+// crash on every connected panel. applyUpdate backfills a partial whole-object write from
+// the defaults so the stored (and re-broadcast) object always has the full shape.
+test("partial fx/mask/warp whole-object writes are backfilled to the full shape (no undefined nested leaves)", () => {
+  const layer = {
+    id: "layer-1",
+    mask: { enabled: false, feather: 0 },
+    fx: { zoom: 1 },
+    warp: { mode: "corner", corners: [] },
+    transport: { playing: false },
+    playlist: { items: [], cursor: -1 },
+  };
+  const state = { layers: { "layer-1": layer } };
+
+  // An empty fx object is accepted but completed: the leaves the panel derefs must exist.
+  assert.equal(applyUpdate(state, "layers.layer-1.fx", {}), true);
+  const fx = state.layers["layer-1"].fx;
+  assert.equal(typeof fx.edgeBlend, "object");
+  assert.equal(typeof fx.edgeBlend.invert, "boolean"); // FxDrawer reads `!!fx.edgeBlend.invert`
+  assert.equal(typeof fx.zoom, "number");
+
+  // A partial mask keeps the caller's value AND gains the missing leaves.
+  assert.equal(applyUpdate(state, "layers.layer-1.mask", { enabled: true }), true);
+  const mask = state.layers["layer-1"].mask;
+  assert.equal(mask.enabled, true);
+  assert.equal(typeof mask.feather, "number"); // Inspector reads `mask.feather.toFixed(2)`
+
+  // A partial warp gains a corners array so StageSelectionOverlay's `points.map` never
+  // dereferences undefined.
+  assert.equal(applyUpdate(state, "layers.layer-1.warp", { mode: "mesh" }), true);
+  const warp = state.layers["layer-1"].warp;
+  assert.equal(warp.mode, "mesh");
+  assert.ok(Array.isArray(warp.corners));
+  assert.equal(typeof warp.mesh, "object");
+});
+
 // House master dim: the one leaf that scales every screen's final output. The render
 // client's setMaster guards non-numbers but NOT NaN (typeof NaN === "number"), so a NaN/
 // Infinity master (reachable via an OSC float arg) blacks the whole wall and persists as

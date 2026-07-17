@@ -132,6 +132,28 @@ export function App() {
   // stage and look bar are the entire surface during the show. Desktop-only — the mobile
   // layout already shows one surface at a time.
   const [focusMode, setFocusMode] = useState(false);
+  // Desktop left-rail section collapse (Layers / Media / Shared-slots). The rail is one
+  // scroll surface, so with several layers the Slots (a live-trigger surface) sit below
+  // the fold; folding sections keeps the ones an operator needs visible together — the
+  // VJ/DAW rack pattern. Persisted so the operator's layout survives a reload. Desktop
+  // only (mobile shows one section per sheet tab, where collapsing would just hide it).
+  const [railCollapsed, setRailCollapsed] = useState<Record<"layers" | "media" | "slots", boolean>>(() => {
+    try {
+      const raw = localStorage.getItem("vpt.railCollapsed");
+      if (raw) return { layers: false, media: false, slots: false, ...JSON.parse(raw) };
+    } catch { /* ignore malformed/absent storage */ }
+    return { layers: false, media: false, slots: false };
+  });
+  const toggleRail = useCallback((key: "layers" | "media" | "slots") => {
+    setRailCollapsed((s) => {
+      const next = { ...s, [key]: !s[key] };
+      try { localStorage.setItem("vpt.railCollapsed", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  const toggleLayersRail = useCallback(() => toggleRail("layers"), [toggleRail]);
+  const toggleMediaRail = useCallback(() => toggleRail("media"), [toggleRail]);
+  const toggleSlotsRail = useCallback(() => toggleRail("slots"), [toggleRail]);
   // Video-input devices for the camera pickers (task A14) — the panel enumerates them
   // (it's already in a browser) and threads the list to the Inspector + SlotGrid editors.
   const cameraDevices = useCameraDevices();
@@ -485,12 +507,20 @@ export function App() {
   const presets = useMemo(() => Object.values(state.presets ?? {}), [state.presets]);
   const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
   const media = useMemo(() => Object.values(state.media ?? {}), [state.media]);
-  // buildTargetOptions reads only state.layers (+ a constant master option). Keyed on
-  // state.layers, NOT state: the store's copy-on-write keeps the ROOT `state` ref stable
-  // (only mutated children get new identity), so `[state]` would compute once and never
-  // update. eslint's exhaustive-deps can't see that invariant.
+  // buildTargetOptions reads only each layer's id/name/order (+ a constant master
+  // option) — never the modulated values (opacity/fx/mask) an LFO or fade nudges at 30
+  // Hz. `state.layers` changes identity on ANY layer leaf write, so keying the memo on it
+  // rebuilt the whole sort + N×27 option-object list at the throttled ~8 Hz during a live
+  // show. Key it instead on a cheap signature of just the pickable fields: the string is
+  // recomputed each tick (unavoidable — it reads state.layers) but is IDENTICAL when only
+  // values changed, so the expensive rebuild is skipped until the layer set/names/order
+  // actually change. Feeds CueList / LfoRack / MidiMapPanel target pickers.
+  const targetOptionsSig = useMemo(
+    () => Object.values(state.layers ?? {}).map((l) => `${l.id} ${l.name ?? ""} ${l.order ?? 0}`).join("|"),
+    [state.layers],
+  );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const targetOptions = useMemo(() => buildTargetOptions(state), [state.layers]);
+  const targetOptions = useMemo(() => buildTargetOptions(state), [targetOptionsSig]);
   // Source-bank snapshots (task A12) + the recall cursor Next/Prev step from.
   const sourceBankPresets = useMemo(() => Object.values(state.sourceBankPresets ?? {}), [state.sourceBankPresets]);
   const sourceBankPresetCursor = state.sourceBankPresetCursor ?? -1;
@@ -510,24 +540,33 @@ export function App() {
   // persistent bottom strip (masterBarEl) where a VJ expects a master/transport bar, and
   // the audio-owner picker is gone entirely (audio was removed — vpt9 is a silent
   // instrument). A "?" opens the shortcuts/gestures help.
-  const faceplate = (
-    <Faceplate
-      screenSelect={
-        <ScreenSelect
-          screens={screens}
-          selectedId={selectedScreenId}
-          onSelect={setSelectedScreenId}
-          onAdd={actions.addScreen}
-        />
-      }
-      center={null}
-      right={
-        <div className="faceplate-right">
-          <button type="button" className="help-btn" title="Keyboard shortcuts & hidden gestures" onClick={() => setHelpOpen(true)}>?</button>
-          <StatusLamp state={status.state} label={status.label} />
-        </div>
-      }
-    />
+  //
+  // Memoized so a ~8 Hz automation tick doesn't rebuild the ScreenSelect/StatusLamp
+  // subtree: it only depends on the screen list, the selection, and the connection status
+  // (setSelectedScreenId / actions.addScreen are stable), so the element identity is reused
+  // — and React bails out reconciling it — on every unrelated re-render. (The Faceplate's
+  // own React.memo couldn't help: these element props were fresh every render.)
+  const faceplate = useMemo(
+    () => (
+      <Faceplate
+        screenSelect={
+          <ScreenSelect
+            screens={screens}
+            selectedId={selectedScreenId}
+            onSelect={setSelectedScreenId}
+            onAdd={actions.addScreen}
+          />
+        }
+        center={null}
+        right={
+          <div className="faceplate-right">
+            <button type="button" className="help-btn" title="Keyboard shortcuts & hidden gestures" onClick={() => setHelpOpen(true)}>?</button>
+            <StatusLamp state={status.state} label={status.label} />
+          </div>
+        }
+      />
+    ),
+    [screens, selectedScreenId, status.state, status.label, actions.addScreen],
   );
 
   // Persistent bottom master/transport strip. The "Playback owner" picker (multi-screen
@@ -965,6 +1004,8 @@ export function App() {
       outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}
       outputSelected={selection.editTarget === "screen"}
       onSelectOutput={selectOutput}
+      collapsed={!isMobile && railCollapsed.layers}
+      onToggleCollapse={isMobile ? undefined : toggleLayersRail}
     />
   );
   const mediaBinEl = (
@@ -978,6 +1019,8 @@ export function App() {
       onImportUrl={importMediaUrl}
       imports={mediaImportsArr}
       onDismissImport={dismissMediaImport}
+      collapsed={!isMobile && railCollapsed.media}
+      onToggleCollapse={isMobile ? undefined : toggleMediaRail}
     />
   );
   const slotGridEl = (
@@ -989,6 +1032,8 @@ export function App() {
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
       onSetTransport={actions.setSourceBankSlotTransport}
+      collapsed={!isMobile && railCollapsed.slots}
+      onToggleCollapse={isMobile ? undefined : toggleSlotsRail}
     />
   );
   // The look bar rides directly above the stage in both layouts — firing a look and
@@ -1090,7 +1135,7 @@ export function App() {
         media={media}
         sourceBank={state.sourceBank}
         cameraDevices={cameraDevices}
-        allScreens={Object.values(state.screens ?? {})}
+        allScreens={screens}
         transportPosition={selectedLayer ? transportPositionsRef.current[selectedLayer.id] : undefined}
         transportDuration={selectedLayer ? transportDurationsRef.current[selectedLayer.id] : undefined}
         onUpdate={onInspectorUpdate}

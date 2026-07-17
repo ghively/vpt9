@@ -20,6 +20,10 @@
 /* ---------------- shell ---------------- */
 .deck {
   height: 100vh;
+  /* Dynamic viewport height: keeps the bottom master strip + mobile tab bar on-screen
+   * when the phone browser's URL bar expands/collapses (100vh includes the URL-bar band
+   * and would push them out of view). 100vh above is the fallback for older browsers. */
+  height: 100dvh;
   display: grid;
   /* Row sizes to the Faceplate header's own height (padding lives in panel.css)
    * rather than a hardcoded 46px, so the bar never clips its content. Trailing `auto`
@@ -120,7 +124,9 @@
 .screen-select { display: flex; align-items: center; gap: 8px; }
 /* Scoped to .screen-select (its only consumer) so `.seg` can't leak to a future
  * unrelated segmented control elsewhere in the deck. */
-.screen-select .seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+/* overflow-x:auto (not hidden) + a max-width so several screens / a long screen name scroll
+ * within the segment instead of clipping the trailing buttons unreachably on desktop. */
+.screen-select .seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow-x: auto; max-width: 100%; }
 .screen-select .seg button {
   padding: 6px 12px;
   border: none;
@@ -157,6 +163,14 @@
   grid-template-columns: 276px 1fr 288px; /* left rail widened for the MediaBin thumbnails */
   min-height: 0;
 }
+/* Tablet / narrow-desktop band (just above the 719px mobile breakpoint, e.g. an iPad in
+ * portrait at 768px): the full-width 276+288 rails leave the 1fr stage cramped to ~200px
+ * and push right-edge content under the viewport edge (which #root's overflow:hidden then
+ * clips). Narrow the rails here so the live-preview stage keeps a usable width until there
+ * is room for the full desktop sizing. Above 1024px the default rule applies unchanged. */
+@media (min-width: 720px) and (max-width: 1024px) {
+  .body { grid-template-columns: 224px 1fr 248px; }
+}
 .rail {
   display: flex;
   flex-direction: column;
@@ -170,6 +184,18 @@
 .rail-l > * { flex: none; }
 .rail-l .layers { overflow-y: visible; }
 .rail-l .media-bin__grid { max-height: none; overflow-y: visible; }
+/* Desktop: cap the two tall, variable-length lists (the layer stack and the media grid)
+ * so they scroll WITHIN themselves instead of pushing the sections below them (Media,
+ * Shared slots) off the bottom of the single-scroll rail. This keeps all three left-rail
+ * sections reachable at once — the collapse toggles then fold whichever aren't needed.
+ * Explicit max-height + overflow (not flex-shrink) so rows scroll, never silently clip.
+ * Gated on the `data-mobile` ATTRIBUTE (not a `min-width:720px` query) so it tracks the
+ * exact same boundary as the JS layout switch (useIsMobile). A width query at 720px and the
+ * matchMedia at 719px disagree on a fractional 719<w<720 width (browser zoom / fractional
+ * DPR): the desktop DOM would render there but the caps wouldn't apply, un-capping the lists.
+ * Mobile renders each section as its own full sheet tab, so no cap there. */
+.deck:not([data-mobile="true"]) .rail-l .layers { max-height: 44vh; overflow-y: auto; }
+.deck:not([data-mobile="true"]) .rail-l .media-bin__grid { max-height: 34vh; overflow-y: auto; }
 .rail-r { border-left: 1px solid var(--hairline); }
 
 .sec-head {
@@ -189,6 +215,30 @@
   flex: none;
 }
 .sec-head .count { margin-left: auto; color: var(--muted-dim); }
+
+/* Collapsible rail-section header (desktop): the whole header row is the fold control.
+ * Resets the <button> UA chrome back to the static `.sec-head` look and swaps the beam
+ * dot for a rotating chevron that doubles as the affordance. */
+.sec-head--toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.sec-head--toggle::before { display: none; }
+.sec-head--toggle:hover { color: var(--text); }
+.sec-head__chev {
+  flex: none;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--beam);
+  transition: transform 120ms ease;
+}
+.sec-head__chev[data-collapsed] { transform: rotate(-90deg); color: var(--muted-dim); }
 
 /* ---------------- layer stack ---------------- */
 .layers { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 6px; overflow-y: auto; }
@@ -460,6 +510,9 @@
   border-radius: 4px;
   outline: none;
 }
+/* `outline: none` above dropped the global keyboard focus ring with no replacement;
+ * restore a visible indicator via the border so this inline editor is keyboard-usable. */
+.media-bin__new-collection:focus-visible { border-color: var(--beam); }
 .media-bin__back {
   flex: none;
   max-width: 45%;
@@ -514,6 +567,8 @@
   border-top: 1px solid var(--accent, #888);
   outline: none;
 }
+/* Restore a keyboard focus indicator dropped by `outline: none` (brighten the top edge). */
+.media-cell__tags-input:focus-visible { border-top-color: var(--beam); }
 .media-cell__kind {
   position: absolute;
   top: 4px;
@@ -684,6 +739,9 @@
   position: relative;
   padding: 16px;
   min-height: 0;
+  /* Clip any stage overflow to this zone so it can never bleed over the Show drawer /
+   * master bar on a short viewport (belt-and-suspenders with .deck-stage's max-height). */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -764,11 +822,21 @@
 .deck-stage {
   position: relative;
   aspect-ratio: 16 / 9;
+  /* Own stacking context so the on-stage overlay handles (sel-label z6 / mask-point z8)
+   * resolve locally and can never paint over the later master bar / tab bar. */
+  isolation: isolate;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--panel-sunken);
   border: 1px solid var(--hairline);
   box-shadow: inset 0 0 0 1px #000, 0 20px 60px -20px #000;
+}
+/* Bound the stage height on short viewports so its 16/9 height can't exceed the space and
+ * overflow (it's clipped by .stage-wrap either way, but this keeps it letterboxed-visible
+ * rather than bottom-clipped). Scoped to short heights so the normal flex-stretch sizing —
+ * which margin/auto or a blanket max-height would collapse — is untouched at normal sizes. */
+@media (max-height: 760px) {
+  .deck:not([data-mobile="true"]) .deck-stage { max-height: 100%; }
 }
 .deck-stage__nosignal {
   position: absolute;
@@ -1171,6 +1239,16 @@
   padding: 14px 16px;
   max-height: 38vh;
   overflow-y: auto;
+  /* Keep the drawer's wide rack rows (Cues/OSC) from stretching absurdly on ultra-wide
+   * monitors; the racks stay readable and the full-width text inputs don't span 2000px+. */
+  max-width: 1800px;
+}
+/* Short viewports (a short laptop window / a dragged-short window): shrink the drawer so
+ * the command bar + drawer + the CRITICAL bottom master strip (BLACKOUT/BLIND) always fit
+ * within 100dvh and the master strip is never pushed off the bottom. The drawer body
+ * already scrolls, so its content stays reachable. */
+@media (max-height: 640px) {
+  .show-drawer-body { max-height: 26vh; }
 }
 /* The hosted panels are the same ones the pre-redesign flat layout rendered inside
  * `.sc-card` (see panel.css) — reuse that card treatment here so PresetsBar/CueList/
@@ -1232,6 +1310,12 @@
 .deck[data-mobile="true"] .sheet .show-drawer-tabs { flex-wrap: wrap; }
 .deck[data-mobile="true"] .sheet .show-drawer-bar { flex-wrap: wrap; row-gap: 6px; }
 
+/* Focus mode hides the desktop rails/drawer (`.deck[data-focus]` rules are desktop-only,
+   and App gates data-focus on !isMobile) — the mobile layout already shows one surface at
+   a time, so the button would toggle nothing visible. Hide it rather than ship a dead
+   control. */
+.deck[data-mobile="true"] .look-focus { display: none; }
+
 /* Master strip wraps on a phone instead of clipping the fader + BLIND/BLACKOUT (and
    GO LIVE/DISCARD while blind); center it rather than right-justify when wrapped. */
 .deck[data-mobile="true"] .master-bar { justify-content: center; flex-wrap: wrap; }
@@ -1268,6 +1352,10 @@
  * wordmark — let it wrap onto its own line rather than overflow on the narrowest
  * phones, same rationale as `.cmd > header` above. */
 .deck[data-mobile="true"] .nameplate { flex-wrap: wrap; row-gap: 6px; }
+/* The segmented screen selector clips its buttons (`overflow: hidden`) — with 3+ named
+ * screens that truncates the last ones on a ~375px phone. Let it scroll horizontally
+ * instead so every screen stays reachable. */
+.deck[data-mobile="true"] .screen-select .seg { overflow-x: auto; max-width: 100%; }
 
 /* ── Touch: enlarge the deck's own interactive controls (not already covered by
  * panel.css's `.toggle-sq`/`.handle`/`.mask-shape__edge`/`.pip-box__resize` rules, which
@@ -1290,5 +1378,28 @@
   .show-drawer-tab,
   .show-drawer-toggle { min-height: var(--tap-min); }
   .subhead .rst { min-height: var(--tap-min); padding-left: 12px; padding-right: 12px; }
+  /* Tap targets missed by the list above (audit 2026-07-17): per-row layer toggles, the
+   * help open/close, and the media-bin back/clear chips are all comfortably under 44px on
+   * their own. Give them the coarse-pointer minimum too. */
+  .help-btn { width: var(--tap-min); height: var(--tap-min); }
+  .help-close { min-width: var(--tap-min); min-height: var(--tap-min); }
+  .layer-eye { width: var(--tap-min); height: var(--tap-min); }
+  .layer-play { width: var(--tap-min); height: var(--tap-min); }
+  .media-bin__back,
+  .media-bin__clear { min-height: var(--tap-min); }
+  .ctx-menu__item { min-height: var(--tap-min); }
+
+  /* iOS Safari zooms the whole page whenever a focused field's font is < 16px — jarring
+   * mid-show and it leaves the layout shifted. Bump every text field / select to 16px
+   * under coarse pointers (touch); mouse users keep the compact desktop sizing. The two
+   * two-class rules (.media-name, .source-media-select) are named explicitly so this wins
+   * their specificity; every other field is single-class and loses to `.deck …` here. */
+  .deck input[type="text"],
+  .deck input[type="search"],
+  .deck input[type="number"],
+  .deck select,
+  .deck textarea,
+  .deck .media-name,
+  .deck .source-media-select { font-size: 16px; }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /** Shortcuts + hidden-gestures reference (owner request 2026-07-16: "I want all stuff like
  *  this found"). Many capabilities are keyboard- or gesture-only with no on-screen
@@ -43,23 +43,34 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
       ["Master / blackout / blind", "Bottom strip"],
       ["Looks, Cues, LFO, MIDI, PiP…", "Bottom Show drawer tabs"],
       ["Collections & tags", "Media bin (folders; right-click → Edit tags)"],
+      ["Fold a left-rail section", "Click its ▾ header (Layers / Media / Slots)"],
     ],
   },
 ];
 
 export function HelpPanel({ onClose }: { onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Move focus into the dialog on open and restore it to the trigger (the "?" button) on
+  // close, so a keyboard user isn't dropped back at the top of the document. Escape/click
+  // still close; this just gives the modal a sane focus entry/exit point.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, []);
+
   return (
     <div className="help-backdrop" onClick={onClose}>
-      <div className="help-panel" role="dialog" aria-label="Shortcuts and gestures" onClick={(e) => e.stopPropagation()}>
+      <div className="help-panel" role="dialog" aria-modal="true" aria-label="Shortcuts and gestures" onClick={(e) => e.stopPropagation()}>
         <div className="help-head">
           <span className="help-title">Shortcuts & hidden gestures</span>
-          <button type="button" className="help-close" title="Close (Esc)" onClick={onClose}>×</button>
+          <button type="button" ref={closeRef} className="help-close" title="Close (Esc)" aria-label="Close" onClick={onClose}>×</button>
         </div>
         <div className="help-body">
           {SECTIONS.map((s) => (

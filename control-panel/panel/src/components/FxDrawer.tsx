@@ -4,15 +4,12 @@ import { Button } from "./primitives/Button";
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { TransportControls } from "./TransportControls";
-import type { Fx, Mask, MediaItem, Playlist, PlaylistItem, Transport } from "./types";
+import type { Fx, MediaItem, Playlist, PlaylistItem, Transport } from "./types";
 
 export interface FxDrawerProps {
   fx: Fx;
-  /** Mask geometry lives here too (center/size/feather); enable + shape stay on the
-   *  strip. Optional so existing fx-only usage keeps working. */
-  mask?: Mask;
-  /** Clip transport (play/rate/loop/pan/vol/loop-in/loop-out/scrub). Optional so existing
-   *  fx-only usage keeps working; the section renders once a caller supplies it. */
+  /** Clip transport (play/rate/loop/loop-in/loop-out/scrub). Optional so existing fx-only
+   *  usage keeps working; the section renders once a caller supplies it. */
   transport?: Transport;
   /** Live playback position in seconds for the selected layer (transportStatus telemetry),
    *  shown as the scrub readout. */
@@ -28,13 +25,9 @@ export interface FxDrawerProps {
   /** Library items offered by the playlist item picker — the same list LayerStrip's own
    *  source picker already receives, threaded through unchanged. */
   media?: MediaItem[];
-  /** Field paths are relative to the layer ("fx.zoom", "mask.feather") so the container
-   *  can prefix them with "layers.<id>." unchanged. */
+  /** Field paths are relative to the layer ("fx.zoom") so the container can prefix them
+   *  with "layers.<id>." unchanged. */
   onUpdate?: (field: string, value: unknown) => void;
-  /** Opens the on-canvas mask editor for this layer (Screen tab). */
-  onEditMask?: () => void;
-  /** Opens the on-canvas warp editor for this layer (Screen tab). */
-  onEditWarp?: () => void;
   /** Switches this layer between a single fixed source and a playlist. */
   onSetSourceMode?: (mode: "single" | "playlist") => void;
   /** Replaces the whole playlist item queue (it's one state leaf, like the cue list). */
@@ -90,16 +83,6 @@ const EDGE_SLIDERS: SliderSpec[] = [
   { label: "TOP", field: "fx.edgeBlend.top", min: 0, max: 0.5, step: 0.005, neutral: 0 },
   { label: "BOTTOM", field: "fx.edgeBlend.bottom", min: 0, max: 0.5, step: 0.005, neutral: 0 },
   { label: "GAMMA", field: "fx.edgeBlend.gamma", min: 0.5, max: 4, step: 0.05, neutral: 2 },
-];
-
-// Mask geometry — engine-honored (render client uploads all five as uniforms); the
-// "neutral" marks are the server defaults, so an untouched mask reads dimmed.
-const MASK_SLIDERS: SliderSpec[] = [
-  { label: "CENTER X", field: "mask.cx", min: 0, max: 1, step: 0.005, neutral: 0.5 },
-  { label: "CENTER Y", field: "mask.cy", min: 0, max: 1, step: 0.005, neutral: 0.5 },
-  { label: "SIZE X", field: "mask.rx", min: 0.02, max: 1, step: 0.005, neutral: 0.4 },
-  { label: "SIZE Y", field: "mask.ry", min: 0.02, max: 1, step: 0.005, neutral: 0.4 },
-  { label: "FEATHER", field: "mask.feather", min: 0, max: 0.5, step: 0.005, neutral: 0.08 },
 ];
 
 function readField(root: Record<string, unknown>, field: string): number {
@@ -176,11 +159,13 @@ function NumField({
   className,
   value,
   placeholder,
+  ariaLabel,
   onCommit,
 }: {
   className?: string;
   value: number | null | undefined;
   placeholder?: string;
+  ariaLabel?: string;
   onCommit: (value: number | null) => void;
 }) {
   return (
@@ -188,6 +173,8 @@ function NumField({
       className={className}
       value={value != null ? String(value) : ""}
       placeholder={placeholder}
+      ariaLabel={ariaLabel ?? placeholder}
+      inputMode="decimal"
       onCommit={(v) => onCommit(v.trim() === "" ? null : Math.max(0, Number(v) || 0))}
     />
   );
@@ -231,6 +218,7 @@ function PlaylistEditor({
         <div className="playlist-row" key={index}>
           <span className="playlist-idx mono">{String(index).padStart(2, "0")}</span>
           <Select
+            ariaLabel="Playlist clip"
             // A slot-type item can't be represented by the media list — show its own option
             // (so the select doesn't misleadingly display the first media as selected) and
             // don't overwrite the slot binding unless the operator actually picks a media.
@@ -258,11 +246,12 @@ function PlaylistEditor({
 }
 
 /** The per-layer effects chain controls (vlayer.maxpat's stages) in captioned sections:
- *  TRANSFORM (flip/tile/zoom/pan), COLOR (blur/trail/brcosa), EDGE BLEND (projector
- *  ramps) and MASK geometry. Rendered inside an expanded LayerStrip. */
+ *  TRANSFORM (flip/tile/zoom/pan), COLOR & BLUR (blur/trail/brcosa), EDGE BLEND (projector
+ *  ramps), plus TRANSPORT / RENDER QUALITY / PLAYLIST. Warp and Mask are NOT here — they
+ *  have dedicated Inspector sections (this used to duplicate them). Rendered inside the
+ *  Inspector's FX section. */
 export function FxDrawer({
   fx,
-  mask,
   transport,
   transportPosition,
   transportDuration,
@@ -271,8 +260,6 @@ export function FxDrawer({
   downscale,
   media,
   onUpdate,
-  onEditMask,
-  onEditWarp,
   onSetSourceMode,
   onSetPlaylist,
   onTriggerClip,
@@ -302,7 +289,7 @@ export function FxDrawer({
         ))}
       </FxSection>
       <FxSection
-        caption="Color"
+        caption="Color & blur"
         enabled={fx.enabled?.color ?? true}
         onToggleEnabled={() => onUpdate?.("fx.enabled.color", !(fx.enabled?.color ?? true))}
       >
@@ -343,51 +330,6 @@ export function FxDrawer({
           onClick={() => onUpdate?.("fx.edgeBlend.invert", !fx.edgeBlend.invert)}
         />
       </FxSection>
-      <FxSection caption="Warp">
-        <Select
-          className="corner-preset-select"
-          value=""
-          options={[
-            { value: "", label: "Preset…" },
-            { value: "full", label: "Full" },
-            { value: "center", label: "Center" },
-            { value: "leftThird", label: "Left third" },
-            { value: "rightThird", label: "Right third" },
-            { value: "rotate90", label: "Rotate 90°" },
-            { value: "rotate180", label: "Rotate 180°" },
-            { value: "rotate270", label: "Rotate 270°" },
-          ]}
-          onChange={(v) => { if (v) onUpdate?.("__cornerPreset__", v); }}
-        />
-        {onEditWarp && <Button label="Edit on canvas" onClick={onEditWarp} />}
-      </FxSection>
-      {mask && (
-        <FxSection caption="Mask">
-          <ToggleSquare
-            label={mask.enabled ? "On" : "Off"}
-            title="Toggle mask for this layer"
-            active={!!mask.enabled}
-            onClick={() => onUpdate?.("mask.enabled", !mask.enabled)}
-          />
-          <ToggleSquare
-            label={mask.shape === "polygon" ? "▽" : mask.shape === "rect" ? "□" : "○"}
-            title={mask.shape === "polygon" ? "Polygon mask — edit shape in the Inspector's Mask section" : "Mask shape (rect / ellipse)"}
-            // This quick toggle only knows rect/ellipse. A polygon mask has its own point
-            // editor in the Mask section — clicking here used to silently convert it to a
-            // rect and orphan its points. Do nothing for polygon; only flip rect<->ellipse.
-            onClick={() => { if (mask.shape !== "polygon") onUpdate?.("mask.shape", mask.shape === "rect" ? "ellipse" : "rect"); }}
-          />
-          {onEditMask && <Button label="Edit on canvas" onClick={onEditMask} />}
-          {MASK_SLIDERS.map((spec) => (
-            <FxSlider
-              key={spec.field}
-              spec={spec}
-              root={mask as unknown as Record<string, unknown>}
-              onUpdate={onUpdate}
-            />
-          ))}
-        </FxSection>
-      )}
       {transport && (
         <FxSection caption="Transport">
           <TransportControls
@@ -399,7 +341,7 @@ export function FxDrawer({
         </FxSection>
       )}
       {downscale !== undefined && (
-        <FxSection caption="Adapt">
+        <FxSection caption="Render quality">
           <label className="fx-control" data-neutral={(downscale ?? 1) === 1}>
             <span className="fx-label">DOWNSCALE</span>
             <Select
