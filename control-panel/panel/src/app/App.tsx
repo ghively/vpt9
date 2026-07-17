@@ -132,6 +132,28 @@ export function App() {
   // stage and look bar are the entire surface during the show. Desktop-only — the mobile
   // layout already shows one surface at a time.
   const [focusMode, setFocusMode] = useState(false);
+  // Desktop left-rail section collapse (Layers / Media / Shared-slots). The rail is one
+  // scroll surface, so with several layers the Slots (a live-trigger surface) sit below
+  // the fold; folding sections keeps the ones an operator needs visible together — the
+  // VJ/DAW rack pattern. Persisted so the operator's layout survives a reload. Desktop
+  // only (mobile shows one section per sheet tab, where collapsing would just hide it).
+  const [railCollapsed, setRailCollapsed] = useState<Record<"layers" | "media" | "slots", boolean>>(() => {
+    try {
+      const raw = localStorage.getItem("vpt.railCollapsed");
+      if (raw) return { layers: false, media: false, slots: false, ...JSON.parse(raw) };
+    } catch { /* ignore malformed/absent storage */ }
+    return { layers: false, media: false, slots: false };
+  });
+  const toggleRail = useCallback((key: "layers" | "media" | "slots") => {
+    setRailCollapsed((s) => {
+      const next = { ...s, [key]: !s[key] };
+      try { localStorage.setItem("vpt.railCollapsed", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  const toggleLayersRail = useCallback(() => toggleRail("layers"), [toggleRail]);
+  const toggleMediaRail = useCallback(() => toggleRail("media"), [toggleRail]);
+  const toggleSlotsRail = useCallback(() => toggleRail("slots"), [toggleRail]);
   // Video-input devices for the camera pickers (task A14) — the panel enumerates them
   // (it's already in a browser) and threads the list to the Inspector + SlotGrid editors.
   const cameraDevices = useCameraDevices();
@@ -982,6 +1004,8 @@ export function App() {
       outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}
       outputSelected={selection.editTarget === "screen"}
       onSelectOutput={selectOutput}
+      collapsed={!isMobile && railCollapsed.layers}
+      onToggleCollapse={isMobile ? undefined : toggleLayersRail}
     />
   );
   const mediaBinEl = (
@@ -995,6 +1019,8 @@ export function App() {
       onImportUrl={importMediaUrl}
       imports={mediaImportsArr}
       onDismissImport={dismissMediaImport}
+      collapsed={!isMobile && railCollapsed.media}
+      onToggleCollapse={isMobile ? undefined : toggleMediaRail}
     />
   );
   const slotGridEl = (
@@ -1006,6 +1032,8 @@ export function App() {
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
       onSetTransport={actions.setSourceBankSlotTransport}
+      collapsed={!isMobile && railCollapsed.slots}
+      onToggleCollapse={isMobile ? undefined : toggleSlotsRail}
     />
   );
   // The look bar rides directly above the stage in both layouts — firing a look and

@@ -136,3 +136,19 @@ test("Warp section owns the corner-preset menu; Mask section owns editable size 
     })
     .toBeLessThan(0.4);
 });
+
+test("desktop: left-rail sections collapse (folding Media reveals more room) and the state persists", async ({ page }) => {
+  await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  // The three left-rail sections render collapsible headers on desktop.
+  const mediaHead = page.locator(".rail-l .sec-head--toggle", { hasText: "Media" });
+  await expect(mediaHead).toHaveAttribute("aria-expanded", "true");
+  // The media bin body (its + Add media button) is visible while expanded.
+  await expect(page.locator(".media-bin__add")).toBeVisible();
+  // Collapse it: the body hides and aria-expanded flips.
+  await mediaHead.click();
+  await expect(mediaHead).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".media-bin__add")).toHaveCount(0);
+  // Reloading keeps it collapsed (persisted to localStorage).
+  await page.reload();
+  await expect(page.locator(".rail-l .sec-head--toggle[aria-expanded='false']", { hasText: "Media" })).toHaveCount(1);
+});

@@ -43,6 +43,7 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
       ["Master / blackout / blind", "Bottom strip"],
       ["Looks, Cues, LFO, MIDI, PiP…", "Bottom Show drawer tabs"],
       ["Collections & tags", "Media bin (folders; right-click → Edit tags)"],
+      ["Fold a left-rail section", "Click its ▾ header (Layers / Media / Slots)"],
     ],
   },
 ];

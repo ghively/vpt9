@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { MediaThumb } from "./MediaThumb";
+import { SectionHead } from "./SectionHead";
 import { useContextMenu, longPressHandlers } from "./ContextMenu";
 import { setMediaDrag, hasMediaDrag, getMediaDrag } from "./dnd";
 import { Chip } from "../primitives/Chip";
@@ -93,6 +94,9 @@ export interface MediaBinProps {
   imports?: Array<{ url: string; status: string; error?: string }>;
   /** Clicking a failed import's cell dismisses it. */
   onDismissImport?: (url: string) => void;
+  /** Desktop rail collapse: when `onToggleCollapse` is set the header folds the section. */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 /** The media library (owner redesign 2026-07-16, spec: docs/superpowers/specs/
@@ -102,7 +106,7 @@ export interface MediaBinProps {
  *  and loose-tag chips operating inside it. Membership = `collection:<Name>` entries in
  *  the item's own keyword list, so it travels with the files. Items are draggable onto
  *  a layer row, a source-bank slot, the stage — or onto a folder row to file them. */
-function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onSetTags, onImportUrl, imports = [], onDismissImport }: MediaBinProps) {
+function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, onSetTags, onImportUrl, imports = [], onDismissImport, collapsed = false, onToggleCollapse }: MediaBinProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -315,11 +319,13 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
       onDragLeave={() => setDropArmed(false)}
       onDrop={onDrop}
     >
-      <div className="sec-head label">
-        Media
-        <span className="count mono">{showFolderList ? media.length : filtered ? `${visible.length}/${scope.length}` : scope.length}</span>
-      </div>
-
+      <SectionHead
+        title="Media"
+        count={showFolderList ? media.length : filtered ? `${visible.length}/${scope.length}` : scope.length}
+        collapsed={collapsed}
+        onToggle={onToggleCollapse}
+      />
+      {!collapsed && (<>
       {/* Search lives above both views: on the folder list it searches EVERYTHING (the
           grid opens flat across the library); inside a folder it narrows that folder. */}
       {media.length > 0 && (
@@ -587,6 +593,7 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
         )}
         {error && <span className="media-bin__error mono">{error}</span>}
       </div>
+      </>)}
       {ctx.menu}
     </div>
   );
