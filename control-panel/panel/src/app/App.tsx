@@ -485,12 +485,20 @@ export function App() {
   const presets = useMemo(() => Object.values(state.presets ?? {}), [state.presets]);
   const automation = state.automation ?? { cues: [], cursor: -1, running: false, timers: {} };
   const media = useMemo(() => Object.values(state.media ?? {}), [state.media]);
-  // buildTargetOptions reads only state.layers (+ a constant master option). Keyed on
-  // state.layers, NOT state: the store's copy-on-write keeps the ROOT `state` ref stable
-  // (only mutated children get new identity), so `[state]` would compute once and never
-  // update. eslint's exhaustive-deps can't see that invariant.
+  // buildTargetOptions reads only each layer's id/name/order (+ a constant master
+  // option) — never the modulated values (opacity/fx/mask) an LFO or fade nudges at 30
+  // Hz. `state.layers` changes identity on ANY layer leaf write, so keying the memo on it
+  // rebuilt the whole sort + N×27 option-object list at the throttled ~8 Hz during a live
+  // show. Key it instead on a cheap signature of just the pickable fields: the string is
+  // recomputed each tick (unavoidable — it reads state.layers) but is IDENTICAL when only
+  // values changed, so the expensive rebuild is skipped until the layer set/names/order
+  // actually change. Feeds CueList / LfoRack / MidiMapPanel target pickers.
+  const targetOptionsSig = useMemo(
+    () => Object.values(state.layers ?? {}).map((l) => `${l.id} ${l.name ?? ""} ${l.order ?? 0}`).join("|"),
+    [state.layers],
+  );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const targetOptions = useMemo(() => buildTargetOptions(state), [state.layers]);
+  const targetOptions = useMemo(() => buildTargetOptions(state), [targetOptionsSig]);
   // Source-bank snapshots (task A12) + the recall cursor Next/Prev step from.
   const sourceBankPresets = useMemo(() => Object.values(state.sourceBankPresets ?? {}), [state.sourceBankPresets]);
   const sourceBankPresetCursor = state.sourceBankPresetCursor ?? -1;
@@ -1090,7 +1098,7 @@ export function App() {
         media={media}
         sourceBank={state.sourceBank}
         cameraDevices={cameraDevices}
-        allScreens={Object.values(state.screens ?? {})}
+        allScreens={screens}
         transportPosition={selectedLayer ? transportPositionsRef.current[selectedLayer.id] : undefined}
         transportDuration={selectedLayer ? transportDurationsRef.current[selectedLayer.id] : undefined}
         onUpdate={onInspectorUpdate}

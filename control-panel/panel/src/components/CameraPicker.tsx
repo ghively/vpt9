@@ -24,6 +24,7 @@ export function CameraPicker({ deviceId, resolution, devices, onDevice, onResolu
     <div className="camera-picker">
       <Select
         className="camera-device-select"
+        ariaLabel="Camera device"
         value={deviceId ?? ""}
         options={[
           { value: "", label: "Default camera" },
@@ -39,6 +40,7 @@ export function CameraPicker({ deviceId, resolution, devices, onDevice, onResolu
       />
       <Select
         className="camera-res-select"
+        ariaLabel="Camera resolution"
         value={resolutionKey(resolution)}
         options={CAMERA_RESOLUTIONS.map((r) => ({ value: r.value, label: r.label }))}
         onChange={(v) => onResolution(resolutionFromKey(v))}

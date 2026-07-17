@@ -20,6 +20,10 @@
 /* ---------------- shell ---------------- */
 .deck {
   height: 100vh;
+  /* Dynamic viewport height: keeps the bottom master strip + mobile tab bar on-screen
+   * when the phone browser's URL bar expands/collapses (100vh includes the URL-bar band
+   * and would push them out of view). 100vh above is the fallback for older browsers. */
+  height: 100dvh;
   display: grid;
   /* Row sizes to the Faceplate header's own height (padding lives in panel.css)
    * rather than a hardcoded 46px, so the bar never clips its content. Trailing `auto`
@@ -460,6 +464,9 @@
   border-radius: 4px;
   outline: none;
 }
+/* `outline: none` above dropped the global keyboard focus ring with no replacement;
+ * restore a visible indicator via the border so this inline editor is keyboard-usable. */
+.media-bin__new-collection:focus-visible { border-color: var(--beam); }
 .media-bin__back {
   flex: none;
   max-width: 45%;
@@ -514,6 +521,8 @@
   border-top: 1px solid var(--accent, #888);
   outline: none;
 }
+/* Restore a keyboard focus indicator dropped by `outline: none` (brighten the top edge). */
+.media-cell__tags-input:focus-visible { border-top-color: var(--beam); }
 .media-cell__kind {
   position: absolute;
   top: 4px;
@@ -1232,6 +1241,12 @@
 .deck[data-mobile="true"] .sheet .show-drawer-tabs { flex-wrap: wrap; }
 .deck[data-mobile="true"] .sheet .show-drawer-bar { flex-wrap: wrap; row-gap: 6px; }
 
+/* Focus mode hides the desktop rails/drawer (`.deck[data-focus]` rules are desktop-only,
+   and App gates data-focus on !isMobile) — the mobile layout already shows one surface at
+   a time, so the button would toggle nothing visible. Hide it rather than ship a dead
+   control. */
+.deck[data-mobile="true"] .look-focus { display: none; }
+
 /* Master strip wraps on a phone instead of clipping the fader + BLIND/BLACKOUT (and
    GO LIVE/DISCARD while blind); center it rather than right-justify when wrapped. */
 .deck[data-mobile="true"] .master-bar { justify-content: center; flex-wrap: wrap; }
@@ -1268,6 +1283,10 @@
  * wordmark — let it wrap onto its own line rather than overflow on the narrowest
  * phones, same rationale as `.cmd > header` above. */
 .deck[data-mobile="true"] .nameplate { flex-wrap: wrap; row-gap: 6px; }
+/* The segmented screen selector clips its buttons (`overflow: hidden`) — with 3+ named
+ * screens that truncates the last ones on a ~375px phone. Let it scroll horizontally
+ * instead so every screen stays reachable. */
+.deck[data-mobile="true"] .screen-select .seg { overflow-x: auto; max-width: 100%; }
 
 /* ── Touch: enlarge the deck's own interactive controls (not already covered by
  * panel.css's `.toggle-sq`/`.handle`/`.mask-shape__edge`/`.pip-box__resize` rules, which
@@ -1290,5 +1309,28 @@
   .show-drawer-tab,
   .show-drawer-toggle { min-height: var(--tap-min); }
   .subhead .rst { min-height: var(--tap-min); padding-left: 12px; padding-right: 12px; }
+  /* Tap targets missed by the list above (audit 2026-07-17): per-row layer toggles, the
+   * help open/close, and the media-bin back/clear chips are all comfortably under 44px on
+   * their own. Give them the coarse-pointer minimum too. */
+  .help-btn { width: var(--tap-min); height: var(--tap-min); }
+  .help-close { min-width: var(--tap-min); min-height: var(--tap-min); }
+  .layer-eye { width: var(--tap-min); height: var(--tap-min); }
+  .layer-play { width: var(--tap-min); height: var(--tap-min); }
+  .media-bin__back,
+  .media-bin__clear { min-height: var(--tap-min); }
+  .ctx-menu__item { min-height: var(--tap-min); }
+
+  /* iOS Safari zooms the whole page whenever a focused field's font is < 16px — jarring
+   * mid-show and it leaves the layout shifted. Bump every text field / select to 16px
+   * under coarse pointers (touch); mouse users keep the compact desktop sizing. The two
+   * two-class rules (.media-name, .source-media-select) are named explicitly so this wins
+   * their specificity; every other field is single-class and loses to `.deck …` here. */
+  .deck input[type="text"],
+  .deck input[type="search"],
+  .deck input[type="number"],
+  .deck select,
+  .deck textarea,
+  .deck .media-name,
+  .deck .source-media-select { font-size: 16px; }
 }
 

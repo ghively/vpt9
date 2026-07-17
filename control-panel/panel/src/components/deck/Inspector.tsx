@@ -117,13 +117,17 @@ function TogglePill({
   options,
   value,
   onChange,
+  label,
 }: {
   options: { value: string; label: string }[];
   value: string;
   onChange: (value: string) => void;
+  /** Names the group of pills for assistive tech — without it, two "On/Off" pills in the
+   *  same section (mask Enabled + Invert) are indistinguishable to a screen reader. */
+  label?: string;
 }) {
   return (
-    <div className="togglepill">
+    <div className="togglepill" role="group" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)}>
           {o.label}
@@ -235,6 +239,7 @@ function SourceControl({
     <div className="source-group">
       <Select
         className="source-type"
+        ariaLabel="Source type"
         value={layer.source?.type ?? "video"}
         options={[
           { value: "video", label: "Video URL" },
@@ -266,6 +271,7 @@ function SourceControl({
           />
         ) : layer.source?.type === "slot" ? (
           <Select
+            ariaLabel="Shared slot"
             value={layer.source.slotId ?? ""}
             options={sourceBank.map((s) => ({ value: s.id, label: s.name }))}
             onChange={(v) => onUpdate?.("source", { type: "slot", slotId: v })}
@@ -273,6 +279,7 @@ function SourceControl({
         ) : isColor ? (
           <input
             type="color"
+            aria-label="Layer color"
             value={rgbToHex(layer.source.color ?? [0.5, 0.5, 0.5])}
             onChange={(e) => {
               const hex = e.target.value;
@@ -284,6 +291,7 @@ function SourceControl({
           <>
             <Select
               className="source-media-select"
+              ariaLabel="Source media"
               value={externalMode || isExternalUrl ? "__external__" : currentUrl}
               options={[...mediaOptions, { value: "__external__", label: "External URL…" }]}
               onChange={(v) => {
@@ -299,6 +307,7 @@ function SourceControl({
               <TextField
                 value={currentUrl}
                 placeholder="/media/video.mp4 or https://…"
+                ariaLabel="External media URL"
                 onCommit={(v) => onUpdate?.("source", { type: "video", url: v })}
               />
             )}
@@ -346,6 +355,7 @@ function WarpBody({
         </button>
       </div>
       <TogglePill
+        label="Warp mode"
         options={[
           { value: "corner", label: "Corner" },
           { value: "mesh", label: "Mesh" },
@@ -354,7 +364,7 @@ function WarpBody({
         onChange={(v) => onSetWarpMode?.(v as "corner" | "mesh")}
       />
       {isMesh && (
-        <Select className="mesh-size-select" value={String(size)} options={MESH_SIZES} onChange={(v) => onSetMeshSize?.(Number(v))} />
+        <Select className="mesh-size-select" ariaLabel="Mesh grid size" value={String(size)} options={MESH_SIZES} onChange={(v) => onSetMeshSize?.(Number(v))} />
       )}
       <div className="coords">
         {points.map((p, i) => (
@@ -394,6 +404,7 @@ function MatteSourcePicker({
   const current = value ? `${value.type}:${value.type === "media" ? value.mediaId : value.slotId}` : "";
   return (
     <Select
+      ariaLabel="Mask matte source"
       value={current}
       options={options}
       onChange={(v) => {
@@ -451,6 +462,7 @@ function MaskBody({
       <div className="mini">
         <span className="label">Enabled</span>
         <TogglePill
+          label="Mask enabled"
           options={[
             { value: "on", label: "On" },
             { value: "off", label: "Off" },
@@ -462,6 +474,7 @@ function MaskBody({
       <div className="mini">
         <span className="label">Shape</span>
         <TogglePill
+          label="Mask shape"
           options={[
             { value: "ellipse", label: "Ellipse" },
             { value: "rect", label: "Rect" },
@@ -481,6 +494,7 @@ function MaskBody({
       <div className="mini">
         <span className="label">Invert</span>
         <TogglePill
+          label="Mask invert"
           options={[
             { value: "on", label: "On" },
             { value: "off", label: "Off" },
@@ -572,6 +586,7 @@ function InspectorView(props: InspectorProps) {
               className="screen-name-input"
               value={screen.name ?? ""}
               placeholder="Screen name"
+              ariaLabel="Screen name"
               onCommit={(v) => onRenameScreen?.(v)}
             />
             <span className="ix mono">{screen.id}</span>
@@ -648,6 +663,7 @@ function InspectorView(props: InspectorProps) {
           <span className="label">Blend</span>
           <Select
             className="blend-select"
+            ariaLabel="Blend mode"
             value={layer.blendMode ?? "normal"}
             options={BLEND_MODES.map((m) => ({ value: m, label: m[0].toUpperCase() + m.slice(1) }))}
             onChange={(v) => onUpdate?.("blendMode", v)}

@@ -176,11 +176,13 @@ function NumField({
   className,
   value,
   placeholder,
+  ariaLabel,
   onCommit,
 }: {
   className?: string;
   value: number | null | undefined;
   placeholder?: string;
+  ariaLabel?: string;
   onCommit: (value: number | null) => void;
 }) {
   return (
@@ -188,6 +190,8 @@ function NumField({
       className={className}
       value={value != null ? String(value) : ""}
       placeholder={placeholder}
+      ariaLabel={ariaLabel ?? placeholder}
+      inputMode="decimal"
       onCommit={(v) => onCommit(v.trim() === "" ? null : Math.max(0, Number(v) || 0))}
     />
   );
@@ -231,6 +235,7 @@ function PlaylistEditor({
         <div className="playlist-row" key={index}>
           <span className="playlist-idx mono">{String(index).padStart(2, "0")}</span>
           <Select
+            ariaLabel="Playlist clip"
             // A slot-type item can't be represented by the media list — show its own option
             // (so the select doesn't misleadingly display the first media as selected) and
             // don't overwrite the slot binding unless the operator actually picks a media.
@@ -346,6 +351,7 @@ export function FxDrawer({
       <FxSection caption="Warp">
         <Select
           className="corner-preset-select"
+          ariaLabel="Warp corner preset"
           value=""
           options={[
             { value: "", label: "Preset…" },

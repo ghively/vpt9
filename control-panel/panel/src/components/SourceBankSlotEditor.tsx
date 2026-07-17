@@ -72,6 +72,7 @@ function RefPicker({
   return (
     <div className="ref-picker">
       <Select
+        ariaLabel="Mix input source"
         value={current}
         options={options}
         onChange={(v) => {
@@ -96,6 +97,7 @@ function RefPicker({
       {value?.type === "color" && (
         <input
           type="color"
+          aria-label="Mix input color"
           value={rgbToHex(value.color ?? [1, 1, 1])}
           onChange={(e) => onChange({ type: "color", color: hexToRgb(e.target.value) })}
         />
@@ -116,6 +118,7 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDev
       <TextField className="media-name" value={slot.name} onCommit={(v) => onRename?.(index, v)} />
       <Select
         className="source-slot-type"
+        ariaLabel="Slot content type"
         value={slot.content?.type ?? ""}
         options={[
           { value: "", label: "Empty" },
@@ -134,6 +137,7 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDev
       />
       {slot.content?.type === "media" && (
         <Select
+          ariaLabel="Media clip"
           value={slot.content.mediaId}
           options={media.map((m) => ({ value: m.id, label: m.name }))}
           onChange={(v) => onSetContent?.(slot.id, index, { type: "media", mediaId: v })}
@@ -151,6 +155,7 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDev
       {slot.content?.type === "color" && (
         <input
           type="color"
+          aria-label="Slot color"
           value={rgbToHex(slot.content.color ?? [1, 1, 1])}
           onChange={(e) => onSetContent?.(slot.id, index, { type: "color", color: hexToRgb(e.target.value) })}
         />
@@ -160,6 +165,7 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDev
           <RefPicker value={slot.content.a} media={media} otherSlots={otherSlots} cameraDevices={cameraDevices} onChange={(a) => onSetContent?.(slot.id, index, { ...slot.content, a } as SourceBankSlot["content"])} />
           <RefPicker value={slot.content.b} media={media} otherSlots={otherSlots} cameraDevices={cameraDevices} onChange={(b) => onSetContent?.(slot.id, index, { ...slot.content, b } as SourceBankSlot["content"])} />
           <Select
+            ariaLabel="Mix blend mode"
             value={slot.content.blendMode}
             options={BLEND_MODES.map((m) => ({ value: m, label: m }))}
             onChange={(v) => onSetContent?.(slot.id, index, { ...slot.content, blendMode: v } as SourceBankSlot["content"])}

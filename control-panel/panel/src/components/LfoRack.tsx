@@ -90,26 +90,29 @@ export function LfoRack({ lfos, tempoBpm, targetOptions, onAdd, onUpdate, onRemo
               active={!!lfo.enabled}
               onClick={() => onUpdate?.(lfo.id, "enabled", !lfo.enabled)}
             />
-            <Select value={kind} options={KINDS} onChange={(v) => onUpdate?.(lfo.id, "kind", v)} />
+            <Select ariaLabel="LFO kind" value={kind} options={KINDS} onChange={(v) => onUpdate?.(lfo.id, "kind", v)} />
 
             {kind === "mixer" ? (
               <>
-                <Select value={lfo.aId ?? ""} options={oscOptions} onChange={(v) => onUpdate?.(lfo.id, "aId", v || null)} />
-                <Select value={lfo.bId ?? ""} options={oscOptions} onChange={(v) => onUpdate?.(lfo.id, "bId", v || null)} />
-                <Select value={lfo.blend ?? "add"} options={BLENDS} onChange={(v) => onUpdate?.(lfo.id, "blend", v)} />
+                <Select ariaLabel="Mixer input A" value={lfo.aId ?? ""} options={oscOptions} onChange={(v) => onUpdate?.(lfo.id, "aId", v || null)} />
+                <Select ariaLabel="Mixer input B" value={lfo.bId ?? ""} options={oscOptions} onChange={(v) => onUpdate?.(lfo.id, "bId", v || null)} />
+                <Select ariaLabel="Mixer blend" value={lfo.blend ?? "add"} options={BLENDS} onChange={(v) => onUpdate?.(lfo.id, "blend", v)} />
                 {lfo.blend === "xfade" && (
                   <TextField
                     className="lfo-num"
                     value={String(lfo.mix ?? 0.5)}
                     placeholder="mix"
+                    ariaLabel="Crossfade mix"
+                    inputMode="decimal"
                     onCommit={(v) => onUpdate?.(lfo.id, "mix", Math.min(1, Math.max(0, parseNumberOr(v, 0.5))))}
                   />
                 )}
               </>
             ) : (
               <>
-                <Select value={lfo.wave ?? "sine"} options={WAVES} onChange={(v) => onUpdate?.(lfo.id, "wave", v)} />
+                <Select ariaLabel="LFO waveform" value={lfo.wave ?? "sine"} options={WAVES} onChange={(v) => onUpdate?.(lfo.id, "wave", v)} />
                 <Select
+                  ariaLabel="Tempo sync"
                   value={lfo.syncNote ?? ""}
                   options={SYNC_NOTES}
                   onChange={(v) => onUpdate?.(lfo.id, "syncNote", v || null)}
@@ -119,6 +122,8 @@ export function LfoRack({ lfos, tempoBpm, targetOptions, onAdd, onUpdate, onRemo
                     className="lfo-num"
                     value={String(lfo.rateHz ?? 0)}
                     placeholder="Hz"
+                    ariaLabel="Rate (Hz)"
+                    inputMode="decimal"
                     onCommit={(v) => onUpdate?.(lfo.id, "rateHz", Math.max(0, parseNumberOr(v, 0)))}
                   />
                 )}
@@ -126,6 +131,8 @@ export function LfoRack({ lfos, tempoBpm, targetOptions, onAdd, onUpdate, onRemo
                   className="lfo-num"
                   value={String(lfo.phase ?? 0)}
                   placeholder="phase"
+                  ariaLabel="Phase offset"
+                  inputMode="decimal"
                   onCommit={(v) => onUpdate?.(lfo.id, "phase", Math.min(1, Math.max(0, parseNumberOr(v, 0))))}
                 />
                 <ToggleSquare
@@ -141,12 +148,16 @@ export function LfoRack({ lfos, tempoBpm, targetOptions, onAdd, onUpdate, onRemo
               className="lfo-num"
               value={String(lfo.min ?? 0)}
               placeholder="min"
+              ariaLabel="Output range minimum"
+              inputMode="decimal"
               onCommit={(v) => onUpdate?.(lfo.id, "min", parseNumberOr(v, 0))}
             />
             <TextField
               className="lfo-num"
               value={String(lfo.max ?? 1)}
               placeholder="max"
+              ariaLabel="Output range maximum"
+              inputMode="decimal"
               onCommit={(v) => onUpdate?.(lfo.id, "max", parseNumberOr(v, 1))}
             />
             <TargetField

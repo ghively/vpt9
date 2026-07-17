@@ -57,6 +57,7 @@ export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate
             onCommit={(v) => onUpdate?.(timer.id, "time", normalizeHhmm(v))}
           />
           <Select
+            ariaLabel="Timer action"
             value={timer.action ?? "cueGo"}
             options={[
               { value: "cueGo", label: "Cue GO" },
@@ -67,6 +68,7 @@ export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate
           />
           {timer.action === "recall" && (
             <Select
+              ariaLabel="Preset"
               value={timer.presetId ?? ""}
               options={presetOptions.length ? presetOptions : [{ value: "", label: "(no presets)" }]}
               onChange={(v) => onUpdate?.(timer.id, "presetId", v)}
@@ -74,6 +76,7 @@ export function TimerBank({ timers, presets, sourcePresets = [], onAdd, onUpdate
           )}
           {timer.action === "source" && (
             <Select
+              ariaLabel="Source snapshot"
               value={timer.presetId ?? ""}
               options={sourceOptions.length ? sourceOptions : [{ value: "", label: "(no snapshots)" }]}
               onChange={(v) => onUpdate?.(timer.id, "presetId", v)}

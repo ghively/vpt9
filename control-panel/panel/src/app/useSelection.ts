@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 
 export type EditMode = "warp" | "mask" | "fx";
 
@@ -15,5 +15,14 @@ export function useSelection(firstLayerId: string | null) {
   const [stageEditMode, setStageEditMode] = useState<EditMode>("warp");
   const [editTarget, setEditTarget] = useState<EditTarget>("layer");
   const select = useCallback((id: string | null) => setSelectedLayerId(id), []);
-  return { selectedLayerId, setSelectedLayerId: select, stageEditMode, setStageEditMode, editTarget, setEditTarget };
+  // Memoize the returned object so its identity is stable across renders that don't
+  // change the selection. The setters (`select` + the two useState setters) are already
+  // stable, so App's `useCallback`s that list `selection` as a dep — and the memoized
+  // LayerStack/MediaBin that receive those callbacks — no longer re-create/re-render on
+  // every unrelated ~8 Hz automation tick (perf: the object literal was a fresh reference
+  // each render, silently defeating those memos). Recomputes only when a value changes.
+  return useMemo(
+    () => ({ selectedLayerId, setSelectedLayerId: select, stageEditMode, setStageEditMode, editTarget, setEditTarget }),
+    [selectedLayerId, select, stageEditMode, editTarget],
+  );
 }

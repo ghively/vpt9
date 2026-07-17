@@ -348,6 +348,7 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
             {!showFolderList && (
               <Select
                 className="media-bin__sort"
+                ariaLabel="Sort media by"
                 value={view.sort}
                 options={SORT_OPTIONS}
                 onChange={(sort) => saveView({ ...view, sort: sort as MediaSort })}
