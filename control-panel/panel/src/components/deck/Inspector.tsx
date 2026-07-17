@@ -323,6 +323,19 @@ const CORNER_TAGS = ["TL", "TR", "BR", "BL"]; // index order matches Warp.corner
 // bicubic-subdivides the control grid (render-client/src/warp.js) so even the sparsest
 // 2x2/3x3 control grids render as a smooth surface, not faceted triangles.
 const MESH_SIZES = [2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ value: String(n), label: `${n}×${n}` }));
+// Corner-pin quick presets (moved here from the FX drawer's old duplicate Warp section so
+// the dedicated Warp section is the ONE place warp is edited). Only meaningful in corner
+// mode — they set the four corner positions.
+const CORNER_PRESETS = [
+  { value: "", label: "Preset…" },
+  { value: "full", label: "Full" },
+  { value: "center", label: "Center" },
+  { value: "leftThird", label: "Left third" },
+  { value: "rightThird", label: "Right third" },
+  { value: "rotate90", label: "Rotate 90°" },
+  { value: "rotate180", label: "Rotate 180°" },
+  { value: "rotate270", label: "Rotate 270°" },
+];
 
 /** Warp contextual body: corner/mesh mode toggle, mesh size, reset, and a live
  *  READ-ONLY coordinate readout (the actual drag interaction lives on the stage —
@@ -336,11 +349,14 @@ function WarpBody({
   onSetWarpMode,
   onSetMeshSize,
   onResetWarp,
+  onApplyCornerPreset,
 }: {
   warp: Warp | undefined;
   onSetWarpMode?: (mode: "corner" | "mesh") => void;
   onSetMeshSize?: (size: number) => void;
   onResetWarp?: () => void;
+  /** Layer-only corner-pin presets (screens don't wire this — they get no preset menu). */
+  onApplyCornerPreset?: (preset: string) => void;
 }) {
   const isMesh = warp?.mode === "mesh";
   const size = warp?.mesh?.size ?? 4;
@@ -363,8 +379,18 @@ function WarpBody({
         value={isMesh ? "mesh" : "corner"}
         onChange={(v) => onSetWarpMode?.(v as "corner" | "mesh")}
       />
-      {isMesh && (
+      {isMesh ? (
         <Select className="mesh-size-select" ariaLabel="Mesh grid size" value={String(size)} options={MESH_SIZES} onChange={(v) => onSetMeshSize?.(Number(v))} />
+      ) : (
+        onApplyCornerPreset && (
+          <Select
+            className="corner-preset-select"
+            ariaLabel="Warp corner preset"
+            value=""
+            options={CORNER_PRESETS}
+            onChange={(v) => { if (v) onApplyCornerPreset(v); }}
+          />
+        )
       )}
       <div className="coords">
         {points.map((p, i) => (
@@ -526,20 +552,39 @@ function MaskBody({
           {isPolygon ? (
             <p className="mask-note">Drag the polygon points on the stage. Click near an edge to insert a vertex. Delete removes the selected vertex.</p>
           ) : (
-            <div className="coords">
-              <div className="coord">
-                <span className="t">CENTER</span>
-                <span className="v mono">
-                  {mask.cx.toFixed(2)} · {mask.cy.toFixed(2)}
-                </span>
+            // Editable center/size (moved here from the FX drawer's old duplicate Mask
+            // section, so this dedicated Mask section is the ONE place a rect/ellipse mask
+            // is edited numerically — the stage handles remain the direct-manipulation path).
+            <>
+              <div className="field">
+                <span className="label">Center X</span>
+                <div className="row">
+                  <Fader value={mask.cx} min={0} max={1} step={0.005} ariaLabel="Mask center X" onChange={(v) => onUpdate?.("mask.cx", v)} />
+                  <span className="mono">{mask.cx.toFixed(2)}</span>
+                </div>
               </div>
-              <div className="coord">
-                <span className="t">SIZE</span>
-                <span className="v mono">
-                  {mask.rx.toFixed(2)} · {mask.ry.toFixed(2)}
-                </span>
+              <div className="field">
+                <span className="label">Center Y</span>
+                <div className="row">
+                  <Fader value={mask.cy} min={0} max={1} step={0.005} ariaLabel="Mask center Y" onChange={(v) => onUpdate?.("mask.cy", v)} />
+                  <span className="mono">{mask.cy.toFixed(2)}</span>
+                </div>
               </div>
-            </div>
+              <div className="field">
+                <span className="label">Size X</span>
+                <div className="row">
+                  <Fader value={mask.rx} min={0.02} max={1} step={0.005} ariaLabel="Mask size X" onChange={(v) => onUpdate?.("mask.rx", v)} />
+                  <span className="mono">{mask.rx.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="field">
+                <span className="label">Size Y</span>
+                <div className="row">
+                  <Fader value={mask.ry} min={0.02} max={1} step={0.005} ariaLabel="Mask size Y" onChange={(v) => onUpdate?.("mask.ry", v)} />
+                  <span className="mono">{mask.ry.toFixed(2)}</span>
+                </div>
+              </div>
+            </>
           )}
         </>
       )}
@@ -702,7 +747,7 @@ function InspectorView(props: InspectorProps) {
 
         <div className="insp-sections">
           <InspectorSection title="Warp" summary={warpSummary(layer.warp)} active={mode === "warp"} onActivate={() => onModeChange("warp")}>
-            <WarpBody warp={layer.warp} onSetWarpMode={onSetWarpMode} onSetMeshSize={onSetMeshSize} onResetWarp={onResetWarp} />
+            <WarpBody warp={layer.warp} onSetWarpMode={onSetWarpMode} onSetMeshSize={onSetMeshSize} onResetWarp={onResetWarp} onApplyCornerPreset={onApplyCornerPreset} />
           </InspectorSection>
           <InspectorSection title="Mask" summary={maskSummary(layer)} active={mode === "mask"} onActivate={() => onModeChange("mask")}>
             <MaskBody layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} />
@@ -710,7 +755,6 @@ function InspectorView(props: InspectorProps) {
           <InspectorSection title="FX" summary={fxSummary(layer)} active={mode === "fx"} defaultOpen onActivate={() => onModeChange("fx")}>
             <FxDrawer
               fx={layer.fx}
-              mask={layer.mask}
               transport={layer.transport}
               transportPosition={transportPosition}
               transportDuration={transportDuration}
@@ -718,12 +762,7 @@ function InspectorView(props: InspectorProps) {
               playlist={layer.playlist}
               downscale={layer.downscale}
               media={media}
-              onUpdate={(field, value) => {
-                if (field === "__cornerPreset__") onApplyCornerPreset?.(value as string);
-                else onUpdate?.(field, value);
-              }}
-              onEditMask={() => onModeChange("mask")}
-              onEditWarp={() => onModeChange("warp")}
+              onUpdate={onUpdate}
               onSetSourceMode={onSetSourceMode}
               onSetPlaylist={onSetPlaylist}
               onTriggerClip={onTriggerClip}

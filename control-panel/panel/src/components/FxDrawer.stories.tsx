@@ -13,7 +13,9 @@ type Story = StoryObj<typeof FxDrawer>;
 export const Active: Story = {
   args: {
     fx: sampleLayers[0].fx,
-    mask: sampleLayers[1].mask,
+    transport: sampleLayers[0].transport,
+    sourceMode: "single",
+    downscale: 1,
     onUpdate: noop,
   },
 };
