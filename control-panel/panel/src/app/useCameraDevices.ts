@@ -23,6 +23,11 @@ export function useCameraDevices(): CameraDevice[] {
           setDevices(
             list
               .filter((d) => d.kind === "videoinput")
+              // Drop blank-deviceId entries: before camera permission is granted the browser
+              // returns video inputs with an empty deviceId, which collide with the picker's
+              // hard-coded {value:""} "Default camera" option (duplicate React <option> keys +
+              // an unselectable "Camera N" that just resolves back to the default).
+              .filter((d) => d.deviceId)
               .map((d) => ({ deviceId: d.deviceId, label: d.label })),
           );
         })

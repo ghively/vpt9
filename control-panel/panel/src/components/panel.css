@@ -541,8 +541,10 @@ html, body { height: 100%; }
 
   /* ── Extra controls added by the automation cluster (A16–A19) ────────────────── */
   /* Cue rows and LFO rows now carry more per-row controls (new cue types, mixer/sync
-     fields), so let them wrap rather than overflow their narrow drawer column. */
-  .cue-row, .lfo-row { flex-wrap: wrap; }
+     fields), so let them wrap rather than overflow their narrow drawer column. Timer and
+     MIDI rows wrap too — in the ~360px mobile Show sheet their fixed-width binding/action
+     controls otherwise overflow and force a horizontal scrollbar on the whole sheet. */
+  .cue-row, .lfo-row, .timer-row, .midi-row { flex-wrap: wrap; }
   .cue-row select, .lfo-row select { min-width: 0; }
   .cue-target { flex: 1 1 120px; min-width: 0; }
   .cue-follow[data-active="true"] { color: var(--beam); border-color: var(--beam); }

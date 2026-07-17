@@ -31,6 +31,23 @@ export function useMidi(getState: () => PanelState, send: (message: SocketMessag
     let access: MidiAccessLike | null = null;
     let disposed = false;
 
+    // Coalesce outgoing writes to one-per-target-per-animation-frame. A swept knob/encoder
+    // fires 30–200 CC messages/sec (and several mappings can bind the same channel+CC), and
+    // emitting a WS `update` per raw event floods the control plane — the exact flood
+    // WarpHandle / MaskShapeOverlay / PipBox already rAF-coalesce (MIDI was the one
+    // high-rate input that didn't). Keep only the latest value per target between frames.
+    const pending = new Map<string, unknown>();
+    let raf = 0;
+    const flush = () => {
+      raf = 0;
+      for (const [path, value] of pending) send({ type: "update", path, value });
+      pending.clear();
+    };
+    const emit = (path: string, value: unknown) => {
+      pending.set(path, value);
+      if (!raf) raf = requestAnimationFrame(flush);
+    };
+
     const onMessage = (event: { data: Uint8Array | null }) => {
       const data = event.data;
       if (!data || data.length < 3) return;
@@ -51,7 +68,7 @@ export function useMidi(getState: () => PanelState, send: (message: SocketMessag
       for (const mapping of Object.values(getState().midiMap ?? {})) {
         if (mapping.channel !== channel || mapping.controller !== controller || !mapping.target) continue;
         const value = (mapping.min ?? 0) + normalized * ((mapping.max ?? 1) - (mapping.min ?? 0));
-        send({ type: "update", path: mapping.target, value });
+        emit(mapping.target, value);
       }
     };
 
@@ -72,6 +89,7 @@ export function useMidi(getState: () => PanelState, send: (message: SocketMessag
 
     return () => {
       disposed = true;
+      if (raf) { cancelAnimationFrame(raf); flush(); } // land the last coalesced value
       if (access) {
         for (const input of access.inputs.values()) input.onmidimessage = null;
         access.onstatechange = null;
