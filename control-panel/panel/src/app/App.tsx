@@ -828,6 +828,9 @@ export function App() {
   const onInspectorResetScreenWarp = useCallback(() => {
     if (selectedScreenId) actions.resetWarp(selectedScreenId);
   }, [actions, selectedScreenId]);
+  const onInspectorRemoveScreen = useCallback(() => {
+    if (selectedScreenId) actions.removeScreen(selectedScreenId);
+  }, [actions, selectedScreenId]);
 
   // Task 8: the Show drawer's active-tab panel — each case wired with the EXACT
   // props/callbacks the pre-Task-1 flat layout used (git show 3dcc100), just relocated
@@ -1125,6 +1128,8 @@ export function App() {
         onSetScreenWarpMode={onInspectorSetScreenWarpMode}
         onSetScreenMeshSize={onInspectorSetScreenMeshSize}
         onResetScreenWarp={onInspectorResetScreenWarp}
+        onRemoveScreen={onInspectorRemoveScreen}
+        screenCount={screens.length}
       />
     ) : (
       <Inspector

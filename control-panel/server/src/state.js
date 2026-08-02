@@ -124,7 +124,14 @@ const DEFAULT_STATE = {
       id: "layer-1",
       name: "Ambient loop",
       order: 1,
-      source: { type: "video", url: "/media/sample.mp4" },
+      // Was { type: "video", url: "/media/sample.mp4" } — that file ships in neither the
+      // repo nor the Docker images, and server/src/media.js's SAFE_FILENAME allowlist
+      // (only server-generated `media-<token>.<ext>` names) would 404 it even if an
+      // operator dropped a same-named file in by hand. Every fresh boot showed a
+      // broken/black layer plus a console CORS-looking error until someone replaced the
+      // source by hand. A color placeholder never 404s; the operator swaps in real
+      // footage via the media bin same as any other layer.
+      source: { type: "color", color: [0.55, 0.4, 0.2] },
       opacity: 0.82,
       blendMode: "screen",
       mask: defaultMask(),
@@ -735,6 +742,27 @@ export function resolveDanglingSourceRefs(state, kind, id) {
         if ((layer.playlist.cursor ?? -1) >= kept.length) layer.playlist.cursor = kept.length - 1;
       }
     }
+  }
+}
+
+// Called after a screen is deleted: strips the id from any layer's per-screen routing
+// array (an empty result becomes null — "every screen" — rather than leaving the layer
+// routed nowhere), and reassigns the audio owner and any PiP windows pinned to the
+// deleted screen onto another remaining screen (or null if none remain). Mirrors
+// resolveDanglingSourceRefs — a reference to something just deleted must never be left
+// silently dangling.
+export function resolveDanglingScreenRefs(state, deletedScreenId) {
+  const fallback = Object.keys(state.screens ?? {})[0] ?? null;
+  for (const layer of Object.values(isPlainObject(state.layers) ? state.layers : {})) {
+    if (!layer || typeof layer !== "object") continue;
+    if (Array.isArray(layer.screens) && layer.screens.includes(deletedScreenId)) {
+      const kept = layer.screens.filter((id) => id !== deletedScreenId);
+      layer.screens = kept.length ? kept : null;
+    }
+  }
+  if (state.audioOwnerScreenId === deletedScreenId) state.audioOwnerScreenId = fallback;
+  for (const pip of Object.values(isPlainObject(state.pip) ? state.pip : {})) {
+    if (pip && pip.screenId === deletedScreenId) pip.screenId = fallback;
   }
 }
 

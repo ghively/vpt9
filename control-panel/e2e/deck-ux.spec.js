@@ -10,6 +10,7 @@ import http from "node:http";
 import os from "node:os";
 import { rmSync } from "node:fs";
 import handler from "serve-handler";
+import WebSocket from "ws";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -78,8 +79,17 @@ test("Help panel lists shortcuts and closes on Escape", async ({ page }) => {
 });
 
 test("a layer row exposes play/pause and a draggable opacity fader; FX shows a HUE slider writing fx.hue", async ({ page }) => {
+  // layer-1 is a color placeholder by default (no bundled sample video ships with the
+  // repo — see server/src/state.js) — give it a video source directly so its row shows
+  // a play button + fader, same as it would once an operator assigns real footage.
+  const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+  await new Promise((resolve) =>
+    socket.send(JSON.stringify({ type: "update", path: "layers.layer-1.source", value: { type: "video", url: "/media/placeholder.mp4" } }), resolve),
+  );
+  socket.close();
+
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
-  // layer-1 (server demo layer) has a video source, so its row shows a play button + fader.
   const row = page.locator('.layer[data-id="layer-1"]');
   await expect(row.locator(".layer-quick .layer-play")).toBeVisible();
   await expect(row.locator('.layer-quick input[type="range"]')).toBeVisible();

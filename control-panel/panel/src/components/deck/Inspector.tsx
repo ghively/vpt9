@@ -2,6 +2,7 @@ import { memo, useState, type ReactNode } from "react";
 import { Select } from "../primitives/Select";
 import { Fader } from "../primitives/Fader";
 import { TextField } from "../primitives/TextField";
+import { ToggleSquare } from "../primitives/ToggleSquare";
 import { FxDrawer } from "../FxDrawer";
 import { CameraPicker } from "../CameraPicker";
 import { rgbToHex } from "../color";
@@ -84,6 +85,11 @@ export interface InspectorScreenProps {
   onSetScreenWarpMode?: (mode: "corner" | "mesh") => void;
   onSetScreenMeshSize?: (size: number) => void;
   onResetScreenWarp?: () => void;
+  /** Omitted/no-op-disabled when only one screen remains — a show always needs at
+   *  least one output (the server refuses the delete too; this just avoids a dead
+   *  click). */
+  onRemoveScreen?: () => void;
+  screenCount?: number;
 }
 
 /** Discriminated union keyed on `editTarget` (type-tighten cleanup): a "layer" props
@@ -615,7 +621,7 @@ function InspectorView(props: InspectorProps) {
   // Narrow on `props.editTarget` directly (not a destructured copy) so TS actually
   // narrows the union.
   if (props.editTarget === "screen") {
-    const { screen, onRenameScreen, onSetScreenWarpMode, onSetScreenMeshSize, onResetScreenWarp } = props;
+    const { screen, onRenameScreen, onSetScreenWarpMode, onSetScreenMeshSize, onResetScreenWarp, onRemoveScreen, screenCount } = props;
     if (!screen) {
       return (
         <div className="insp-empty">
@@ -623,6 +629,7 @@ function InspectorView(props: InspectorProps) {
         </div>
       );
     }
+    const isLastScreen = (screenCount ?? 2) <= 1;
     return (
       <>
         <div className="insp-head">
@@ -635,6 +642,13 @@ function InspectorView(props: InspectorProps) {
               onCommit={(v) => onRenameScreen?.(v)}
             />
             <span className="ix mono">{screen.id}</span>
+            <ToggleSquare
+              className="remove-btn"
+              label="×"
+              title={isLastScreen ? "Can't remove the only screen" : "Remove screen"}
+              disabled={isLastScreen}
+              onClick={() => onRemoveScreen?.()}
+            />
           </div>
           <div className="insp-sub mono">Projector warp · composited output</div>
         </div>

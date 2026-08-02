@@ -563,6 +563,27 @@ test("resolveDanglingSourceRefs sweeps layer sources, mattes, and playlist items
   assert.equal(state.layers["layer-1"].playlist.cursor, 0, "cursor clamped into the shrunk list");
 });
 
+test("resolveDanglingScreenRefs sweeps layer routing, audio owner, and pinned PiP windows", async () => {
+  const { resolveDanglingScreenRefs } = await import("../src/state.js");
+  const state = {
+    screens: { "screen-1": { id: "screen-1" }, "screen-2": { id: "screen-2" } },
+    layers: {
+      "layer-1": { id: "layer-1", screens: ["screen-2"] },
+      "layer-2": { id: "layer-2", screens: ["screen-1", "screen-2"] },
+      "layer-3": { id: "layer-3", screens: null },
+    },
+    audioOwnerScreenId: "screen-2",
+    pip: { "pip-1": { id: "pip-1", screenId: "screen-2" }, "pip-2": { id: "pip-2", screenId: "screen-1" } },
+  };
+  resolveDanglingScreenRefs(state, "screen-2");
+  assert.equal(state.layers["layer-1"].screens, null, "routed-only-to-the-deleted-screen falls back to 'every screen', not stranded");
+  assert.deepEqual(state.layers["layer-2"].screens, ["screen-1"], "the deleted screen is dropped, the rest survive");
+  assert.equal(state.layers["layer-3"].screens, null, "a layer already routed to 'every screen' is untouched");
+  assert.equal(state.audioOwnerScreenId, "screen-1", "audio owner reassigned to a remaining screen");
+  assert.equal(state.pip["pip-1"].screenId, "screen-1", "a PiP pinned to the deleted screen is reassigned");
+  assert.equal(state.pip["pip-2"].screenId, "screen-1", "a PiP on a surviving screen is untouched");
+});
+
 test("layers.<id>.visible: backfilled true, pinned to boolean", () => {
   const layer = { id: "l" };
   ensureLayerDefaults(layer);

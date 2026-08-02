@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
-import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent, resetShowState } from "./state.js";
+import { loadState, saveState, applyUpdate, applyCreate, applyDelete, nextLayerOrder, ensureLayerDefaults, walkToParent, resetShowState, resolveDanglingScreenRefs } from "./state.js";
 import { writeFileTags } from "./media-tags.js";
 import { SAFE_FILENAME } from "./media.js";
 import { createAutomationEngine } from "./automation.js";
@@ -238,6 +238,10 @@ function handleDelete(message) {
     /^sourceBankPresets\.[^.]+$/.test(message.path) && Number.isInteger(state.sourceBankPresetCursor)
       ? Object.keys(state.sourceBankPresets ?? {})[state.sourceBankPresetCursor] ?? null
       : undefined;
+  // A show always needs at least one output screen — refuse to delete the last one rather
+  // than leaving every render client with nowhere to attach.
+  const screenMatch = /^screens\.([^.]+)$/.exec(message.path);
+  if (screenMatch && Object.keys(state.screens ?? {}).length <= 1) return;
   if (!applyDelete(state, message.path)) return;
   if (cursorTargetId !== undefined) {
     // Re-point the cursor at the SAME snapshot by id (−1 if it was the one just deleted),
@@ -248,8 +252,12 @@ function handleDelete(message) {
       broadcast({ type: "update", path: "sourceBankPresetCursor", value: next });
     }
   }
+  if (screenMatch) resolveDanglingScreenRefs(state, screenMatch[1]);
   scheduleSave();
   broadcast({ type: "delete", path: message.path });
+  // Layer routing / audio owner / PiP screenId may have changed too (resolveDanglingScreenRefs) —
+  // same full-snapshot-after-sweep pattern the media delete route uses.
+  if (screenMatch) broadcast({ type: "state", state });
 }
 
 function handlePresetSave(message) {

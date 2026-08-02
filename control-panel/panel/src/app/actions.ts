@@ -262,6 +262,12 @@ export function createActions(send: (message: SocketMessage) => void, getState: 
     renameScreen(screenId: string, name: string) {
       send({ type: "update", path: `screens.${screenId}.name`, value: name });
     },
+    removeScreen(screenId: string) {
+      // Server refuses this if it's the last remaining screen and sweeps dangling
+      // per-layer routing / audio owner / PiP refs onto another screen — see
+      // handleDelete/resolveDanglingScreenRefs in server/src/index.js and state.js.
+      send({ type: "delete", path: `screens.${screenId}` });
+    },
     setMeshSize(screenId: string, size: number) {
       // A different grid size makes the old points meaningless — reset to identity.
       // One atomic update: size and points must never disagree, even for a frame.
