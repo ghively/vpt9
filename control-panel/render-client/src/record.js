@@ -39,8 +39,6 @@ export class CameraRecorder {
     this._getMediaOrigin = getMediaOrigin;
     this._getStream = getStream;
     this._recorder = null;
-    this._chunks = [];
-    this._mime = null;
   }
 
   get recording() {
@@ -66,18 +64,29 @@ export class CameraRecorder {
       console.warn("[record] could not start MediaRecorder:", err?.message ?? err);
       return false;
     }
-    this._chunks = [];
-    this._mime = mime;
+    // Chunks live in THIS closure, not on `this` — MediaRecorder.stop() flips `state` to
+    // "inactive" synchronously, but its "stop" event (and thus _finish) is always
+    // deferred at least one task. A quick stop()-then-start() double-tap sails past the
+    // `recording` guard above (state is already inactive) and installs a NEW recorder
+    // while the old one's "stop" is still in flight. A shared `this._chunks` would get
+    // wiped by the new recorder's own start() before the old one's _finish ever reads
+    // it, silently dropping its footage; worse, _finish reading `this._recorder` fresh
+    // would tear down the NEW recorder's reference instead of the one that actually
+    // stopped, orphaning it — still "recording" internally, but unreachable through
+    // this class (recording getter reports false, stop() is a no-op), buffering
+    // encoded data with no timeslice and thus no way to ever flush it, for the rest of
+    // the show. Passing the specific recorder/chunks/mime into _finish (and only
+    // clearing `this._recorder` if it's STILL this one) closes both holes.
+    const chunks = [];
     recorder.addEventListener("dataavailable", (e) => {
-      if (e.data && e.data.size > 0) this._chunks.push(e.data);
+      if (e.data && e.data.size > 0) chunks.push(e.data);
     });
-    recorder.addEventListener("stop", () => this._finish());
+    recorder.addEventListener("stop", () => this._finish(recorder, chunks, mime));
     recorder.addEventListener("error", (e) => console.warn("[record] recorder error:", e?.error?.message ?? e));
     try {
       recorder.start();
     } catch (err) {
       console.warn("[record] recorder.start() failed:", err?.message ?? err);
-      this._recorder = null;
       return false;
     }
     this._recorder = recorder;
@@ -95,18 +104,16 @@ export class CameraRecorder {
     return true;
   }
 
-  // Assembles the buffered chunks into one Blob and uploads it, then clears state. Split from
+  // Assembles one recorder's buffered chunks into a Blob and uploads it. Split from
   // stop() because MediaRecorder flushes its final chunk asynchronously via a trailing
   // dataavailable BEFORE the stop event, so the complete clip is only ready here.
-  _finish() {
-    const recorder = this._recorder;
-    this._recorder = null;
-    const chunks = this._chunks;
-    this._chunks = [];
-    const mime = this._mime;
-    // Free the just-stopped recorder's reference; the camera stream itself is owned/torn down
-    // by layers.js / source-bank.js, so we deliberately do NOT stop its tracks here.
-    void recorder;
+  _finish(recorder, chunks, mime) {
+    // Only clear the live reference if IT is the recorder that just stopped — a
+    // stop()-then-start() race (see start()'s comment) may have already installed a
+    // newer one, which this now-stale event must not tear down.
+    if (this._recorder === recorder) this._recorder = null;
+    // The camera stream itself is owned/torn down by layers.js / source-bank.js, so we
+    // deliberately do NOT stop its tracks here.
     if (!chunks.length) {
       console.warn("[record] nothing captured (no data) — skipping upload");
       return;

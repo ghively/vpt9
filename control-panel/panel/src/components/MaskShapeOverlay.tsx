@@ -115,6 +115,14 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     const stage = rootRef.current?.parentElement;
     if (!stage) return;
     const target = event.currentTarget;
+    // Ignore a SECOND touch on an already-dragging body/edge handle — the same guard
+    // WarpHandle.tsx uses (this is a separate reimplementation of the same drag
+    // pattern, so it needs its own copy): a second pointerdown used to stack a second
+    // set of move/up listeners with no pointerId filtering, so both fingers' moves
+    // thrashed the mask position and the first release fired onDragEnd (App's
+    // isDraggingRef guard) while the second finger's gesture was still in flight.
+    if (target.dataset.dragging === "true") return;
+    target.dataset.dragging = "true";
     target.setPointerCapture(event.pointerId);
     onDragStart?.();
     const rect = stage.getBoundingClientRect();
@@ -128,15 +136,18 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
       onChange?.(patch);
     };
     const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== event.pointerId) return; // only the captured pointer drives this drag
       const nx = clamp01((e.clientX - rect.left) / rect.width);
       const ny = clamp01((e.clientY - rect.top) / rect.height);
       pending = { ...pending, ...apply(nx, ny) };
       paint();
       if (!raf) raf = requestAnimationFrame(flush);
     };
-    const onUp = () => {
+    const onUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== event.pointerId) return; // ignore the other finger's release
       if (raf) cancelAnimationFrame(raf);
       flush();
+      target.dataset.dragging = "false";
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onUp);
       target.removeEventListener("pointercancel", onUp);

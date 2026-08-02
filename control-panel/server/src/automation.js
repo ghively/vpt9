@@ -214,7 +214,11 @@ export function createAutomationEngine({
     fade = null;
     if (!f) return;
     if (f.presetId) {
-      recallPreset(f.presetId);
+      // Same "missing, skipped" logging every other cue-type path already has (see the
+      // `recall`/`source`/`fade` cases above) — without it, a preset deleted mid-fade
+      // (operator cleanup, another client) silently left the fade frozen at its last
+      // interpolated value with no record of why, instead of landing on the target.
+      if (!recallPreset(f.presetId)) log(`[automation] fade: preset "${f.presetId}" missing, landed short`);
       return;
     }
     const updates = [];

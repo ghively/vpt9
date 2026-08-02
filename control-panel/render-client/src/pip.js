@@ -52,13 +52,24 @@ export class PipOverlay {
     // the iframe (which would restart playback) whenever audio ownership changes.
     // A hidden window unloads its iframe entirely — display:none does NOT stop a
     // YouTube embed, so a hidden PiP that owned audio would keep sounding.
+    //
+    // `mute` is deliberately NOT part of wantedSrc (and always loads muted=1, which
+    // browser autoplay policy requires regardless of audio-owner status anyway): baking
+    // the live mute value into the src made wantedSrc change on every audio-owner
+    // handoff, which fell into the src-changed branch below and did a full iframe
+    // reload — restarting playback from 0:00, visible on the live projection — even
+    // though the postMessage path two branches down exists for exactly this and was
+    // unreachable as a result (wantedSrc can only be unchanged if mute was already
+    // unchanged too, once mute lived inside it). Now only videoId/visible changing
+    // reloads; every mute change, including the very first one right after a fresh
+    // load, goes out live via postMessage.
     const wantedSrc = pip.videoId && pip.visible
-      ? `https://www.youtube.com/embed/${encodeURIComponent(pip.videoId)}?autoplay=1&mute=${muted ? 1 : 0}&loop=1&playlist=${encodeURIComponent(pip.videoId)}&enablejsapi=1`
+      ? `https://www.youtube.com/embed/${encodeURIComponent(pip.videoId)}?autoplay=1&mute=1&loop=1&playlist=${encodeURIComponent(pip.videoId)}&enablejsapi=1`
       : "";
     if (iframe.dataset.src !== wantedSrc) {
       iframe.dataset.src = wantedSrc;
       iframe.src = wantedSrc;
-      iframe.dataset.muted = String(muted);
+      iframe.dataset.muted = "true";
       return;
     }
 

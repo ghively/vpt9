@@ -343,8 +343,8 @@ export function FxDrawer({
         <ToggleSquare
           label="INV"
           title="Invert edge blend (fade the center instead of the edges)"
-          active={!!fx.edgeBlend.invert}
-          onClick={() => onUpdate?.("fx.edgeBlend.invert", !fx.edgeBlend.invert)}
+          active={!!fx.edgeBlend?.invert}
+          onClick={() => onUpdate?.("fx.edgeBlend.invert", !fx.edgeBlend?.invert)}
         />
       </FxSection>
       {transport && (

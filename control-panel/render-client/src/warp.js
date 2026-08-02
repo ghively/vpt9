@@ -125,7 +125,17 @@ function gridPoint(points, size, row, col) {
     const p1 = gridPoint(points, size, row, size - 2);
     return { x: 2 * p0.x - p1.x, y: 2 * p0.y - p1.y };
   }
-  return points[row * size + col] ?? { x: 0, y: 0 };
+  // Guards both a MISSING slot (element undefined) and a PRESENT-but-malformed one
+  // (e.g. `{x: 5}` with no `y`, or `{}`) — the corner-pin path already does this
+  // (`points[i]?.x ?? 0`, ScreenWarp.render() below); this one only guarded the
+  // former, so an incomplete point object fed `undefined` straight into the
+  // Catmull-Rom arithmetic (`undefined - x` is NaN, not 0), producing NaN vertex
+  // positions in the FINAL blit-to-canvas pass — not just one layer, the whole
+  // composited output — with no validation anywhere upstream to catch it first
+  // (server/src/state.js pins warp.mesh.points to an array, but never checks each
+  // element's shape).
+  const p = points[row * size + col];
+  return { x: p?.x ?? 0, y: p?.y ?? 0 };
 }
 
 // Bicubic (tensor-product Catmull-Rom) surface value at a continuous (row, col) position

@@ -163,5 +163,13 @@ export function applyVideoTransport(video, transport, entry) {
     entry._loopDir = 1;
   }
 
-  applySeek(video, t, entry);
+  // Same reverse-leg guard as the play() call above: startPalindromeReverse() manually
+  // drives video.currentTime every frame while entry._loopDir === -1, so a seek landing
+  // mid-reverse raced it — last-write-wins in practice (harmless), except a seek target
+  // below loopIn got silently snapped up to loopIn by the reverse leg's own bound check,
+  // instead of being honored exactly. Deferring the seek until the reverse leg ends (it
+  // stays queued — entry._lastSeek is only updated once applySeek actually runs, so the
+  // very next call after forward playback resumes still sees `seek !== _lastSeek` and
+  // applies it then) matches "hold, don't fight" the same way play() already does.
+  if (entry._loopDir !== -1) applySeek(video, t, entry);
 }

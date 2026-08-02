@@ -285,6 +285,23 @@ export function ensureLayerDefaults(layer) {
   for (const key of ["mask", "fx", "warp", "transport", "playlist"]) {
     if (layer[key] === null) delete layer[key];
   }
+  // Same normalization one level deeper, for a layer saved (by an older server, before
+  // corruptsStructure's matching pin existed) with fx.edgeBlend/fx.enabled or
+  // warp.corners/warp.mesh explicitly null: fillMissing below only backfills an ABSENT
+  // key, and `"edgeBlend" in layer.fx` is true even when its value is null, so without
+  // this the corruption would survive every future load. Only runs when the parent
+  // object itself is present and intact — if it isn't, it's deleted above (or was
+  // already absent) and fillMissing rebuilds it fresh.
+  if (layer.fx && typeof layer.fx === "object") {
+    for (const key of ["edgeBlend", "enabled"]) {
+      if (layer.fx[key] === null) delete layer.fx[key];
+    }
+  }
+  if (layer.warp && typeof layer.warp === "object") {
+    for (const key of ["corners", "mesh"]) {
+      if (layer.warp[key] === null) delete layer.warp[key];
+    }
+  }
   fillMissing(layer, {
     mask: defaultMask(),
     fx: defaultFx(),
@@ -354,6 +371,20 @@ export function ensureStateDefaults(state) {
   for (const layer of Object.values(state.layers ?? {})) ensureLayerDefaults(layer);
   for (const preset of Object.values(state.presets ?? {})) {
     for (const layer of Object.values(preset?.snapshot?.layers ?? {})) ensureLayerDefaults(layer);
+  }
+  // Same repair as ensureLayerDefaults, for a screen's warp (identical shape, same
+  // corruptsStructure pin added alongside the layer one) — normalize an explicit null
+  // (whole warp, or corners/mesh within an otherwise-intact warp) to absent so
+  // fillMissing rebuilds it, instead of a pre-existing corruption surviving forever.
+  for (const screen of Object.values(state.screens ?? {})) {
+    if (!screen || typeof screen !== "object") continue;
+    if (screen.warp === null) delete screen.warp;
+    if (screen.warp && typeof screen.warp === "object") {
+      for (const key of ["corners", "mesh"]) {
+        if (screen.warp[key] === null) delete screen.warp[key];
+      }
+    }
+    fillMissing(screen, { warp: defaultWarp() });
   }
   state.automation.running = false;
   // Same boot-reset policy as automation.running: a power-cycled installation must not
@@ -507,9 +538,34 @@ function corruptsStructure(keys, last, value) {
   // to a plain object — whole-object replacement with a valid object stays allowed (e.g.
   // setPlaylist sends a fresh {items,cursor}); only null/scalar/array is rejected.
   if (
-    keys.length === 2 && keys[0] === "layers" &&
-    (last === "mask" || last === "fx" || last === "warp" || last === "transport" || last === "playlist")
+    (keys.length === 2 && keys[0] === "layers" &&
+      (last === "mask" || last === "fx" || last === "warp" || last === "transport" || last === "playlist")) ||
+    // A screen's warp is the identical shape a layer's own warp already gets pinned to
+    // above (StageSelectionOverlay dereferences `warp.mode`/`warp.corners`/`warp.mesh`
+    // exactly the same way for either target) — it had no pin at all before this line.
+    (keys.length === 2 && keys[0] === "screens" && last === "warp")
   ) {
+    return !isPlainObject(value);
+  }
+  // The container-level pin above stops one level too shallow: it protects
+  // layers.<id>.fx / warp from being nulled wholesale, but not their OWN structural
+  // sub-fields, which the panel dereferences with exactly the same lack of caution the
+  // container pin was written to stop (FxDrawer.tsx's `fx.edgeBlend.invert` — unlike
+  // every other read of `fx.edgeBlend` in that file, this one skips the `?? {}` guard —
+  // and StageSelectionOverlay.tsx's `warp.corners.map`/`warp.mesh.points` are neither
+  // optional-chained). With no error boundary anywhere in the panel, a single
+  // `{type:"update",path:"layers.<id>.fx.edgeBlend",value:null}` blanks the whole
+  // operator UI for every connected/reconnecting client, and the corruption is
+  // persisted to disk (ensureLayerDefaults only repairs an explicit null at the
+  // CONTAINER level, never recurses into it — see its own comment). Screens get the
+  // same warp.corners/warp.mesh pin as layers, since it's the same shape.
+  if (
+    keys.length === 3 && (keys[0] === "layers" || keys[0] === "screens") && keys[2] === "warp" &&
+    (last === "corners" || last === "mesh")
+  ) {
+    return last === "corners" ? !Array.isArray(value) : !isPlainObject(value);
+  }
+  if (keys.length === 3 && keys[0] === "layers" && keys[2] === "fx" && (last === "edgeBlend" || last === "enabled")) {
     return !isPlainObject(value);
   }
   // A layer's visibility eye (layers.<id>.visible): every render client reads it per

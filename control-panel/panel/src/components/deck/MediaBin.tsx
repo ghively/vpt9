@@ -267,6 +267,13 @@ function MediaBinView({ media, mediaBase, uploadUrl, onUseOnSelected, onRemove, 
     if (!e.dataTransfer.files?.length) return;
     e.preventDefault();
     setDropArmed(false);
+    // Same guard the "+ Add media" button already has (disabled={uploading != null}):
+    // without it, dropping a second batch while the first is still uploading started a
+    // fully concurrent upload() call — both loops independently drive the same
+    // `uploading` state, so the "Uploading X…" label could show the wrong filename
+    // mid-upload. No data corruption (each upload is otherwise independent), just a
+    // confusing label — but as cheap to prevent as to explain away.
+    if (uploading != null) return;
     void upload(e.dataTransfer.files);
   };
 

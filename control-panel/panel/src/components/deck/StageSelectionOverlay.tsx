@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { WarpHandle } from "../WarpHandle";
 import { MaskShapeOverlay } from "../MaskShapeOverlay";
 import { arrowNudge, isEditableTarget } from "../nudge";
@@ -11,6 +11,11 @@ import type { Layer, Mask, Screen, Warp } from "../types";
  *  module doc below); the two must be kept in sync by hand. Only meaningful when
  *  `editTarget === "layer"` — a screen only ever shows its warp (see below). */
 export type StageEditMode = "warp" | "mask" | "fx";
+
+// Stable empty-array singleton for WarpHandles' defensive fallback below — a fresh `[]`
+// literal there would get a new identity every render, defeating the point-count
+// change-detection effect that relies on referential/length stability.
+const EMPTY_POINTS: { x: number; y: number }[] = [];
 
 /** Which object the overlay is currently drawing handles for (Task 12): the selected
  *  LAYER (warp/mask/fx, unchanged from pre-Task-12) or the active SCREEN's projector
@@ -110,9 +115,16 @@ function WarpHandles({
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }) {
-  const isMesh = warp.mode === "mesh";
-  const points = isMesh ? warp.mesh.points : warp.corners;
-  const size = warp.mesh?.size ?? 4;
+  // Defensive like render-client/src/warp.js's `warp?.corners`/`w?.mode` and
+  // layerGeometry.ts's `w?.mode`/`w?.corners` — same Warp shape, same "don't trust the
+  // network" rule, even though the prop type below claims `warp` is always well-formed.
+  const isMesh = warp?.mode === "mesh";
+  const rawPoints = isMesh ? warp?.mesh?.points : warp?.corners;
+  // A stable EMPTY_POINTS singleton (not `?? []` inline) so the fallback doesn't create
+  // a fresh array identity every render — that would fire the selection-reset effect
+  // below on every unrelated re-render, not just on an actual mode/point-count change.
+  const points = useMemo(() => rawPoints ?? EMPTY_POINTS, [rawPoints]);
+  const size = warp?.mesh?.size ?? 4;
 
   // Tap a handle to select it, then arrow-key it into exact registration (fine step;
   // Shift = coarse; Escape deselects) — the MadMapper/Resolume "mouse for placement,
