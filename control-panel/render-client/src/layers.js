@@ -417,6 +417,11 @@ export class LayerStack {
     const entry = this.entries.get(id);
     if (!entry) return;
     this._stopSource(entry);
+    // Invalidate any in-flight camera acquisition: the getUserMedia .then above only
+    // stops the resolved stream when currentUrl no longer matches its key, so without
+    // this a camera stream resolving AFTER the layer was removed (permission prompt
+    // still open) re-attached to the orphaned entry and held the camera open forever.
+    entry.currentUrl = null;
     entry.fxChain?.dispose();
     if (entry.texture) this.gl.deleteTexture(entry.texture); // was leaked on every layer add/remove
     this.entries.delete(id);

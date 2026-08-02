@@ -125,6 +125,13 @@ test("mask.source drives the mask alpha from a matte's luminance (bright shows /
   const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
   await new Promise((resolve) => socket.once("open", resolve));
 
+  // Remove the two seeded demo layers: this spec's masked-out assertions expect the
+  // near-black GROUND to show through, and since 8e44ed6 (demo layer-1 became a visible
+  // color placeholder instead of a broken/black video) the demo pair composites a
+  // brownish wash (~84 red) exactly where "masked out" is asserted <60.
+  await wsSend(socket, { type: "delete", path: "layers.layer-1" });
+  await wsSend(socket, { type: "delete", path: "layers.layer-2" });
+
   // Seed the media-library entry for the matte GIF written into MEDIA_DIR above (mirrors
   // what server/src/media.js's upload handler broadcasts on a real upload).
   await wsSend(socket, {

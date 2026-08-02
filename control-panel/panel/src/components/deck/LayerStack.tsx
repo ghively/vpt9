@@ -1,6 +1,7 @@
 import { memo, useState, type DragEvent, type KeyboardEvent } from "react";
 import { ToggleSquare } from "../primitives/ToggleSquare";
 import { Fader } from "../primitives/Fader";
+import { useFaderEcho } from "../primitives/useFaderEcho";
 import { rgbToHex } from "../color";
 import { MediaThumb } from "./MediaThumb";
 import { SectionHead } from "./SectionHead";
@@ -45,6 +46,9 @@ export interface LayerStackProps {
   onSetLayerPlaying?: (id: string, playing: boolean) => void;
   /** Row opacity fader — writes layers.<id>.opacity. (Previously read-only on the row.) */
   onSetLayerOpacity?: (id: string, value: number) => void;
+  /** Drag guard (App's isDraggingRef), threaded to every row's opacity fader. */
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   /** Drag-to-reorder (rows are draggable): writes the dragged layer's new `order`. */
   onSetLayerOrder?: (id: string, order: number) => void;
   /** Context menu "Duplicate": clone the layer to the top of the stack. */
@@ -156,6 +160,36 @@ function LayerName({
   );
 }
 
+/** A row's opacity fader + % readout. Its own component (not inline in the row map)
+ *  because the readout needs a local drag echo (useFaderEcho — a hook, so it can't live
+ *  inside the map): while the drag guard suppresses store re-renders, the % would
+ *  otherwise freeze mid-drag. */
+function RowOpacity({
+  layer,
+  onSetLayerOpacity,
+  onDragStart,
+  onDragEnd,
+}: {
+  layer: Layer;
+  onSetLayerOpacity?: (id: string, value: number) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+}) {
+  const drag = useFaderEcho((v) => onSetLayerOpacity?.(layer.id, v), onDragStart, onDragEnd);
+  return (
+    <>
+      <Fader
+        value={layer.opacity ?? 1}
+        ariaLabel={`${layer.name || layer.id} opacity`}
+        onChange={drag.onChange}
+        onDragStart={drag.onDragStart}
+        onDragEnd={drag.onDragEnd}
+      />
+      <span className="op mono">{Math.round((drag.echo ?? layer.opacity ?? 1) * 100)}%</span>
+    </>
+  );
+}
+
 /** Compact left-rail layer list: a real content thumbnail, name (double-click to
  *  rename), blend/index meta, and an opacity bar per layer. Rows are selectable
  *  (driving the stage handles + inspector), accept media drops as source assignment,
@@ -172,6 +206,8 @@ function LayerStackView({
   onPasteLayer,
   onSetLayerPlaying,
   onSetLayerOpacity,
+  onDragStart,
+  onDragEnd,
   hasClipboard,
   onRenameLayer,
   onDropMedia,
@@ -269,7 +305,6 @@ function LayerStackView({
           </div>
         )}
         {layers.map((layer, i) => {
-          const opacityPct = Math.round((layer.opacity ?? 1) * 100);
           const stackIndex = layers.length - i;
           const isSelected = layer.id === selectedId;
           const isVisible = layer.visible !== false;
@@ -344,12 +379,7 @@ function LayerStackView({
                     {layer.transport?.playing ? "⏸" : "▶"}
                   </button>
                 )}
-                <Fader
-                  value={layer.opacity ?? 1}
-                  ariaLabel={`${layer.name || layer.id} opacity`}
-                  onChange={(v) => onSetLayerOpacity?.(layer.id, v)}
-                />
-                <span className="op mono">{opacityPct}%</span>
+                <RowOpacity layer={layer} onSetLayerOpacity={onSetLayerOpacity} onDragStart={onDragStart} onDragEnd={onDragEnd} />
               </div>
               {/* Controls for the SELECTED layer only (GIMP shows tools for the active
                *  layer, not five buttons on every row) — selection is one click away. */}

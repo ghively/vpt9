@@ -1,6 +1,7 @@
 import { memo, useState, type ReactNode } from "react";
 import { Select } from "../primitives/Select";
 import { Fader } from "../primitives/Fader";
+import { useFaderEcho } from "../primitives/useFaderEcho";
 import { TextField } from "../primitives/TextField";
 import { ToggleSquare } from "../primitives/ToggleSquare";
 import { FxDrawer } from "../FxDrawer";
@@ -68,6 +69,12 @@ export interface InspectorLayerProps {
   onSetWarpMode?: (mode: "corner" | "mesh") => void;
   onSetMeshSize?: (size: number) => void;
   onResetWarp?: () => void;
+  /** Drag guard (App's isDraggingRef), threaded to every fader in the Inspector
+   *  (opacity, mask numerics, the FX drawer's sliders + transport) so an in-flight drag
+   *  suppresses store-driven re-renders until release — the same contract the stage's
+   *  WarpHandle drags already follow. */
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }
 
 export interface InspectorScreenProps {
@@ -474,16 +481,54 @@ const DEFAULT_POLYGON = Array.from({ length: 6 }, (_, i) => {
  *  Matte (task A5 — layermask.maxpat's `pattr source` + cc.alphaglue's `lum2alpha`): when
  *  `mask.source` is set, that source's luminance drives the alpha instead of the shape;
  *  the shape/feather controls stay editable but a note flags that the matte overrides them. */
+/** A fader + live numeric readout row (`.row` markup shared by the Opacity and mask
+ *  numeric fields). Its own component because the readout needs a local drag echo
+ *  (useFaderEcho): the drag guard suppresses the container's store re-renders for the
+ *  gesture, which would otherwise freeze the number mid-drag. */
+function FaderRow({
+  value,
+  min,
+  max,
+  step,
+  ariaLabel,
+  format,
+  onChange,
+  onDragStart,
+  onDragEnd,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  ariaLabel: string;
+  format: (v: number) => string;
+  onChange: (v: number) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+}) {
+  const drag = useFaderEcho(onChange, onDragStart, onDragEnd);
+  return (
+    <div className="row">
+      <Fader value={value} min={min} max={max} step={step} ariaLabel={ariaLabel} onChange={drag.onChange} onDragStart={drag.onDragStart} onDragEnd={drag.onDragEnd} />
+      <span className="mono">{format(drag.echo ?? value)}</span>
+    </div>
+  );
+}
+
 function MaskBody({
   layer,
   media,
   sourceBank,
   onUpdate,
+  onDragStart,
+  onDragEnd,
 }: {
   layer: Layer;
   media?: MediaItem[];
   sourceBank?: SourceBankSlot[];
   onUpdate?: (field: string, value: unknown) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const mask = layer.mask;
   const isPolygon = mask.shape === "polygon";
@@ -550,10 +595,7 @@ function MaskBody({
         <>
           <div className="field">
             <span className="label">Feather</span>
-            <div className="row">
-              <Fader key={layer.id} value={mask.feather} min={0} max={0.5} step={0.005} ariaLabel="Mask feather" onChange={(v) => onUpdate?.("mask.feather", v)} />
-              <span className="mono">{mask.feather.toFixed(2)}</span>
-            </div>
+            <FaderRow key={layer.id} value={mask.feather} min={0} max={0.5} step={0.005} ariaLabel="Mask feather" format={(v) => v.toFixed(2)} onChange={(v) => onUpdate?.("mask.feather", v)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
           </div>
           {isPolygon ? (
             <p className="mask-note">Drag the polygon points on the stage. Click near an edge to insert a vertex. Delete removes the selected vertex.</p>
@@ -564,31 +606,19 @@ function MaskBody({
             <>
               <div className="field">
                 <span className="label">Center X</span>
-                <div className="row">
-                  <Fader value={mask.cx} min={0} max={1} step={0.005} ariaLabel="Mask center X" onChange={(v) => onUpdate?.("mask.cx", v)} />
-                  <span className="mono">{mask.cx.toFixed(2)}</span>
-                </div>
+                <FaderRow value={mask.cx} min={0} max={1} step={0.005} ariaLabel="Mask center X" format={(v) => v.toFixed(2)} onChange={(v) => onUpdate?.("mask.cx", v)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
               </div>
               <div className="field">
                 <span className="label">Center Y</span>
-                <div className="row">
-                  <Fader value={mask.cy} min={0} max={1} step={0.005} ariaLabel="Mask center Y" onChange={(v) => onUpdate?.("mask.cy", v)} />
-                  <span className="mono">{mask.cy.toFixed(2)}</span>
-                </div>
+                <FaderRow value={mask.cy} min={0} max={1} step={0.005} ariaLabel="Mask center Y" format={(v) => v.toFixed(2)} onChange={(v) => onUpdate?.("mask.cy", v)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
               </div>
               <div className="field">
                 <span className="label">Size X</span>
-                <div className="row">
-                  <Fader value={mask.rx} min={0.02} max={1} step={0.005} ariaLabel="Mask size X" onChange={(v) => onUpdate?.("mask.rx", v)} />
-                  <span className="mono">{mask.rx.toFixed(2)}</span>
-                </div>
+                <FaderRow value={mask.rx} min={0.02} max={1} step={0.005} ariaLabel="Mask size X" format={(v) => v.toFixed(2)} onChange={(v) => onUpdate?.("mask.rx", v)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
               </div>
               <div className="field">
                 <span className="label">Size Y</span>
-                <div className="row">
-                  <Fader value={mask.ry} min={0.02} max={1} step={0.005} ariaLabel="Mask size Y" onChange={(v) => onUpdate?.("mask.ry", v)} />
-                  <span className="mono">{mask.ry.toFixed(2)}</span>
-                </div>
+                <FaderRow value={mask.ry} min={0.02} max={1} step={0.005} ariaLabel="Mask size Y" format={(v) => v.toFixed(2)} onChange={(v) => onUpdate?.("mask.ry", v)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
               </div>
             </>
           )}
@@ -679,6 +709,8 @@ function InspectorView(props: InspectorProps) {
     onSetWarpMode,
     onSetMeshSize,
     onResetWarp,
+    onDragStart,
+    onDragEnd,
   } = props;
 
   if (!layer) {
@@ -691,7 +723,6 @@ function InspectorView(props: InspectorProps) {
 
   const isColor = layer.source?.type === "color";
   const swatchBg = isColor ? rgbToHex(layer.source?.color ?? [0.5, 0.5, 0.5]) : "linear-gradient(135deg,#12283b,#0c1620)";
-  const opacityPct = Math.round((layer.opacity ?? 1) * 100);
 
   return (
     <>
@@ -713,10 +744,7 @@ function InspectorView(props: InspectorProps) {
         </div>
         <div className="field">
           <span className="label">Opacity</span>
-          <div className="row">
-            <Fader key={layer.id} value={layer.opacity ?? 1} ariaLabel="Layer opacity" onChange={(v) => onUpdate?.("opacity", v)} />
-            <span className="mono">{opacityPct}%</span>
-          </div>
+          <FaderRow key={layer.id} value={layer.opacity ?? 1} ariaLabel="Layer opacity" format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => onUpdate?.("opacity", v)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         </div>
         <div className="field">
           <span className="label">Blend</span>
@@ -764,7 +792,7 @@ function InspectorView(props: InspectorProps) {
             <WarpBody warp={layer.warp} onSetWarpMode={onSetWarpMode} onSetMeshSize={onSetMeshSize} onResetWarp={onResetWarp} onApplyCornerPreset={onApplyCornerPreset} />
           </InspectorSection>
           <InspectorSection title="Mask" summary={maskSummary(layer)} active={mode === "mask"} onActivate={() => onModeChange("mask")}>
-            <MaskBody layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} />
+            <MaskBody layer={layer} media={media} sourceBank={sourceBank} onUpdate={onUpdate} onDragStart={onDragStart} onDragEnd={onDragEnd} />
           </InspectorSection>
           <InspectorSection title="FX" summary={fxSummary(layer)} active={mode === "fx"} defaultOpen onActivate={() => onModeChange("fx")}>
             <FxDrawer
@@ -780,6 +808,8 @@ function InspectorView(props: InspectorProps) {
               onSetSourceMode={onSetSourceMode}
               onSetPlaylist={onSetPlaylist}
               onTriggerClip={onTriggerClip}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
             />
           </InspectorSection>
         </div>

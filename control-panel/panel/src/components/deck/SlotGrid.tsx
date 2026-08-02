@@ -22,6 +22,9 @@ export interface SlotGridProps {
   onSetContent?: (slotId: string, index: number, content: SourceBankSlot["content"]) => void;
   /** Per-slot transport write (task A9): `sourceBank.<index>.transport.<field>`. */
   onSetTransport?: (index: number, field: string, value: unknown) => void;
+  /** Drag guard (App's isDraggingRef), threaded to the inline editor's faders. */
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   /** Library origin for rendering a filled media slot's REAL thumbnail. */
   mediaBase?: string;
   /** Fired with the clicked slot's index whenever a cell is clicked (open or re-toggle),
@@ -50,7 +53,7 @@ function slotSummary(slot: SourceBankSlot, media: MediaItem[]): string | null {
  *  editor inline below the grid — `SourceBankSlotEditor`, extracted from
  *  `SourceBankPanel` — so editing keeps using the existing `onRename`/`onSetContent`
  *  write paths unchanged rather than a second, drifting implementation. */
-function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onEditSlot, mediaBase, collapsed = false, onToggleCollapse }: SlotGridProps) {
+function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetContent, onSetTransport, onDragStart, onDragEnd, onEditSlot, mediaBase, collapsed = false, onToggleCollapse }: SlotGridProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const editingSlot = editingIndex != null ? slots[editingIndex] : undefined;
@@ -141,6 +144,8 @@ function SlotGridView({ slots, media = [], cameraDevices = [], onRename, onSetCo
             onRename={onRename}
             onSetContent={onSetContent}
             onSetTransport={onSetTransport}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
           />
         </div>
       )}

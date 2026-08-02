@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Fader } from "./primitives/Fader";
+import { useFaderEcho } from "./primitives/useFaderEcho";
 import { Button } from "./primitives/Button";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { TextField } from "./primitives/TextField";
@@ -18,6 +19,10 @@ export interface TransportControlsProps {
   /** Clip duration in seconds (same telemetry relay) — lets the scrub thumb track the
    *  live playhead (position/duration) instead of sitting frozen at the last seek. */
   duration?: number;
+  /** Drag guard (App's isDraggingRef), threaded to every fader here so an in-flight
+   *  rate/scrub drag suppresses store-driven re-renders until release. */
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }
 
 // off → loop → palindrome → once → off. Mirrors VPT8's loop-mode set plus the "once"
@@ -46,6 +51,8 @@ function TransportFader({
   neutral,
   digits,
   onChange,
+  onDragStart,
+  onDragEnd,
 }: {
   label: string;
   value: number;
@@ -55,12 +62,16 @@ function TransportFader({
   neutral: number;
   digits: number;
   onChange: (v: number) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
+  const drag = useFaderEcho(onChange, onDragStart, onDragEnd);
+  const shown = drag.echo ?? value;
   return (
-    <label className="fx-control" data-neutral={value === neutral}>
+    <label className="fx-control" data-neutral={shown === neutral}>
       <span className="fx-label">{label}</span>
-      <Fader value={value} min={min} max={max} step={step} ariaLabel={label} onChange={onChange} />
-      <span className="fx-val mono">{value.toFixed(digits)}</span>
+      <Fader value={value} min={min} max={max} step={step} ariaLabel={label} onChange={drag.onChange} onDragStart={drag.onDragStart} onDragEnd={drag.onDragEnd} />
+      <span className="fx-val mono">{shown.toFixed(digits)}</span>
     </label>
   );
 }
@@ -87,7 +98,7 @@ function NumField({ value, placeholder, onCommit }: { value: number | null | und
  *  element muted (transport.vol/pan remain in the state schema for compatibility but drive
  *  nothing, see server/src/state.js), so surfacing audio faders here only misled operators
  *  into thinking they did something. Dropped 2026-07-17. */
-export function TransportControls({ transport, onUpdate, position, duration }: TransportControlsProps) {
+export function TransportControls({ transport, onUpdate, position, duration, onDragStart, onDragEnd }: TransportControlsProps) {
   const loopMode = transport.loopMode ?? "off";
   const seek = transport.seek ?? 0;
   // The scrub thumb follows the live playhead (position/duration) when playing; while the
@@ -107,7 +118,7 @@ export function TransportControls({ transport, onUpdate, position, duration }: T
   return (
     <>
       <Button label={transport.playing ? "Pause" : "Play"} onClick={() => onUpdate("playing", !transport.playing)} />
-      <TransportFader label="RATE" value={transport.rate ?? 1} min={0.1} max={4} step={0.05} neutral={1} digits={2} onChange={(v) => onUpdate("rate", v)} />
+      <TransportFader label="RATE" value={transport.rate ?? 1} min={0.1} max={4} step={0.05} neutral={1} digits={2} onChange={(v) => onUpdate("rate", v)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
       <ToggleSquare
         label={LOOP_LABEL[loopMode]}
         title="Cycle loop mode: off / loop / palindrome / once"
@@ -124,7 +135,9 @@ export function TransportControls({ transport, onUpdate, position, duration }: T
       </label>
       <label className="fx-control" data-neutral={scrubValue === 0}>
         <span className="fx-label">SCRUB</span>
-        <Fader value={scrubValue} min={0} max={1} step={0.001} ariaLabel="Scrub" onChange={onScrub} />
+        {/* Scrub keeps its own drag-value echo (scrubDrag, above) for the readout; the
+            guard hooks still thread through so a scrub drag suppresses store repaints. */}
+        <Fader value={scrubValue} min={0} max={1} step={0.001} ariaLabel="Scrub" onChange={onScrub} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         <span className="fx-val mono">{position != null ? `${position.toFixed(1)}s` : `${Math.round(scrubValue * 100)}%`}</span>
       </label>
     </>

@@ -332,6 +332,11 @@ export class SourceBank {
     for (const [key, entry] of [...this.entries]) {
       if (activeKeys.has(key)) continue;
       this._releaseElements(entry); // stops <video>/<img> AND live-camera tracks
+      // Invalidate any in-flight camera acquisition (see _decodeCameraInto's .then):
+      // without this a getUserMedia resolving AFTER the slot was reassigned/cleared
+      // (permission prompt still open) matched its original key and re-attached the
+      // stream to this orphaned entry, holding the camera open forever.
+      entry.currentUrl = null;
       if (entry.texture) this.gl.deleteTexture(entry.texture);
       this.entries.delete(key);
     }
@@ -406,6 +411,7 @@ export class SourceBank {
     const gl = this.gl;
     for (const entry of this.entries.values()) {
       this._releaseElements(entry); // stops <video>/<img> AND live-camera tracks
+      entry.currentUrl = null; // invalidate in-flight camera acquisitions (see sweep above)
       if (entry.texture) gl.deleteTexture(entry.texture);
     }
     this.entries.clear();

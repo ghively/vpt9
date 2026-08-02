@@ -68,6 +68,12 @@ test.afterAll(async () => {
 test("mask.shape=\"polygon\" gates a layer by point-in-polygon, and mask.invert flips the visible side (VPT8 parity: code/pointmask01.js's draggable mask + layermask.maxpat's pattr inv)", async ({ page }) => {
   const socket = new WebSocket(`ws://localhost:${WS_PORT}`);
   await new Promise((resolve) => socket.once("open", resolve));
+  // Remove the two seeded demo layers: this spec's masked-out assertions expect the
+  // near-black GROUND to show through, and since 8e44ed6 (demo layer-1 became a visible
+  // color placeholder instead of a broken/black video) the demo pair composites a
+  // brownish wash (~84 red) exactly where "masked out" is asserted <60.
+  await wsSend(socket, { type: "delete", path: "layers.layer-1" });
+  await wsSend(socket, { type: "delete", path: "layers.layer-2" });
   await wsSend(socket, {
     type: "create",
     path: "layers",

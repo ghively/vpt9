@@ -1,6 +1,7 @@
 import { Select } from "./primitives/Select";
 import { TextField } from "./primitives/TextField";
 import { Fader } from "./primitives/Fader";
+import { useFaderEcho } from "./primitives/useFaderEcho";
 import { TransportControls } from "./TransportControls";
 import { CameraPicker } from "./CameraPicker";
 import { rgbToHex, hexToRgb } from "./color";
@@ -38,6 +39,9 @@ export interface SourceBankSlotEditorProps {
   /** Writes one per-slot transport field (task A9): `sourceBank.<index>.transport.<field>`.
    *  `field` is relative to the transport object ("playing", "rate", "loopMode", …). */
   onSetTransport?: (index: number, field: string, value: unknown) => void;
+  /** Drag guard (App's isDraggingRef), threaded to the crossfade + transport faders. */
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }
 
 /** A/B ref picker for mix content. Offers media + other slots (original), plus Camera and
@@ -110,9 +114,14 @@ function RefPicker({
  *  type-specific controls. Extracted from `SourceBankPanel` so the compact rail
  *  `SlotGrid` can reveal the exact same controls — same markup, same write paths
  *  (`onRename`/`onSetContent`) — instead of a second, drifting implementation. */
-export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDevices = [], onRename, onSetContent, onSetTransport }: SourceBankSlotEditorProps) {
+export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDevices = [], onRename, onSetContent, onSetTransport, onDragStart, onDragEnd }: SourceBankSlotEditorProps) {
   const isMix = slot.content?.type === "mix";
   const transport = slot.transport ?? DEFAULT_SLOT_TRANSPORT;
+  const mixDrag = useFaderEcho(
+    (v) => { if (slot.content?.type === "mix") onSetContent?.(slot.id, index, { ...slot.content, mix: v } as SourceBankSlot["content"]); },
+    onDragStart,
+    onDragEnd,
+  );
   return (
     <div className="media-row source-slot-row">
       <TextField className="media-name" value={slot.name} onCommit={(v) => onRename?.(index, v)} />
@@ -174,9 +183,11 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDev
             <Fader
               value={slot.content.mix}
               ariaLabel="Crossfade amount"
-              onChange={(v) => onSetContent?.(slot.id, index, { ...slot.content, mix: v } as SourceBankSlot["content"])}
+              onChange={mixDrag.onChange}
+              onDragStart={mixDrag.onDragStart}
+              onDragEnd={mixDrag.onDragEnd}
             />
-            <span className="mono source-slot-mix-val">{Math.round(slot.content.mix * 100)}%</span>
+            <span className="mono source-slot-mix-val">{Math.round((mixDrag.echo ?? slot.content.mix) * 100)}%</span>
           </div>
         </>
       )}
@@ -185,7 +196,7 @@ export function SourceBankSlotEditor({ slot, index, media, otherSlots, cameraDev
           have no audible effect — the render-client applies play/rate/loop/scrub. */}
       {(slot.content?.type === "media" || slot.content?.type === "mix") && (
         <div className="fx-row source-slot-transport">
-          <TransportControls transport={transport} onUpdate={(field, value) => onSetTransport?.(index, field, value)} />
+          <TransportControls transport={transport} onUpdate={(field, value) => onSetTransport?.(index, field, value)} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         </div>
       )}
     </div>

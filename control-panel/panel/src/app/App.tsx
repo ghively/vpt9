@@ -239,6 +239,18 @@ export function App() {
     }, 120); // ~8 Hz
   }, []);
 
+  // The drag guard's entry/exit, shared by EVERY continuous pointer gesture in the deck:
+  // the stage's warp/mask handles (Task 6), PiP box drags, and — via the Fader
+  // primitive's onDragStart/onDragEnd — every fader (layer/Inspector opacity, FX
+  // sliders, mask numerics, transport rate/scrub, master, slot crossfade). Suppresses
+  // store-driven re-renders for the gesture's duration so a server-echoed / unrelated
+  // update never yanks the DOM out from under an in-flight drag (and a full-tree render
+  // stops burning a frame per pointer-move); endDrag forces one render to reconcile
+  // with whatever the server actually applied. Declared up here with the rerender
+  // machinery it guards — element variables below (masterBarEl etc.) reference it.
+  const beginDrag = useCallback(() => { isDraggingRef.current = true; }, []);
+  const endDrag = useCallback(() => { isDraggingRef.current = false; forceRender(); }, []);
+
   const { send: rawSend } = useSocket(wsUrl, {
     onState(next) {
       stateRef.current = next;
@@ -581,6 +593,8 @@ export function App() {
       <MasterControl
         master={state.master ?? 1}
         onChange={setMasterRemembering}
+        onDragStart={beginDrag}
+        onDragEnd={endDrag}
         onToggleBlackout={toggleBlackout}
         blind={state.blind ?? false}
         onToggleBlind={toggleBlind}
@@ -717,15 +731,6 @@ export function App() {
   const selectOutput = useCallback(() => {
     selection.setEditTarget("screen");
   }, [selection]);
-
-  // Task 6: on-stage warp/mask handles (StageSelectionOverlay) drag imperatively via
-  // WarpHandle/MaskShapeOverlay's own pointer machinery, the same way the rail-side
-  // WarpEditor's handles do — suppress store-driven re-renders for the gesture's
-  // duration (the isDraggingRef guard `rerender` already checks above) so a
-  // server-echoed update never yanks a handle out from under an in-flight drag, then
-  // force one on drag-end to reconcile with whatever the server actually applied.
-  const beginDrag = useCallback(() => { isDraggingRef.current = true; }, []);
-  const endDrag = useCallback(() => { isDraggingRef.current = false; forceRender(); }, []);
 
   // Maps StageSelectionOverlay's narrow callbacks onto the SAME layer-warp/mask
   // actions WarpEditor already uses (`moveLayerWarpPoint` / `updateLayer("mask.*")`) —
@@ -996,6 +1001,8 @@ export function App() {
       onPasteLayer={pasteLayer}
       onSetLayerPlaying={setLayerPlaying}
       onSetLayerOpacity={setLayerOpacity}
+      onDragStart={beginDrag}
+      onDragEnd={endDrag}
       hasClipboard={hasClipboard}
       onRenameLayer={renameLayer}
       onDropMedia={assignMediaToLayer}
@@ -1035,6 +1042,8 @@ export function App() {
       onRename={actions.renameSourceBankSlot}
       onSetContent={actions.setSourceBankSlotContent}
       onSetTransport={actions.setSourceBankSlotTransport}
+      onDragStart={beginDrag}
+      onDragEnd={endDrag}
       collapsed={!isMobile && railCollapsed.slots}
       onToggleCollapse={isMobile ? undefined : toggleSlotsRail}
     />
@@ -1151,6 +1160,8 @@ export function App() {
         onSetWarpMode={onInspectorSetWarpMode}
         onSetMeshSize={onInspectorSetMeshSize}
         onResetWarp={onInspectorResetWarp}
+        onDragStart={beginDrag}
+        onDragEnd={endDrag}
       />
     );
   const showDrawerEl = (

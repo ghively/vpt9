@@ -12,9 +12,17 @@ export function compileShader(gl, type, source) {
 
 export function createProgram(gl, vertSrc, fragSrc) {
   const program = gl.createProgram();
-  gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, vertSrc));
-  gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, fragSrc));
+  const vert = compileShader(gl, gl.VERTEX_SHADER, vertSrc);
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, fragSrc);
+  gl.attachShader(program, vert);
+  gl.attachShader(program, frag);
   gl.linkProgram(program);
+  // Flag the shader objects for deletion now that the program is linked (idiomatic GL:
+  // they stay alive while attached and are freed with the program). Without this every
+  // createProgram call — e.g. each FX-chain rebuild on a canvas resize — leaked two
+  // WebGLShader objects for the context's lifetime.
+  gl.deleteShader(vert);
+  gl.deleteShader(frag);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     throw new Error(`Program link failed: ${gl.getProgramInfoLog(program)}`);
   }

@@ -1,17 +1,26 @@
 import { createProgram, createFullscreenQuad, bindFullscreenQuad, createFramebuffer } from "./gl-utils.js";
 import { ScreenWarp } from "./warp.js";
 
-// Per-layer effects chain — the WebGL port of vlayer.maxpat's processing stages, in the
-// same order: flip → tile → zoom/pan → brcosa + edge-blend → blur → motion-blur → mask
-// → per-layer warp. Mask precedes warp to match VPT8's vlayer order (mask, then mesh),
-// so the mask deforms along with the warp. (Blend-mode compositing stays in the
+// Per-layer effects chain — the WebGL port of vlayer.maxpat's processing stages, in
+// VPT8's actual traced wiring order (docs/architecture/03-layer-engine-instance.md,
+// "p flip": flip → tile → zoom → blur → mblur → brcosa → layermask → edgeblend → mesh):
+// transform (flip/tile/zoom/pan/rotation) → blur → motion-blur → color grade (brcosa +
+// edge-blend) → mask → per-layer warp. Grading runs AFTER the blurs on purpose: the
+// intermediate FBOs are RGBA8 (values clamp to 0..1 on every write), so grading first
+// clips highlights that a blur should still have been able to spread — the two orders
+// are NOT equivalent once brightness/contrast push values out of range. Edge-blend rides
+// in the color pass (VPT8 puts it just after the mask; both are pure multiplicative
+// alpha ramps, so they commute with the mask and with brcosa's rgb-only grade — one
+// fewer pass, same pixels). Mask precedes warp to match VPT8's vlayer order (mask, then
+// mesh), so the mask deforms along with the warp. (Blend-mode compositing stays in the
 // LayerStack blend pass; the separate screen-level mesh warp — the house master fader —
 // still lives in ScreenWarp, reused here via its generalized offscreen-target render().)
 //
 // Cost model: a layer whose fx are all defaults never enters this file (see
-// fxNeedsChain). When any stage is active, the point-wise stages (flip/tile/zoom/pan/
-// brcosa/edge-blend) are ONE shader pass; gaussian blur adds two separable passes and
-// motion-blur one feedback pass, each only when non-zero.
+// fxNeedsChain). When any stage is active, the transform stage is ONE shader pass; the
+// color pass (brcosa/hue + edge-blend) runs only when one of those knobs is non-neutral;
+// gaussian blur adds two separable passes and motion-blur one feedback pass, each only
+// when non-zero.
 
 // Blur/slide tap-spread reference resolution: the internal compositing size these
 // effects were originally calibrated at. Keeping the spread a fixed fraction of the
@@ -28,9 +37,11 @@ void main() {
   gl_Position = vec4(a_position, 0.0, 1.0);
 }`;
 
-// Scene-space orientation note: y=1 is the top (videos are uploaded with FLIP_Y and the
-// screen warp flips back) — so the "top" edge-blend ramp keys off (1 - v_uv.y).
-const POINT_FRAG = `#version 300 es
+// Transform-only pass: flip/tile/zoom/pan/rotation (+ color-fill synthesis). Grading
+// (brcosa/hue/edge-blend) deliberately lives in the SEPARATE color pass below so the
+// blur/motion-blur passes can run between them, matching VPT8's traced stage order —
+// see the module doc above.
+const TRANSFORM_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_src;
@@ -43,28 +54,12 @@ uniform vec2 u_zoomXY;     // non-uniform zoom multipliers (on top of u_zoom), 1
 uniform vec2 u_anchor;     // zoom/rotate pivot, in uv space; (0.5, 0.5) = center
 uniform float u_rotation;  // radians, about u_anchor
 uniform vec2 u_pan;
-uniform vec3 u_brcosa;     // brightness, contrast, saturation
-uniform float u_hue;       // hue rotation in radians, 0 = unchanged
-uniform vec4 u_edges;      // left, right, top, bottom fractional widths
-uniform float u_edgeGamma;
-uniform bool u_edgeInvert; // fade the CENTER instead of the edges (VPT8 tr.edgeblend01.jxs)
 // Per-stage enable/bypass (task A7 — VPT8 parity: a "pattr on" per stage, decoupled from
-// its value so a preset amount can be toggled off without losing it). All default true —
+// its value so a preset amount can be toggled off without losing it). Defaults true —
 // an untouched layer (fx.enabled absent, or every flag true) renders exactly as before
-// these uniforms existed.
+// this uniform existed.
 uniform bool u_enTransform; // gates flip/tile/zoom/pan/rotation
-uniform bool u_enBrcosa;    // gates brightness/contrast/saturation
-uniform bool u_enEdge;      // gates the edge-blend ramp (+ invert)
 out vec4 outColor;
-
-// Hue rotation about the achromatic (1,1,1) axis (Rodrigues rotation). At a==0 this
-// returns col exactly (cos 0 = 1, sin 0 = 0), so a neutral hue is byte-identical and the
-// existing saturation luma-mix below is untouched.
-vec3 hueRotate(vec3 col, float a) {
-  const vec3 k = vec3(0.57735026); // normalize(vec3(1.0))
-  float ca = cos(a);
-  return col * ca + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - ca);
-}
 
 void main() {
   // Inverse of the image-space op chain flip -> tile -> rotate/zoom/pan: undo pan, then
@@ -105,6 +100,38 @@ void main() {
   }
 
   vec4 c = u_isColor ? vec4(u_color, 1.0) : texture(u_src, clamp(suv, 0.0, 1.0));
+  outColor = vec4(c.rgb, c.a * border);
+}`;
+
+// Color-grade pass: brcosa/hue + edge-blend, run AFTER blur/motion-blur (VPT8 order —
+// see the module doc). Scene-space orientation note: y=1 is the top (videos are
+// uploaded with FLIP_Y and the screen warp flips back) — so the "top" edge-blend ramp
+// keys off (1 - v_uv.y). Skipped entirely (no pass) when every knob here is neutral;
+// see _colorPassNeeded.
+const COLOR_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_src;
+uniform vec3 u_brcosa;     // brightness, contrast, saturation
+uniform float u_hue;       // hue rotation in radians, 0 = unchanged
+uniform vec4 u_edges;      // left, right, top, bottom fractional widths
+uniform float u_edgeGamma;
+uniform bool u_edgeInvert; // fade the CENTER instead of the edges (VPT8 tr.edgeblend01.jxs)
+uniform bool u_enBrcosa;   // gates brightness/contrast/saturation (task A7 bypass)
+uniform bool u_enEdge;     // gates the edge-blend ramp (+ invert)
+out vec4 outColor;
+
+// Hue rotation about the achromatic (1,1,1) axis (Rodrigues rotation). At a==0 this
+// returns col exactly (cos 0 = 1, sin 0 = 0), so a neutral hue is byte-identical and the
+// existing saturation luma-mix below is untouched.
+vec3 hueRotate(vec3 col, float a) {
+  const vec3 k = vec3(0.57735026); // normalize(vec3(1.0))
+  float ca = cos(a);
+  return col * ca + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - ca);
+}
+
+void main() {
+  vec4 c = texture(u_src, v_uv);
 
   // brcosa: contrast about mid-grey, then brightness gain, then hue rotation, then
   // saturation vs. luma. Hue is gated on !=0.0 so a neutral layer is byte-identical.
@@ -132,7 +159,7 @@ void main() {
     if (u_edgeInvert && anyEdge) e = 1.0 - e;
   }
 
-  outColor = vec4(c.rgb, c.a * border * e);
+  outColor = vec4(c.rgb, c.a * e);
 }`;
 
 // Mask bake: same formula as layers.js's former maskAlpha(), moved here so masking
@@ -297,18 +324,24 @@ export class FxPasses {
   constructor(gl) {
     this.gl = gl;
     this.quad = createFullscreenQuad(gl);
-    this.point = createProgram(gl, QUAD_VERT, POINT_FRAG);
+    this.transform = createProgram(gl, QUAD_VERT, TRANSFORM_FRAG);
+    this.color = createProgram(gl, QUAD_VERT, COLOR_FRAG);
     this.blur = createProgram(gl, QUAD_VERT, BLUR_FRAG);
     this.feedback = createProgram(gl, QUAD_VERT, FEEDBACK_FRAG);
     this.mask = createProgram(gl, QUAD_VERT, MASK_FRAG);
     this.u = {
-      point: Object.fromEntries(
+      transform: Object.fromEntries(
         [
           "u_src", "u_isColor", "u_color", "u_flip", "u_tile",
           "u_zoom", "u_zoomXY", "u_anchor", "u_rotation", "u_pan",
-          "u_brcosa", "u_hue", "u_edges", "u_edgeGamma", "u_edgeInvert",
-          "u_enTransform", "u_enBrcosa", "u_enEdge",
-        ].map((name) => [name, gl.getUniformLocation(this.point, name)])
+          "u_enTransform",
+        ].map((name) => [name, gl.getUniformLocation(this.transform, name)])
+      ),
+      color: Object.fromEntries(
+        [
+          "u_src", "u_brcosa", "u_hue", "u_edges", "u_edgeGamma", "u_edgeInvert",
+          "u_enBrcosa", "u_enEdge",
+        ].map((name) => [name, gl.getUniformLocation(this.color, name)])
       ),
       blur: Object.fromEntries(
         ["u_src", "u_dir"].map((name) => [name, gl.getUniformLocation(this.blur, name)])
@@ -338,7 +371,8 @@ export class FxChain {
     this.passes = passes;
     this.width = width;
     this.height = height;
-    this.pointFbo = createFramebuffer(gl, width, height);
+    this.transformFbo = createFramebuffer(gl, width, height);
+    this.colorFbo = null;    // allocated on first graded frame (brcosa/hue/edge active)
     this.blurFbo = null;     // pair, allocated on first blur
     this.feedbackFbo = null; // pair, allocated on first motion-blur
     this.feedbackIdx = 0;
@@ -356,11 +390,10 @@ export class FxChain {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  _runPoint(srcTexture, fx, isColor, color) {
+  _runTransform(srcTexture, fx, isColor, color) {
     const gl = this.gl;
-    const u = this.passes.u.point;
-    const eb = fx.edgeBlend ?? {};
-    gl.useProgram(this.passes.point);
+    const u = this.passes.u.transform;
+    gl.useProgram(this.passes.transform);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, srcTexture);
     gl.uniform1i(u.u_src, 0);
@@ -373,17 +406,48 @@ export class FxChain {
     gl.uniform2f(u.u_anchor, fx.anchorX ?? 0.5, fx.anchorY ?? 0.5);
     gl.uniform1f(u.u_rotation, ((fx.rotationDeg ?? 0) * Math.PI) / 180);
     gl.uniform2f(u.u_pan, fx.panX ?? 0, fx.panY ?? 0);
+    gl.uniform1i(u.u_enTransform, fx.enabled?.transform !== false ? 1 : 0);
+    this._draw(this.passes.transform, this.transformFbo);
+    return this.transformFbo.texture;
+  }
+
+  // True when the color pass would change any pixel — brcosa/hue non-neutral (and the
+  // Color stage not bypassed), or an edge-blend ramp actually configured (and its stage
+  // not bypassed). When false the pass is skipped outright: identity passes cost a
+  // full-frame draw and (worse) an extra RGBA8 quantization round-trip.
+  _colorPassNeeded(fx) {
+    const en = fx.enabled ?? {};
+    const brcosaActive =
+      en.color !== false &&
+      ((fx.brightness ?? 1) !== 1 || (fx.contrast ?? 1) !== 1 ||
+        (fx.saturation ?? 1) !== 1 || (fx.hue ?? 0) !== 0);
+    const eb = fx.edgeBlend ?? {};
+    // invert with no edge widths set is a shader-level no-op (see COLOR_FRAG's anyEdge).
+    const edgeActive =
+      en.edgeBlend !== false &&
+      ((eb.left ?? 0) > 0 || (eb.right ?? 0) > 0 || (eb.top ?? 0) > 0 || (eb.bottom ?? 0) > 0);
+    return brcosaActive || edgeActive;
+  }
+
+  _runColor(srcTexture, fx) {
+    const gl = this.gl;
+    const u = this.passes.u.color;
+    const eb = fx.edgeBlend ?? {};
+    const en = fx.enabled ?? {};
+    if (!this.colorFbo) this.colorFbo = createFramebuffer(gl, this.width, this.height);
+    gl.useProgram(this.passes.color);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, srcTexture);
+    gl.uniform1i(u.u_src, 0);
     gl.uniform3f(u.u_brcosa, fx.brightness ?? 1, fx.contrast ?? 1, fx.saturation ?? 1);
     gl.uniform1f(u.u_hue, ((fx.hue ?? 0) * Math.PI) / 180);
     gl.uniform4f(u.u_edges, eb.left ?? 0, eb.right ?? 0, eb.top ?? 0, eb.bottom ?? 0);
     gl.uniform1f(u.u_edgeGamma, eb.gamma ?? 2);
     gl.uniform1i(u.u_edgeInvert, eb.invert ? 1 : 0);
-    const en = fx.enabled ?? {};
-    gl.uniform1i(u.u_enTransform, en.transform !== false ? 1 : 0);
     gl.uniform1i(u.u_enBrcosa, en.color !== false ? 1 : 0);
     gl.uniform1i(u.u_enEdge, en.edgeBlend !== false ? 1 : 0);
-    this._draw(this.passes.point, this.pointFbo);
-    return this.pointFbo.texture;
+    this._draw(this.passes.color, this.colorFbo);
+    return this.colorFbo.texture;
   }
 
   _runBlur(srcTexture, amount) {
@@ -525,7 +589,7 @@ export class FxChain {
    *  For color layers the point pass doubles as the fill synthesizer. */
   process(srcTexture, fx, { isColor = false, color = [0, 0, 0], mask = null, warp = null, matteTexture = null } = {}) {
     const f = fx ?? {};
-    let tex = this._runPoint(srcTexture, f, isColor, color);
+    let tex = this._runTransform(srcTexture, f, isColor, color);
     // Color stage bypass (task A7): blur + motion-blur (trail/slide) + brcosa (brcosa is
     // gated in-shader, see u_enBrcosa) all live under the Color section's single on/off.
     const colorEnabled = f.enabled?.color !== false;
@@ -537,6 +601,9 @@ export class FxChain {
         ? this._runSlide(tex, f.motionBlur, f.motionBlurAngle ?? 0)
         : this._runFeedback(tex, f.motionBlur);
     }
+    // Grade AFTER the blurs (VPT8's traced order — see the module doc); skipped whenever
+    // every grade/edge knob is neutral so ungraded shows pay no extra pass.
+    if (this._colorPassNeeded(f)) tex = this._runColor(tex, f);
     if (mask?.enabled) tex = this._runMask(tex, mask, matteTexture);
     if (warp && (warp.mode === "mesh" || warp.corners)) tex = this._runWarp(tex, warp);
     return tex;
@@ -544,7 +611,7 @@ export class FxChain {
 
   dispose() {
     const gl = this.gl;
-    for (const fbo of [this.pointFbo, ...(this.blurFbo ?? []), ...(this.feedbackFbo ?? []), this.maskFbo, this.warpFbo]) {
+    for (const fbo of [this.transformFbo, this.colorFbo, ...(this.blurFbo ?? []), ...(this.feedbackFbo ?? []), this.maskFbo, this.warpFbo]) {
       if (!fbo) continue;
       gl.deleteFramebuffer(fbo.framebuffer);
       gl.deleteTexture(fbo.texture);
@@ -552,6 +619,7 @@ export class FxChain {
     // The ScreenWarp built in the constructor owns a GL program + 3 buffers; free them too.
     this.warpRenderer?.dispose();
     this.warpRenderer = null;
+    this.colorFbo = null;
     this.blurFbo = null;
     this.feedbackFbo = null;
     this.maskFbo = null;

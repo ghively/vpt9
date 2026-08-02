@@ -1,4 +1,5 @@
 import { Fader } from "./primitives/Fader";
+import { useFaderEcho } from "./primitives/useFaderEcho";
 import { ToggleSquare } from "./primitives/ToggleSquare";
 import { Button } from "./primitives/Button";
 import { Select } from "./primitives/Select";
@@ -34,6 +35,10 @@ export interface FxDrawerProps {
   onSetPlaylist?: (items: PlaylistItem[]) => void;
   /** Manual clip trigger (task A15): advance/retreat/randomize the playlist cursor live. */
   onTriggerClip?: (which: "next" | "prev" | "random") => void;
+  /** Drag guard (App's isDraggingRef), threaded to every fader in the drawer so an
+   *  in-flight slider drag suppresses store-driven re-renders until release. */
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }
 
 // Per-source downscale presets (task A15 — VPT8's `p adapt` F..1/16). Value is the integer
@@ -96,14 +101,20 @@ function FxSlider({
   spec,
   root,
   onUpdate,
+  onDragStart,
+  onDragEnd,
 }: {
   spec: SliderSpec;
   root: Record<string, unknown>;
   onUpdate?: FxDrawerProps["onUpdate"];
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const value = readField(root, spec.field);
+  const drag = useFaderEcho((v) => onUpdate?.(spec.field, v), onDragStart, onDragEnd);
+  const shown = drag.echo ?? value;
   return (
-    <label className="fx-control" data-neutral={value === spec.neutral}>
+    <label className="fx-control" data-neutral={shown === spec.neutral}>
       <span className="fx-label">{spec.label}</span>
       <Fader
         value={value}
@@ -111,9 +122,11 @@ function FxSlider({
         max={spec.max}
         step={spec.step ?? 0.01}
         ariaLabel={spec.label}
-        onChange={(v) => onUpdate?.(spec.field, v)}
+        onChange={drag.onChange}
+        onDragStart={drag.onDragStart}
+        onDragEnd={drag.onDragEnd}
       />
-      <span className="fx-val mono">{spec.step === 1 ? value.toFixed(0) : value.toFixed(2)}</span>
+      <span className="fx-val mono">{spec.step === 1 ? shown.toFixed(0) : shown.toFixed(2)}</span>
     </label>
   );
 }
@@ -263,6 +276,8 @@ export function FxDrawer({
   onSetSourceMode,
   onSetPlaylist,
   onTriggerClip,
+  onDragStart,
+  onDragEnd,
 }: FxDrawerProps) {
   const fxRoot = fx as unknown as Record<string, unknown>;
   return (
@@ -285,7 +300,7 @@ export function FxDrawer({
           onClick={() => onUpdate?.("fx.flipV", !fx.flipV)}
         />
         {TRANSFORM_SLIDERS.map((spec) => (
-          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
+          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         ))}
       </FxSection>
       <FxSection
@@ -294,7 +309,7 @@ export function FxDrawer({
         onToggleEnabled={() => onUpdate?.("fx.enabled.color", !(fx.enabled?.color ?? true))}
       >
         {COLOR_SLIDERS.map((spec) => (
-          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
+          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         ))}
         <label className="fx-control" data-neutral={(fx.motionBlurMode ?? "trail") === "trail"}>
           <span className="fx-label">BLUR MODE</span>
@@ -312,6 +327,8 @@ export function FxDrawer({
             spec={{ label: "ANGLE", field: "fx.motionBlurAngle", min: -180, max: 180, step: 1, neutral: 0 }}
             root={fxRoot}
             onUpdate={onUpdate}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
           />
         )}
       </FxSection>
@@ -321,7 +338,7 @@ export function FxDrawer({
         onToggleEnabled={() => onUpdate?.("fx.enabled.edgeBlend", !(fx.enabled?.edgeBlend ?? true))}
       >
         {EDGE_SLIDERS.map((spec) => (
-          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} />
+          <FxSlider key={spec.field} spec={spec} root={fxRoot} onUpdate={onUpdate} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         ))}
         <ToggleSquare
           label="INV"
@@ -337,6 +354,8 @@ export function FxDrawer({
             position={transportPosition}
             duration={transportDuration}
             onUpdate={(field, value) => onUpdate?.(`transport.${field}`, value)}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
           />
         </FxSection>
       )}
