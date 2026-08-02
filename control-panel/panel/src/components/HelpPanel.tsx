@@ -12,6 +12,8 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
       ["1 – 9", "Recall look (scene preset) 1–9"],
       ["B", "Toggle Blind (edit off-air, then Go Live)"],
       ["F", "Focus mode (hide rails for a clean stage)"],
+      ["Ctrl/Cmd + Z", "Undo the last property edit (this tab only)"],
+      ["Ctrl/Cmd + Shift + Z", "Redo"],
       ["Arrow keys", "Nudge a selected warp point / mask vertex (Shift = coarse)"],
       ["Delete / Backspace", "Remove the selected polygon-mask vertex"],
       ["Ctrl + drag", "Snap a warp handle to the grid"],

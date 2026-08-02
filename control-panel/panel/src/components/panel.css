@@ -375,6 +375,17 @@ html, body { height: 100%; }
   .mask-shape__feather {
     position: absolute; border: 1px dashed var(--beam-line); opacity: 0.5; pointer-events: none;
   }
+  /* Live x/y/radius readout while dragging the body or an edge handle — same idea as
+   * WarpHandle's .handle__badge, which the polygon vertices already get for free. */
+  .mask-shape__badge {
+    /* left/top are set inline (JS tracks the shape's live position every drag frame);
+     * the transform just centers the badge on that point and floats it above. */
+    position: absolute; transform: translate(-50%, -100%); margin-top: -6px;
+    font-size: 8px; font-weight: 700; letter-spacing: 0.08em; line-height: 1;
+    padding: 2px 4px; white-space: nowrap; pointer-events: none;
+    background: var(--panel-sunken); border: 1px solid var(--beam-line); color: var(--beam);
+    border-radius: var(--radius-sm);
+  }
   .mask-shape__poly {
     position: absolute;
     inset: 0;

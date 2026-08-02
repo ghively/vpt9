@@ -1051,6 +1051,32 @@
 .field > .label { color: var(--muted-dim); font-size: 9px; }
 .field .row { display: flex; align-items: center; gap: 8px; }
 .field .row input[type="range"] { flex: 1; min-width: 60px; }
+/* Click-to-edit numeric readout (task: MapMap-style "number boxes" — typing an exact
+ * value sidesteps drag precision entirely). `.fader-readout` is the plain display state,
+ * a real <button> so it's keyboard-reachable; `.fader-readout-edit` replaces it in place
+ * while typing. */
+.fader-readout {
+  min-width: 40px;
+  text-align: right;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 4px;
+  color: inherit;
+  font-size: inherit;
+  cursor: text;
+}
+.fader-readout:hover, .fader-readout:focus-visible { border-color: var(--hairline); background: var(--panel-raised); }
+.fader-readout-edit {
+  width: 52px;
+  text-align: right;
+  background: var(--panel-raised);
+  border: 1px solid var(--beam);
+  border-radius: var(--radius-sm);
+  padding: 2px 4px;
+  color: var(--text);
+  font: inherit;
+}
 
 /* Warp / Mask / FX sections — the flattened replacement for the old exclusive segment:
  * every section header is ALWAYS visible (title + live summary + chevron), only the

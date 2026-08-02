@@ -128,6 +128,20 @@ export function applyDelete(state: PanelState, path: string): boolean {
   return true;
 }
 
+/** Read-only dotted-path lookup (undo/redo history capture in App.tsx's `send` wrapper
+ *  needs the value at a path BEFORE applyUpdate overwrites it). Same prototype-pollution
+ *  guard as the write paths above; returns undefined for anything missing rather than
+ *  throwing, since a path can legitimately point at a leaf that doesn't exist yet. */
+export function readAtPath(state: unknown, path: string): unknown {
+  let node: unknown = state;
+  for (const key of path.split(".")) {
+    if (UNSAFE_KEYS.has(key)) return undefined;
+    if (node == null || typeof node !== "object" || !Object.hasOwn(node, key)) return undefined;
+    node = (node as Record<string, unknown>)[key];
+  }
+  return node;
+}
+
 /** Batch of updates (server fade/LFO engine ticks): apply all, report if any landed. */
 export function applyBatch(state: PanelState, updates: Array<{ path: string; value: unknown }>): boolean {
   let changed = false;

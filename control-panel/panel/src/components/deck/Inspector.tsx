@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useRef, useState, type ReactNode } from "react";
 import { Select } from "../primitives/Select";
 import { Fader } from "../primitives/Fader";
 import { useFaderEcho } from "../primitives/useFaderEcho";
@@ -507,10 +507,66 @@ function FaderRow({
   onDragEnd?: () => void;
 }) {
   const drag = useFaderEcho(onChange, onDragStart, onDragEnd);
+  const displayValue = drag.echo ?? value;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Escape cancels without committing — but removing a focused input from the DOM also
+  // fires a native blur, which would otherwise commit the draft anyway. This skips that
+  // one blur.
+  const skipNextBlurRef = useRef(false);
+
+  // Typing an exact value edits the RAW number (e.g. "0.72"), not the formatted display
+  // string (e.g. "72%") — `format` isn't invertible in general (opacity's is lossy:
+  // Math.round(v*100)), so the input always shows/parses the underlying value directly.
+  const commit = () => {
+    if (skipNextBlurRef.current) {
+      skipNextBlurRef.current = false;
+      return;
+    }
+    const parsed = Number(draft);
+    if (Number.isFinite(parsed)) {
+      const clamped = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed));
+      onChange(clamped);
+    }
+    setEditing(false);
+  };
+  const cancel = () => {
+    skipNextBlurRef.current = true;
+    setEditing(false);
+  };
+
   return (
     <div className="row">
       <Fader value={value} min={min} max={max} step={step} ariaLabel={ariaLabel} onChange={drag.onChange} onDragStart={drag.onDragStart} onDragEnd={drag.onDragEnd} />
-      <span className="mono">{format(drag.echo ?? value)}</span>
+      {editing ? (
+        <input
+          type="text"
+          inputMode="decimal"
+          className="mono fader-readout-edit"
+          aria-label={`${ariaLabel} — exact value`}
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            else if (e.key === "Escape") cancel();
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className="mono fader-readout"
+          aria-label={`${ariaLabel} — click to type an exact value`}
+          onClick={() => {
+            setDraft(String(displayValue));
+            setEditing(true);
+          }}
+        >
+          {format(displayValue)}
+        </button>
+      )}
     </div>
   );
 }
@@ -533,9 +589,21 @@ function MaskBody({
   const mask = layer.mask;
   const isPolygon = mask.shape === "polygon";
   const hasMatte = Boolean(mask.source);
+  // Same relief-valve as WarpBody's Reset: an imprecise drag on the mask circle/polygon
+  // shouldn't require hand-dialing every fader back. Sent as a single whole-`mask` write
+  // (not four separate cx/cy/rx/ry updates) so it lands — and undoes — as one step.
+  const onResetMask = () => {
+    if (isPolygon) onUpdate?.("mask.points", DEFAULT_POLYGON);
+    else onUpdate?.("mask", { ...mask, cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4 });
+  };
   return (
     <>
-      <div className="subhead">Mask shape</div>
+      <div className="subhead">
+        Mask shape
+        <button type="button" className="rst" onClick={onResetMask}>
+          Reset
+        </button>
+      </div>
       <div className="mini">
         <span className="label">Enabled</span>
         <TogglePill

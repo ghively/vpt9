@@ -36,6 +36,12 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
   const rootRef = useRef<HTMLDivElement>(null);
   const shapeRef = useRef<HTMLDivElement>(null);
   const featherRef = useRef<HTMLDivElement>(null);
+  const badgeRef = useRef<HTMLDivElement>(null);
+  // How many of the body/right-edge/bottom-edge handles are mid-drag right now (a second
+  // pointer could grab a different handle than the one already down) — the live badge
+  // shows while this is >0. A plain counter, not a boolean: two concurrent grabs must
+  // both release before the badge hides.
+  const activeDragsRef = useRef(0);
   const geom = useRef({ cx: mask.cx, cy: mask.cy, rx: mask.rx, ry: mask.ry, feather: mask.feather });
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   geom.current = { cx: mask.cx, cy: mask.cy, rx: mask.rx, ry: mask.ry, feather: mask.feather };
@@ -100,6 +106,16 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
       featherNode.style.height = pct((ry + feather) * 2);
       featherNode.style.borderRadius = mask.shape === "rect" ? "2px" : "50%";
     }
+    // Same live-readout idea as WarpHandle's `.handle__badge`: the body/edge drags below
+    // have no per-handle badge of their own (unlike the polygon vertices, which already
+    // get one for free via WarpHandle), so this floats above the shape instead — the gap
+    // that let a mis-placed mask center go unnoticed until it visibly landed wrong.
+    const badge = badgeRef.current;
+    if (badge) {
+      badge.style.left = pct(cx);
+      badge.style.top = pct(cy - ry);
+      badge.textContent = `x ${cx.toFixed(2)} · y ${cy.toFixed(2)} · r ${rx.toFixed(2)}×${ry.toFixed(2)}`;
+    }
   };
 
   // `apply` mutates geom.current (so paint() tracks every raw pointer event) and returns
@@ -125,6 +141,9 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
     target.dataset.dragging = "true";
     target.setPointerCapture(event.pointerId);
     onDragStart?.();
+    activeDragsRef.current += 1;
+    if (badgeRef.current) badgeRef.current.style.display = "block";
+    paint(); // show the badge at the pre-drag position immediately, not just on first move
     const rect = stage.getBoundingClientRect();
     let raf = 0;
     let pending: Partial<Pick<Mask, "cx" | "cy" | "rx" | "ry">> | null = null;
@@ -151,6 +170,8 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onUp);
       target.removeEventListener("pointercancel", onUp);
+      activeDragsRef.current = Math.max(0, activeDragsRef.current - 1);
+      if (activeDragsRef.current === 0 && badgeRef.current) badgeRef.current.style.display = "none";
       onDragEnd?.();
     };
     target.addEventListener("pointermove", onMove);
@@ -282,6 +303,10 @@ export function MaskShapeOverlay({ mask, onDragStart, onChange, onDragEnd }: Mas
               onPointerDown={(e) => startDrag(e, (_nx, ny) => { const ry = clampR(ny - geom.current.cy); geom.current.ry = ry; return { ry }; })}
             />
           </div>
+          {/* Positioned in the same 0..1 stage space as .mask-shape itself (not nested
+           *  inside it), so it tracks the shape regardless of which handle is dragging.
+           *  Hidden by default; startDrag shows it for the duration of the gesture. */}
+          <div ref={badgeRef} className="mask-shape__badge mono" style={{ display: "none" }} aria-hidden="true" />
         </>
       )}
     </div>

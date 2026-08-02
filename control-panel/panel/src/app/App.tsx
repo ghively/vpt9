@@ -42,7 +42,7 @@ import { layerQuad, pickTopLayer } from "../components/deck/layerGeometry";
 import { mediaSourceUrl, type MediaDragPayload } from "../components/deck/dnd";
 import { addToCollection } from "../components/collections";
 import type { Layer, MediaItem } from "../components/types";
-import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, type PanelState } from "./store";
+import { applyBatch, applyCreate, applyDelete, applyUpdate, emptyState, readAtPath, type PanelState } from "./store";
 import { useSocket, type SocketMessage } from "./useSocket";
 import { usePreviewBus } from "./usePreviewBus";
 import { useMidi } from "./useMidi";
@@ -86,6 +86,26 @@ const LAYER_TARGET_FIELDS: Array<[string, string]> = [
   ["mask.ry", "mask size y"],
   ["mask.feather", "mask feather"],
 ];
+
+// Undo/redo history (Ctrl+Z / Ctrl+Shift+Z): local to this operator's tab, not a shared
+// server-side stack — with multiple panels/screens connected live, a shared stack would
+// let one operator's Ctrl+Z yank back an edit someone else just made. Scope is
+// property-path "update" writes only (mask/warp/fx/opacity/etc, the drag-driven edits
+// that prompted this) — structural create/delete (add/remove layer, presets) is out of
+// scope for now. Rapid same-path writes (a drag streams one per pointer-move, typing one
+// per keystroke) coalesce into a single undo step within COALESCE_MS of each other. Kept
+// short: a live drag's events land far faster than this (each refreshes the window, so a
+// slow multi-second drag still coalesces fine), but two DELIBERATE one-shot commits (type
+// a value, hit Enter, retype, hit Enter again) are discrete edits that should each get
+// their own undo step even if they happen in quick succession.
+const UNDO_COALESCE_MS = 300;
+const UNDO_MAX_DEPTH = 50;
+interface HistoryEntry {
+  path: string;
+  prev: unknown;
+  next: unknown;
+  at: number;
+}
 
 function buildTargetOptions(state: PanelState): TargetOption[] {
   const options: TargetOption[] = [{ value: "master", label: "master dim", group: "Global" }];
@@ -317,6 +337,33 @@ export function App() {
     },
   });
 
+  // Undo/redo stacks (see UNDO_COALESCE_MS comment above). Refs, not state — recording a
+  // history entry must never itself trigger a render; `undo`/`redo` re-render via the same
+  // `send` → applyUpdate → rerender path every other write already uses.
+  const undoStackRef = useRef<HistoryEntry[]>([]);
+  const redoStackRef = useRef<HistoryEntry[]>([]);
+  // Set around undo()/redo()'s own send() call so replaying a past value doesn't get
+  // recorded as a brand-new edit (which would leave you unable to redo — undoing would
+  // just push another undo entry that re-undoes itself).
+  const suppressHistoryRef = useRef(false);
+
+  const recordHistory = useCallback((path: string, prev: unknown, next: unknown) => {
+    if (suppressHistoryRef.current || prev === next) return;
+    const stack = undoStackRef.current;
+    const top = stack[stack.length - 1];
+    const now = Date.now();
+    if (top && top.path === path && now - top.at < UNDO_COALESCE_MS) {
+      // Extend the in-progress gesture (same drag/typing burst) instead of stacking a
+      // separate undo step per pointer-move/keystroke.
+      top.next = structuredClone(next);
+      top.at = now;
+    } else {
+      stack.push({ path, prev: structuredClone(prev), next: structuredClone(next), at: now });
+      if (stack.length > UNDO_MAX_DEPTH) stack.shift();
+    }
+    redoStackRef.current = []; // a fresh edit invalidates whatever was available to redo
+  }, []);
+
   // Optimistic local echo: apply an outgoing leaf update to the local mirror immediately.
   // The control then reflects the operator's input right away, and — crucially — a
   // concurrent re-render (e.g. a 30 Hz LFO/fade batch) reads the just-set value instead of
@@ -324,6 +371,11 @@ export function App() {
   // write; that echo no-ops (applyUpdate returns false when the value is already current).
   const send = useCallback(
     (message: SocketMessage) => {
+      const isPathUpdate = message.type === "update" && typeof message.path === "string";
+      // Read the pre-write value BEFORE rawSend/applyUpdate below can mutate it — this is
+      // the only point where "current" and "about to become" are both available.
+      const prevForHistory =
+        isPathUpdate && !suppressHistoryRef.current ? readAtPath(stateRef.current, message.path as string) : undefined;
       const sent = rawSend(message);
       // Only mirror locally when the write actually went out. While disconnected, applying
       // it would show a change the server never received, which the reconnect snapshot then
@@ -335,11 +387,28 @@ export function App() {
         // mirror but left the UI stale until the next unrelated message. Coalesced and
         // drag-guarded by `rerender`, so pointer-rate writes stay cheap.
         if (applyUpdate(stateRef.current, message.path, message.value)) rerender();
+        if (!suppressHistoryRef.current) recordHistory(message.path, prevForHistory, message.value);
       }
       return sent;
     },
-    [rawSend, rerender],
+    [rawSend, rerender, recordHistory],
   );
+  const undo = useCallback(() => {
+    const entry = undoStackRef.current.pop();
+    if (!entry) return;
+    suppressHistoryRef.current = true;
+    send({ type: "update", path: entry.path, value: entry.prev });
+    suppressHistoryRef.current = false;
+    redoStackRef.current.push(entry);
+  }, [send]);
+  const redo = useCallback(() => {
+    const entry = redoStackRef.current.pop();
+    if (!entry) return;
+    suppressHistoryRef.current = true;
+    send({ type: "update", path: entry.path, value: entry.next });
+    suppressHistoryRef.current = false;
+    undoStackRef.current.push(entry);
+  }, [send]);
   const getState = useCallback(() => stateRef.current, []);
   const actions = useMemo(() => createActions(send, getState), [send, getState]);
   // MIDI-learn wiring runs entirely on its own effect (WebMIDI listeners -> `send`);
@@ -427,13 +496,15 @@ export function App() {
     actions.savePreset(`Look ${n}`);
   }, [actions]);
 
-  // Show-control keyboard shortcuts: 1-9 fire looks, B toggles blind, F toggles focus.
-  // Guarded off anything editable (typing a preset name must not fire look 1); arrows
-  // are deliberately NOT handled here — the stage overlay owns point nudging. Blackout
-  // has NO shortcut on purpose: a destructive full-output cut stays a deliberate click.
+  // Show-control keyboard shortcuts: 1-9 fire looks, B toggles blind, F toggles focus,
+  // Ctrl/Cmd+Z undoes the last property edit (Shift+Z redoes). Guarded off anything
+  // editable (typing a preset name must not fire look 1, and a text field keeps its own
+  // native undo instead of ours); arrows are deliberately NOT handled here — the stage
+  // overlay owns point nudging. Blackout has NO shortcut on purpose: a destructive
+  // full-output cut stays a deliberate click.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.defaultPrevented) return;
       // No auto-repeat: a held B would machine-gun blind toggles, and every OFF edge is
       // a COMMIT that destroys the server's pre-blind snapshot.
       if (e.repeat) return;
@@ -442,7 +513,25 @@ export function App() {
       // operator is reading the shortcuts reference.
       if (helpOpenRef.current) return;
       const target = e.target as HTMLElement | null;
+      // Checked ahead of the blanket input/textarea guard below: every Fader is a native
+      // <input type="range">, so focus sits on one right after any drag, and that guard
+      // would otherwise swallow Ctrl+Z the instant a gesture ends. A range/checkbox/button
+      // input has no text-undo history of its own to preserve — only genuinely
+      // text-editable fields (where the browser's native undo should win instead) exempt
+      // Ctrl+Z here.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "z" || e.key === "Z")) {
+        const textEditable = target?.closest(
+          'textarea, [contenteditable="true"], input:not([type]), input[type="text"], input[type="number"], input[type="search"]',
+        );
+        if (!textEditable) {
+          if (e.shiftKey) redo();
+          else undo();
+          e.preventDefault();
+        }
+        return;
+      }
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key >= "1" && e.key <= "9") {
         const looks = Object.values(stateRef.current.presets ?? {});
         const look = looks[Number(e.key) - 1];
@@ -464,7 +553,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions, toggleBlind]);
+  }, [actions, toggleBlind, undo, redo]);
 
   // Task A14b: camera record-to-disk. The render-client owning the camera stream does the
   // actual MediaRecorder capture + upload; this only fires the relay trigger and tracks the
