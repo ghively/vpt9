@@ -821,7 +821,12 @@
 .deck[data-focus="true"] .show-drawer { display: none; }
 .deck-stage {
   position: relative;
-  aspect-ratio: 16 / 9;
+  /* --frame-ratio (Stage.tsx, set from the decoded preview image's own natural size)
+   * matches this box to the real render-client output's actual shape, so object-fit
+   * on .preview-img never has to crop anything — see Stage.tsx's onFrameLoad comment
+   * for why a mismatch there threw off every on-stage coordinate, not just the look.
+   * Falls back to 16:9 before the first frame (or when a screen has no cached frame). */
+  aspect-ratio: var(--frame-ratio, 16 / 9);
   /* Own stacking context so the on-stage overlay handles (sel-label z6 / mask-point z8)
    * resolve locally and can never paint over the later master bar / tab bar. */
   isolation: isolate;
@@ -1022,7 +1027,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.insp-body { padding: 12px 14px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+/* flex: 1 is load-bearing, not decoration: .insp-head above is `flex: none` (pinned to
+ * its own content height), so without this, .insp-body — a sibling flex item with no
+ * grow/shrink of its own — just sizes to ITS content instead of claiming the rest of
+ * .rail-r's height. Its own overflow-y: auto then has nothing to actually scroll WITHIN
+ * (the box is exactly as tall as its content, never shorter), so a long Inspector body
+ * (the FX section stacks 20+ sliders across TRANSFORM/COLOR/EDGE BLEND/TRANSPORT) just
+ * grows past .rail-r's bounded height and gets hard-clipped by #root's overflow:hidden
+ * further up the tree — reads as "the FX section is cut off and won't scroll," because
+ * nothing here was ever a real scroll container to begin with. */
+.insp-body { padding: 12px 14px; min-height: 0; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 .insp-empty {
   flex: 1;
   display: flex;

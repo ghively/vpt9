@@ -235,7 +235,12 @@ html, body { height: 100%; }
      and the live preview feathered at its edges the way overlapping projectors
      are edge-blended. Warp handles are tungsten registration targets on top. */
   .stage {
-    position: relative; aspect-ratio: 16/9;
+    position: relative;
+    /* --frame-ratio (ConfidenceMonitor.tsx, from the decoded preview's own natural
+     * size) matches this box to the real render-client output's shape — see
+     * deck/Stage.tsx's onFrameLoad comment for why a mismatched box/frame ratio throws
+     * off every coordinate computed as a fraction of this box (PipBox's drag math). */
+    aspect-ratio: var(--frame-ratio, 16/9);
     border-radius: var(--radius-md);
     border: 1px solid var(--hairline);
     background: var(--panel-sunken);

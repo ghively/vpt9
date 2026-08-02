@@ -79,6 +79,7 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
   const stageRef = useRef<HTMLDivElement>(null);
   const resRef = useRef<HTMLDivElement>(null);
   const resTextRef = useRef("");
+  const aspectRef = useRef("");
   const [hoverQuad, setHoverQuad] = useState<Quad | null>(null);
   const [dropArmed, setDropArmed] = useState(false);
 
@@ -110,6 +111,10 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
       stageRef.current?.setAttribute("data-live", "false");
       resTextRef.current = "";
       if (resRef.current) resRef.current.textContent = "";
+      // No cached frame for this screen yet — fall back to the default 16:9 box (see
+      // deck.css) rather than keeping the PREVIOUS screen's aspect ratio around.
+      aspectRef.current = "";
+      stageRef.current?.style.removeProperty("--frame-ratio");
     }
   }, [screenId, frame]);
 
@@ -117,14 +122,36 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
   // image (its predecessor showed a hardcoded "1280×720" while displaying a 320px-wide
   // JPEG). Imperative like setFrame itself — frames arrive outside the React render loop,
   // so the badge updates the same way, and only when the size actually changes.
+  //
+  // Also drives the stage box's OWN aspect ratio (via --frame-ratio, read by .deck-stage
+  // in deck.css) from this same measurement. The render-client's canvas is sized off its
+  // real browser window/screen (compositor.js's `canvas.width = clientWidth * dpr`), and
+  // capturePreview()'s downsample preserves that exact ratio — so a screen that ISN'T
+  // 16:9 (a non-standard projector resolution, an odd-shaped surface, even just a
+  // slightly-off browser window) sent a preview whose real shape didn't match this box's
+  // hardcoded 16:9. `object-fit: cover` masked that by silently CROPPING the preview to
+  // fit — invisible as a viewing glitch, but every on-stage coordinate (mask drag, warp
+  // handle drag, click-to-select, media drag-drop) is computed as a fraction of THIS
+  // box's rect and assumes it maps 1:1 onto the full frame, which becomes wrong the
+  // moment cover has to crop anything: the operator drags to where they SEE a point,
+  // but that point sits at a different fraction of the real (cropped) image, so the
+  // value that lands on the mask/warp/layer is offset from where they clicked. Matching
+  // the box's own shape to the real frame eliminates the crop entirely, so box-fraction
+  // and image-fraction are always the same number.
   const onFrameLoad = () => {
     const img = imgRef.current;
     const res = resRef.current;
-    if (!img || !res || !img.naturalWidth) return;
+    if (!img || !res || !img.naturalWidth || !img.naturalHeight) return;
     const text = `preview ${img.naturalWidth}×${img.naturalHeight}`;
-    if (resTextRef.current === text) return;
-    resTextRef.current = text;
-    res.textContent = text;
+    if (resTextRef.current !== text) {
+      resTextRef.current = text;
+      res.textContent = text;
+    }
+    const ratio = `${img.naturalWidth} / ${img.naturalHeight}`;
+    if (aspectRef.current !== ratio) {
+      aspectRef.current = ratio;
+      stageRef.current?.style.setProperty("--frame-ratio", ratio);
+    }
   };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {

@@ -22,6 +22,7 @@ export const ConfidenceMonitor = forwardRef<ConfidenceMonitorHandle, ConfidenceM
   function ConfidenceMonitor({ previewFrame, children }, ref) {
     const imgRef = useRef<HTMLImageElement>(null);
     const stageRef = useRef<HTMLDivElement>(null);
+    const aspectRef = useRef("");
 
     useImperativeHandle(
       ref,
@@ -36,11 +37,26 @@ export const ConfidenceMonitor = forwardRef<ConfidenceMonitorHandle, ConfidenceM
       [],
     );
 
+    // Same fix as deck/Stage.tsx's onFrameLoad, same reason: the render-client's real
+    // canvas (and thus this preview) can be any aspect ratio, not just 16:9 — matching
+    // this box's shape to the actual frame means .preview-img's object-fit never crops
+    // anything, so PipBox's drag math (a plain fraction of this box's rect) always lands
+    // on the same point the operator sees, instead of an offset one whenever the real
+    // screen isn't 16:9.
+    const onFrameLoad = () => {
+      const img = imgRef.current;
+      if (!img || !img.naturalWidth || !img.naturalHeight) return;
+      const ratio = `${img.naturalWidth} / ${img.naturalHeight}`;
+      if (aspectRef.current === ratio) return;
+      aspectRef.current = ratio;
+      stageRef.current?.style.setProperty("--frame-ratio", ratio);
+    };
+
     return (
       <div className="stage" ref={stageRef} data-live={!!previewFrame}>
         <div className="stage__frame">
           {/* src omitted when empty so the CSS `:not([src])` rule hides the broken glyph. */}
-          <img ref={imgRef} className="preview-img" src={previewFrame || undefined} alt="" />
+          <img ref={imgRef} className="preview-img" src={previewFrame || undefined} alt="" onLoad={onFrameLoad} />
         </div>
         <div className="stage__nosignal" aria-hidden="true">
           <span className="mono">NO SIGNAL</span>
