@@ -158,18 +158,21 @@
 .screen-select-add:hover { border-color: var(--beam-line); color: var(--beam); }
 
 /* ---------------- body columns ---------------- */
+/* One sidebar column + Stage (task 35, MapMap comparison: their canvas gets ~90% of the
+ * window and every control lives in one thin tabbed drawer, vs. our old 276px-left +
+ * 288px-right rails running as parallel columns — two panels' width permanently spoken
+ * for before Stage saw a pixel, and each was squeezed to a fraction of the height it
+ * would get alone). See .rail-sidebar/.sidebar-tabs/.sidebar-body below. */
 .body {
   display: grid;
-  grid-template-columns: 276px 1fr 288px; /* left rail widened for the MediaBin thumbnails */
+  grid-template-columns: 300px 1fr;
   min-height: 0;
 }
 /* Tablet / narrow-desktop band (just above the 719px mobile breakpoint, e.g. an iPad in
- * portrait at 768px): the full-width 276+288 rails leave the 1fr stage cramped to ~200px
- * and push right-edge content under the viewport edge (which #root's overflow:hidden then
- * clips). Narrow the rails here so the live-preview stage keeps a usable width until there
- * is room for the full desktop sizing. Above 1024px the default rule applies unchanged. */
+ * portrait at 768px): narrow the sidebar so the live-preview stage keeps a usable width
+ * until there's room for the full desktop sizing. Above 1024px the default rule applies. */
 @media (min-width: 720px) and (max-width: 1024px) {
-  .body { grid-template-columns: 224px 1fr 248px; }
+  .body { grid-template-columns: 240px 1fr; }
 }
 .rail {
   display: flex;
@@ -179,24 +182,60 @@
 }
 /* The left rail scrolls as ONE surface (layer stack + media bin + slots in natural
  * height) — inner per-section scrollboxes silently hid rows once the bin landed, and
- * flex-shrink let sections paint over each other; pin every section to natural height. */
+ * flex-shrink let sections paint over each other; pin every section to natural height.
+ * Desktop no longer renders `.rail-l` (task 35 moved it to the tabbed `.rail-sidebar`
+ * below) — this remains exactly as-is for the mobile sheet, which still uses it. */
 .rail-l { border-right: 1px solid var(--hairline); overflow-y: auto; }
 .rail-l > * { flex: none; }
 .rail-l .layers { overflow-y: visible; }
 .rail-l .media-bin__grid { max-height: none; overflow-y: visible; }
-/* Desktop: cap the two tall, variable-length lists (the layer stack and the media grid)
- * so they scroll WITHIN themselves instead of pushing the sections below them (Media,
- * Shared slots) off the bottom of the single-scroll rail. This keeps all three left-rail
- * sections reachable at once — the collapse toggles then fold whichever aren't needed.
- * Explicit max-height + overflow (not flex-shrink) so rows scroll, never silently clip.
- * Gated on the `data-mobile` ATTRIBUTE (not a `min-width:720px` query) so it tracks the
- * exact same boundary as the JS layout switch (useIsMobile). A width query at 720px and the
- * matchMedia at 719px disagree on a fractional 719<w<720 width (browser zoom / fractional
- * DPR): the desktop DOM would render there but the caps wouldn't apply, un-capping the lists.
- * Mobile renders each section as its own full sheet tab, so no cap there. */
-.deck:not([data-mobile="true"]) .rail-l .layers { max-height: 44vh; overflow-y: auto; }
-.deck:not([data-mobile="true"]) .rail-l .media-bin__grid { max-height: 34vh; overflow-y: auto; }
 .rail-r { border-left: 1px solid var(--hairline); }
+
+/* Desktop sidebar (task 35): one tabbed column replacing the old rail-l/rail-r pair —
+ * Layers / Media(+Slots) / Inspector, one visible at a time, each getting the sidebar's
+ * FULL height to itself instead of sharing a fixed-height column with two siblings (the
+ * old .rail-l model above, which needed the vh-capping this replaces). */
+.rail-sidebar { border-right: 1px solid var(--hairline); }
+.sidebar-tabs { display: flex; flex: none; border-bottom: 1px solid var(--hairline); }
+.sidebar-tabs button {
+  flex: 1;
+  padding: 10px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.sidebar-tabs button:hover { color: var(--text); }
+.sidebar-tabs button[aria-selected="true"] { color: var(--beam); border-bottom-color: var(--beam); }
+/* flex-column + min-height:0 so a flex:1 child (Inspector's own .insp-body, which was
+ * already built expecting exactly this from its old parent .rail-r — see .insp-body's
+ * own comment) gets a real bounded height to scroll within, instead of growing to fit
+ * content and leaving overflow-y with nothing to actually scroll. */
+/* overflow:hidden, NOT auto — each tab's own content already scrolls internally
+ * (.layers, .media-bin__grid, .insp-body all carry their own overflow-y:auto). A second,
+ * redundant scroll region here had nothing of its own to scroll (this box's content is
+ * always exactly its allocated flex height) but still confused scrollIntoView/click
+ * targeting on whatever was scrolled inside the REAL inner container. */
+.sidebar-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-body > .layers { flex: 1; min-height: 0; }
+/* min-height:0 on a flex:1 item has no floor — on a short window, SlotGrid's own
+ * natural height (a 2-column button grid, no cap of its own) ate ALL the space and
+ * squeezed media-bin to a measured 0px, hiding it completely rather than just showing
+ * fewer thumbnail rows. A real floor + capping .slots below keeps both always visible. */
+/* 180px was enough to stop media-bin measuring 0 height, but not enough to be USABLE:
+ * its own chrome (folder nav + tag filters + the add/paste-link footer) already runs
+ * ~168px, so a 180px box left the actual thumbnail grid a 20px sliver — technically
+ * "visible" by area, but every cell mostly clipped and un-clickable. 280px guarantees
+ * at least one full row of thumbnails on top of that chrome. */
+.sidebar-body > .media-bin { flex: 1 1 auto; min-height: 280px; }
+.sidebar-body .media-bin__grid { flex: 1; min-height: 0; overflow-y: auto; }
+.sidebar-body .slots { max-height: 220px; overflow-y: auto; }
 
 .sec-head {
   display: flex;
@@ -1122,8 +1161,16 @@
 /* Warp / Mask / FX sections — the flattened replacement for the old exclusive segment:
  * every section header is ALWAYS visible (title + live summary + chevron), only the
  * active section's body expands, and activating one drives the Stage overlay via the
- * container's onModeChange -> selection.setStageEditMode, same as the segment did. */
-.insp-sections { display: flex; flex-direction: column; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+ * container's onModeChange -> selection.setStageEditMode, same as the segment did.
+ *
+ * flex-shrink:0 is load-bearing, not decoration: this is a flex child of .insp-body
+ * (a flex column with overflow-y:auto), and its own overflow:hidden (below, to clip the
+ * rounded corners) gives it a min-content height of 0 — without flex-shrink:0, a short
+ * .insp-body doesn't let this scroll: flexbox's default shrink-before-overflow behavior
+ * squeezes the WHOLE section list down toward zero height first, so with FX expanded
+ * (the tallest section) on a short window this can collapse to a couple of visible
+ * pixels — reads as "the section list vanished," not "scroll for more." */
+.insp-sections { display: flex; flex-direction: column; flex-shrink: 0; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
 .insp-sec { display: flex; flex-direction: column; border-bottom: 1px solid var(--hairline); }
 .insp-sec:last-child { border-bottom: none; }
 .insp-sec__head {

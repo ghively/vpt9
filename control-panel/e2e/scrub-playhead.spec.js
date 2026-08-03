@@ -59,6 +59,8 @@ test("SCRUB thumb follows the playhead from position/duration telemetry", async 
 
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
   await page.locator('.layer[data-id="layer-scrub"] .layer-hit').click();
+  // Inspector is its own sidebar tab now — not visible until selected.
+  await page.locator(".sidebar-tabs button", { hasText: "Inspector" }).click();
   const scrub = page.locator(".fx-control", { hasText: "SCRUB" }).locator('input[type="range"]');
   await scrub.scrollIntoViewIfNeeded();
   await expect(scrub).toBeVisible();

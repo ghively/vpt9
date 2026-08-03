@@ -151,28 +151,25 @@ export function App() {
   // stage and look bar are the entire surface during the show. Desktop-only — the mobile
   // layout already shows one surface at a time.
   const [focusMode, setFocusMode] = useState(false);
-  // Desktop left-rail section collapse (Layers / Media / Shared-slots). The rail is one
-  // scroll surface, so with several layers the Slots (a live-trigger surface) sit below
-  // the fold; folding sections keeps the ones an operator needs visible together — the
-  // VJ/DAW rack pattern. Persisted so the operator's layout survives a reload. Desktop
-  // only (mobile shows one section per sheet tab, where collapsing would just hide it).
-  const [railCollapsed, setRailCollapsed] = useState<Record<"layers" | "media" | "slots", boolean>>(() => {
+  // Desktop sidebar tab (MapMap comparison, task 35): LayerStack/MediaBin/SlotGrid/
+  // Inspector used to run as parallel rails (a 276px left column stacking all three left
+  // sections' full height, PLUS a separate 288px right column for Inspector) — three
+  // panels' worth of vertical competition is exactly what left the FX section starved for
+  // room. One column, one panel visible at a time (same grouping MobileTabBar already
+  // uses: Layers / Slots(=media+slots) / Inspector), each getting the sidebar's FULL
+  // height to itself, and Stage reclaims the width the second column used to cost.
+  // Persisted like the old per-section collapse it replaces.
+  const [sidebarTab, setSidebarTab] = useState<MobileTab>(() => {
     try {
-      const raw = localStorage.getItem("vpt.railCollapsed");
-      if (raw) return { layers: false, media: false, slots: false, ...JSON.parse(raw) };
+      const raw = localStorage.getItem("vpt.sidebarTab");
+      if (raw === "layers" || raw === "slots" || raw === "inspector") return raw;
     } catch { /* ignore malformed/absent storage */ }
-    return { layers: false, media: false, slots: false };
+    return "layers";
   });
-  const toggleRail = useCallback((key: "layers" | "media" | "slots") => {
-    setRailCollapsed((s) => {
-      const next = { ...s, [key]: !s[key] };
-      try { localStorage.setItem("vpt.railCollapsed", JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
+  const selectSidebarTab = useCallback((tab: MobileTab) => {
+    setSidebarTab(tab);
+    try { localStorage.setItem("vpt.sidebarTab", tab); } catch { /* ignore */ }
   }, []);
-  const toggleLayersRail = useCallback(() => toggleRail("layers"), [toggleRail]);
-  const toggleMediaRail = useCallback(() => toggleRail("media"), [toggleRail]);
-  const toggleSlotsRail = useCallback(() => toggleRail("slots"), [toggleRail]);
   // Video-input devices for the camera pickers (task A14) — the panel enumerates them
   // (it's already in a browser) and threads the list to the Inspector + SlotGrid editors.
   const cameraDevices = useCameraDevices();
@@ -1100,8 +1097,6 @@ export function App() {
       outputName={selectedScreen ? selectedScreen.name || selectedScreen.id : null}
       outputSelected={selection.editTarget === "screen"}
       onSelectOutput={selectOutput}
-      collapsed={!isMobile && railCollapsed.layers}
-      onToggleCollapse={isMobile ? undefined : toggleLayersRail}
     />
   );
   const mediaBinEl = (
@@ -1115,8 +1110,6 @@ export function App() {
       onImportUrl={importMediaUrl}
       imports={mediaImportsArr}
       onDismissImport={dismissMediaImport}
-      collapsed={!isMobile && railCollapsed.media}
-      onToggleCollapse={isMobile ? undefined : toggleMediaRail}
     />
   );
   const slotGridEl = (
@@ -1130,8 +1123,6 @@ export function App() {
       onSetTransport={actions.setSourceBankSlotTransport}
       onDragStart={beginDrag}
       onDragEnd={endDrag}
-      collapsed={!isMobile && railCollapsed.slots}
-      onToggleCollapse={isMobile ? undefined : toggleSlotsRail}
     />
   );
   // The look bar rides directly above the stage in both layouts — firing a look and
@@ -1291,19 +1282,41 @@ export function App() {
         </>
       ) : (
         <>
-          {/* Desktop: 3-zone body (left rail / stage / right inspector), the Show drawer,
-              then the persistent master/transport strip pinned at the very bottom. */}
+          {/* Desktop: one sidebar column (Layers / Slots / Inspector, one tab visible at a
+              time — see sidebarTab above) + the stage, the Show drawer, then the
+              persistent master/transport strip pinned at the very bottom. Used to be a
+              second, separate 288px column just for Inspector; folding it into the same
+              tabbed rail gives the active panel the WHOLE sidebar height (no more sharing
+              scroll room with two siblings) and gives Stage back the width the second
+              column cost. */}
           <div className="body" data-selected-layer={selection.selectedLayerId ?? undefined}>
-            <aside className="rail rail-l">
-              {layerStackEl}
-              {mediaBinEl}
-              {slotGridEl}
+            <aside className="rail rail-sidebar">
+              <div className="sidebar-tabs" role="tablist" aria-label="Sidebar">
+                <button type="button" role="tab" aria-selected={sidebarTab === "layers"} onClick={() => selectSidebarTab("layers")}>
+                  Layers
+                </button>
+                <button type="button" role="tab" aria-selected={sidebarTab === "slots"} onClick={() => selectSidebarTab("slots")}>
+                  Media
+                </button>
+                <button type="button" role="tab" aria-selected={sidebarTab === "inspector"} onClick={() => selectSidebarTab("inspector")}>
+                  Inspector
+                </button>
+              </div>
+              <div className="sidebar-body">
+                {sidebarTab === "layers" && layerStackEl}
+                {sidebarTab === "slots" && (
+                  <>
+                    {mediaBinEl}
+                    {slotGridEl}
+                  </>
+                )}
+                {sidebarTab === "inspector" && inspectorEl}
+              </div>
             </aside>
             <main className="stage-wrap">
               {lookBarEl}
               {stageEl}
             </main>
-            <aside className="rail rail-r insp">{inspectorEl}</aside>
           </div>
           {showDrawerEl}
           {masterBarEl}

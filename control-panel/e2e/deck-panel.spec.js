@@ -246,7 +246,7 @@ test("switching to Screen edit target and dragging a corner handle sends the SCR
   await expect.poll(async () => (await readScreenCorners())[0]).not.toEqual({ x: 0, y: 0 });
 });
 
-test("media bin: uploaded media renders as a thumbnail and drags onto a layer row as its source", async ({ page }) => {
+test("media bin: uploaded media renders as a thumbnail and drags onto the stage as a layer's source", async ({ page }) => {
   // Upload the red jpg fixture over the same HTTP endpoint the bin's +add uses.
   const jpg = await readFile(path.join(__dirname, "fixtures", "media-fixture-red.jpg"));
   const res = await fetch(`http://localhost:${WS_PORT}/api/media`, {
@@ -257,6 +257,12 @@ test("media bin: uploaded media renders as a thumbnail and drags onto a layer ro
   expect(res.ok).toBe(true);
 
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  // The sidebar is tabbed (Layers/Media/Inspector, one visible at a time) — MediaBin
+  // only renders once the Media tab is active, and with it active a layer ROW is no
+  // longer reachable as a drop target (Layers is a different tab now). Drop directly on
+  // the Stage instead — onStageDropMedia hit-tests the topmost layer's warped quad under
+  // the point (verified independently as task 29; this just re-covers it post-restructure).
+  await page.locator(".sidebar-tabs button", { hasText: "Media" }).click();
 
   // The bin is folders-first: enter "All" to see the thumbnail grid.
   await page.locator(".media-folder", { hasText: "All" }).click();
@@ -264,15 +270,19 @@ test("media bin: uploaded media renders as a thumbnail and drags onto a layer ro
   const cell = page.locator(".media-cell", { hasText: "drag-fixture" });
   await expect(cell).toBeVisible();
 
-  // Drag it onto layer-1's row — the layer's source must become the library url,
-  // through the SAME layers.<id>.source write path the Inspector picker uses.
-  await cell.dragTo(page.locator('.layer[data-id="layer-1"] .layer-hit'));
+  // Drag it onto the stage — SOME layer's source must become the library url, through the
+  // same layers.<id>.source write path the Inspector picker uses. Earlier tests in this
+  // file narrow layer-2's warp quad, so don't assume which layer's quad wins the drop;
+  // just confirm the write landed on one of them.
+  await cell.dragTo(page.locator(".deck-stage"));
   await expect
     .poll(async () => {
       const state = await (await fetch(`http://localhost:${WS_PORT}/state`)).json();
-      return state.layers["layer-1"].source;
+      return Object.values(state.layers).some(
+        (l) => l.source?.type === "video" && /^\/media\/media-.*\.jpg$/.test(l.source?.url ?? ""),
+      );
     })
-    .toMatchObject({ type: "video", url: expect.stringMatching(/^\/media\/media-.*\.jpg$/) });
+    .toBe(true);
 });
 
 test("the visibility eye toggles layers.<id>.visible through the normal update path", async ({ page }) => {
@@ -299,6 +309,7 @@ test("import-by-link: a media URL entered in the bin downloads server-side into 
   await new Promise((r) => fileServer.listen(8199, r));
   try {
     await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+    await page.locator(".sidebar-tabs button", { hasText: "Media" }).click();
     const link = page.locator(".media-bin__link");
     await expect(link).toBeVisible();
     await link.fill("http://localhost:8199/media-fixture-clip.mp4");
@@ -401,7 +412,9 @@ test("polygon mask vertices are draggable on the stage and persist through the e
 
   // The stage click above already selected the layer target; expand the Mask section
   // (the accordion header carries aria-label="Mask" — its visible text also includes a
-  // live summary like "polygon", so target the accessible name).
+  // live summary like "polygon", so target the accessible name). Inspector is its own
+  // sidebar tab now — not visible until selected.
+  await page.locator(".sidebar-tabs button", { hasText: "Inspector" }).click();
   await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
@@ -473,6 +486,8 @@ test("polygon mask edges insert a vertex and Delete removes the selected point",
   // so a geometric center-click can land on the wrong layer. Assert the selection landed.
   await page.locator('.layer[data-id="layer-poly-insert"] .layer-hit').first().click();
   await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-poly-insert");
+  // Inspector is its own sidebar tab now — not visible until selected.
+  await page.locator(".sidebar-tabs button", { hasText: "Inspector" }).click();
   await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
   await page.locator(".togglepill").getByRole("button", { name: "Polygon", exact: true }).click();
 
@@ -519,6 +534,8 @@ test("dragging a rect mask body translates by the drag delta (grab offset), not 
   const box = await stage.boundingBox();
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await expect(page.locator(".body")).toHaveAttribute("data-selected-layer", "layer-rectmask-drag");
+  // Inspector is its own sidebar tab now — not visible until selected.
+  await page.locator(".sidebar-tabs button", { hasText: "Inspector" }).click();
   await page.locator(".insp-sections").getByRole("button", { name: "Mask", exact: true }).click();
 
   const body = page.locator(".mask-shape__body");
@@ -563,6 +580,7 @@ test("media bin: the view toolbar filters by kind, searches by name, and sorts",
   socket.close();
 
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  await page.locator(".sidebar-tabs button", { hasText: "Media" }).click();
   const bin = page.locator(".media-bin");
   // Folders-first: enter "All" for the flat grid the toolbar operates on.
   await bin.locator(".media-folder", { hasText: "All" }).click();

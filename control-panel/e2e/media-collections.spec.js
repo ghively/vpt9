@@ -84,6 +84,9 @@ test("folders-first bin: collections derive from tags, drill-in scopes, membersh
   const pageErrors = [];
   page.on("pageerror", (err) => pageErrors.push(err.message));
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
+  // The sidebar is tabbed (Layers/Media/Inspector, one visible at a time) — MediaBin
+  // only renders once the Media tab is active.
+  await page.locator(".sidebar-tabs button", { hasText: "Media" }).click();
 
   const bin = page.locator(".media-bin");
   await expect(bin).toBeVisible();

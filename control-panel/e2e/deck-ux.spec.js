@@ -95,7 +95,9 @@ test("a layer row exposes play/pause and a draggable opacity fader; FX shows a H
   await expect(row.locator('.layer-quick input[type="range"]')).toBeVisible();
 
   // Select it, then the FX section is open by default and contains the HUE slider.
+  // Inspector is its own sidebar tab now — not visible until selected.
   await row.locator(".layer-hit").click();
+  await page.locator(".sidebar-tabs button", { hasText: "Inspector" }).click();
   const hue = page.locator(".fx-control", { hasText: "HUE" });
   await expect(hue).toBeVisible();
 
@@ -115,6 +117,8 @@ test("a layer row exposes play/pause and a draggable opacity fader; FX shows a H
 test("Warp section owns the corner-preset menu; Mask section owns editable size (no longer duplicated in FX)", async ({ page }) => {
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
   await page.locator('.layer[data-id="layer-1"] .layer-hit').click();
+  // Inspector is its own sidebar tab now — not visible until selected.
+  await page.locator(".sidebar-tabs button", { hasText: "Inspector" }).click();
 
   // Expand the dedicated Warp section and apply a corner preset from its (moved-here) menu.
   await page.locator(".insp-sec__head", { hasText: "Warp" }).click();
@@ -147,18 +151,27 @@ test("Warp section owns the corner-preset menu; Mask section owns editable size 
     .toBeLessThan(0.4);
 });
 
-test("desktop: left-rail sections collapse (folding Media reveals more room) and the state persists", async ({ page }) => {
+// Task 35 (MapMap comparison): the old per-section collapse toggles (Layers/Media/Slots
+// each independently foldable within one shared-scroll rail) were replaced by one tabbed
+// sidebar — Layers/Media/Inspector, one visible at a time, each getting the sidebar's
+// full height instead of splitting it three ways. This replaces the old
+// "left-rail sections collapse" test with the equivalent behavior for the new model.
+test("desktop: sidebar tabs show one panel at a time, and the active tab persists", async ({ page }) => {
   await page.goto(`http://localhost:${PANEL_PORT}/index.html?ws=ws://localhost:${WS_PORT}`);
-  // The three left-rail sections render collapsible headers on desktop.
-  const mediaHead = page.locator(".rail-l .sec-head--toggle", { hasText: "Media" });
-  await expect(mediaHead).toHaveAttribute("aria-expanded", "true");
-  // The media bin body (its + Add media button) is visible while expanded.
-  await expect(page.locator(".media-bin__add")).toBeVisible();
-  // Collapse it: the body hides and aria-expanded flips.
-  await mediaHead.click();
-  await expect(mediaHead).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator(".media-bin__add")).toHaveCount(0);
-  // Reloading keeps it collapsed (persisted to localStorage).
+  // Layers is the default tab.
+  await expect(page.locator('.sidebar-tabs button[aria-selected="true"]')).toHaveText("Layers");
+  await expect(page.locator(".rail-sidebar .layers")).toBeVisible();
+  await expect(page.locator(".rail-sidebar .media-bin")).toHaveCount(0);
+
+  // Switching to Media hides LayerStack and shows MediaBin + SlotGrid instead — never both
+  // at once (that's the whole point: each tab gets the sidebar's full height).
+  await page.locator(".sidebar-tabs button", { hasText: "Media" }).click();
+  await expect(page.locator(".rail-sidebar .media-bin")).toBeVisible();
+  await expect(page.locator(".rail-sidebar .slots")).toBeVisible();
+  await expect(page.locator(".rail-sidebar .layers")).toHaveCount(0);
+
+  // Reloading keeps the last-selected tab (persisted to localStorage, same intent the old
+  // per-section collapse state had).
   await page.reload();
-  await expect(page.locator(".rail-l .sec-head--toggle[aria-expanded='false']", { hasText: "Media" })).toHaveCount(1);
+  await expect(page.locator('.sidebar-tabs button[aria-selected="true"]')).toHaveText("Media");
 });
