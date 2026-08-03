@@ -950,9 +950,50 @@
   pointer-events: none;
 }
 
+/* Stage zoom/pan: `.deck-stage` (the outer frame) keeps overflow:hidden and its fixed
+ * on-screen footprint — it's the clipping viewport. `.deck-stage__content` is the part
+ * that actually scales/pans (transform set inline from Stage.tsx's zoom/pan state); the
+ * preview image and every on-stage handle live inside it, so they zoom/pan together and
+ * every existing getBoundingClientRect()-based drag calc (WarpHandle, MaskShapeOverlay)
+ * keeps working unmodified — the browser already folds ancestor transforms into the rect
+ * it reports. Chrome (badges/ticks/reg grid/zoom control) stays OUTSIDE this wrapper, as
+ * direct children of `.deck-stage`, so it never moves. */
+.deck-stage__content { position: absolute; inset: 0; transform-origin: 0 0; }
+
 /* Task 5/6 selection/warp/mask handles land here, absolutely positioned by normalized
  * 0..1 coordinates against this same box. */
 .stage-overlay { position: absolute; inset: 0; }
+
+.stage-zoom {
+  position: absolute;
+  bottom: 10px;
+  right: 32px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(10, 12, 17, 0.82);
+}
+.stage-zoom button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.stage-zoom button:hover:not(:disabled) { color: var(--text); background: var(--beam-soft); }
+.stage-zoom button:disabled { color: var(--muted-dim); cursor: default; }
+.stage-zoom__pct {
+  min-width: 34px;
+  text-align: center;
+  border-left: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+}
 
 /* Task 5: faint hover outline over whichever layer's warp quad is under the pointer —
  * a plain SVG polygon in normalized 0..1 space (viewBox="0 0 1 1", stretched to the

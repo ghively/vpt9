@@ -28,8 +28,10 @@ export interface StageProps {
   /** Fires for pointer-downs on the stage background — but NOT for pointer-downs that
    *  land on a Task 6 drag handle (any element carrying `.deck-handle`, checked via
    *  `target.closest`), so grabbing a handle never also triggers a background/select
-   *  action underneath it. */
-  onBackgroundPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+   *  action underneath it. `point` is the normalized 0..1 position, already corrected
+   *  for zoom/pan — Stage owns that state internally, so callers never need to know it
+   *  exists (mirrors `onDropMedia`'s contract below, which was already point-based). */
+  onBackgroundPointerDown: (point: { x: number; y: number }) => void;
   /** On-stage Warp · Mask · FX chips (top-center) — the same mode state the Inspector's
    *  sections drive, surfaced where the operator is already looking. Omit (screen-warp
    *  target, no selection) to hide them. */
@@ -47,6 +49,30 @@ const MODE_CHIPS: Array<{ key: EditMode; label: string }> = [
   { key: "mask", label: "Mask" },
   { key: "fx", label: "FX" },
 ];
+
+// Stage zoom/pan (MapMap comparison, task 34): dragging a handle at whatever pixel size
+// the browser window happens to render is the real precision ceiling behind "the mask
+// circle doesn't quite line up" — zooming in lets a fraction of a normalized unit cover
+// many more screen pixels. Local view-only state (like a code editor's zoom level, not
+// synced to the server or other operators). 1 = fit exactly to the frame (today's only
+// option); can't zoom OUT below that since there'd be empty space to pan into for no
+// benefit.
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 6;
+type StageView = { zoom: number; pan: { x: number; y: number } };
+const DEFAULT_VIEW: StageView = { zoom: 1, pan: { x: 0, y: 0 } };
+
+function clampZoom(z: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+}
+
+// Keeps the scaled content covering the viewport at all times — no panning into empty
+// space beyond the content's own edges. At zoom=1 this collapses to exactly {0,0}.
+function clampPan(x: number, y: number, zoom: number, width: number, height: number) {
+  const minX = width * (1 - zoom);
+  const minY = height * (1 - zoom);
+  return { x: Math.min(0, Math.max(minX, x)), y: Math.min(0, Math.max(minY, y)) };
+}
 
 /** The dominant live-preview at the center of the deck: the render-client's low-res
  *  preview frame framed in the confidence-monitor's registration chrome (faint grid,
@@ -82,6 +108,81 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
   const aspectRef = useRef("");
   const [hoverQuad, setHoverQuad] = useState<Quad | null>(null);
   const [dropArmed, setDropArmed] = useState(false);
+  const [view, setView] = useState<StageView>(DEFAULT_VIEW);
+  // Synchronous mirror for the wheel handler below, which needs to read the CURRENT zoom
+  // before deciding whether to hijack a plain scroll for panning — reading `view` itself
+  // there would see a stale closure between renders.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  // Switching screens resets the view — a zoomed/panned crop left over from the PREVIOUS
+  // screen's calibration would just be confusing framing on a screen it was never set on.
+  useEffect(() => {
+    setView(DEFAULT_VIEW);
+  }, [screenId]);
+
+  // Ctrl/Cmd+scroll zooms (centered on the cursor, so the point under it stays under it);
+  // plain scroll pans, but only once zoomed in — at 1:1 the wheel does nothing here, so
+  // normal page/rail scrolling is untouched. Native listener (not JSX onWheel): React
+  // marks wheel listeners passive by default, which silently no-ops preventDefault().
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const zooming = e.ctrlKey || e.metaKey;
+      if (!zooming && viewRef.current.zoom <= MIN_ZOOM) return; // let the page scroll normally
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      setView((prev) => {
+        if (zooming) {
+          // A real mouse sends one notch as deltaY ~=100; trackpads stream many small
+          // deltas per gesture. 0.0015 tunes a single notch to roughly a 15% zoom step
+          // (exp(-100*0.0015) ~= 0.86) — 0.01 (10x more sensitive) jumped straight to
+          // MAX_ZOOM on one notch, which is unusable with a real mouse.
+          const newZoom = clampZoom(prev.zoom * Math.exp(-e.deltaY * 0.0015));
+          // Solve for the pan that keeps the content point under the cursor fixed on
+          // screen: that point was (mx - pan) / zoom before, so newPan = mx - newZoom * that.
+          const cx = (mx - prev.pan.x) / prev.zoom;
+          const cy = (my - prev.pan.y) / prev.zoom;
+          const pan = clampPan(mx - newZoom * cx, my - newZoom * cy, newZoom, rect.width, rect.height);
+          return { zoom: newZoom, pan };
+        }
+        const pan = clampPan(prev.pan.x - e.deltaX, prev.pan.y - e.deltaY, prev.zoom, rect.width, rect.height);
+        return { ...prev, pan };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // content-space point (both 0..1 fraction of the FRAME, not the viewport) for a pixel
+  // position relative to the outer .deck-stage box — shared by hover, background-click,
+  // and media-drop below, all of which used to assume box-rect === content-rect (true
+  // only at zoom 1).
+  const toContentPoint = (px: number, py: number, rect: DOMRect) => {
+    const { zoom, pan } = viewRef.current;
+    return {
+      x: (px - pan.x) / zoom / rect.width,
+      y: (py - pan.y) / zoom / rect.height,
+    };
+  };
+
+  const zoomBy = (factor: number) => {
+    const el = stageRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setView((prev) => {
+      const newZoom = clampZoom(prev.zoom * factor);
+      // Zoom the buttons apply from the viewport's own center, not the last cursor spot.
+      const cx = (rect.width / 2 - prev.pan.x) / prev.zoom;
+      const cy = (rect.height / 2 - prev.pan.y) / prev.zoom;
+      const pan = clampPan(rect.width / 2 - newZoom * cx, rect.height / 2 - newZoom * cy, newZoom, rect.width, rect.height);
+      return { zoom: newZoom, pan };
+    });
+  };
+  const resetZoom = () => setView(DEFAULT_VIEW);
 
   useImperativeHandle(
     ref,
@@ -156,8 +257,12 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
-    if (target.closest(".deck-handle")) return;
-    onBackgroundPointerDown(e);
+    // .stage-zoom sits in a fixed corner over the frame — without this, clicking +/−/reset
+    // would ALSO hit-test whatever layer quad happens to be under that corner and silently
+    // reassign the selection as a side effect of zooming.
+    if (target.closest(".deck-handle, .stage-zoom")) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    onBackgroundPointerDown(toContentPoint(e.clientX - rect.left, e.clientY - rect.top, rect));
   };
 
   // Faint hover outline so objects on the stage read as clickable before the operator
@@ -171,7 +276,7 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
     if (target.closest(".deck-handle")) { setHoverQuad(null); return; }
     if (!hitLayers?.length) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const p = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+    const p = toContentPoint(e.clientX - rect.left, e.clientY - rect.top, rect);
     const hit = hitLayers.find((layer) => pointInQuad(p, layer.quad));
     setHoverQuad(hit?.quad ?? null);
   };
@@ -203,15 +308,28 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
         if (!payload || !onDropMedia) return;
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
-        onDropMedia(
-          { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height },
-          payload,
-        );
+        onDropMedia(toContentPoint(e.clientX - rect.left, e.clientY - rect.top, rect), payload);
       }}
     >
-      {/* src omitted when there's no frame so panel.css's `.preview-img:not([src])` rule
-       *  hides the broken-image glyph instead of showing one. */}
-      <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" onLoad={onFrameLoad} />
+      {/* Everything that should zoom/pan together lives in here — the preview frame and
+       *  every on-stage handle. Chrome below (badges/ticks/reg grid/zoom control) stays
+       *  outside, so it never moves. */}
+      <div
+        className="deck-stage__content"
+        style={view.zoom !== 1 || view.pan.x !== 0 || view.pan.y !== 0 ? { transform: `translate(${view.pan.x}px, ${view.pan.y}px) scale(${view.zoom})` } : undefined}
+      >
+        {/* src omitted when there's no frame so panel.css's `.preview-img:not([src])` rule
+         *  hides the broken-image glyph instead of showing one. */}
+        <img ref={imgRef} className="preview-img" src={frame || undefined} alt="" onLoad={onFrameLoad} />
+        <div className="stage-overlay">
+          {hoverQuad && (
+            <svg className="deck-hover-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+              <polygon points={hoverQuad.map((pt) => `${pt.x},${pt.y}`).join(" ")} />
+            </svg>
+          )}
+          {overlay}
+        </div>
+      </div>
       <div className="deck-stage__nosignal" aria-hidden="true">
         <span className="mono">NO SIGNAL</span>
         <span className="deck-stage__nosignal-sub mono">awaiting render-client preview</span>
@@ -241,15 +359,18 @@ export const Stage = forwardRef<ConfidenceMonitorHandle, StageProps>(function St
         </div>
       )}
       {blind && <div className="stage-blind-note mono">wall frozen · edits off-air · go live commits · discard reverts</div>}
-      {ctx.menu}
-      <div className="stage-overlay">
-        {hoverQuad && (
-          <svg className="deck-hover-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
-            <polygon points={hoverQuad.map((pt) => `${pt.x},${pt.y}`).join(" ")} />
-          </svg>
-        )}
-        {overlay}
+      <div className="stage-zoom" role="group" aria-label="Stage zoom">
+        <button type="button" onClick={() => zoomBy(1 / 1.4)} disabled={view.zoom <= MIN_ZOOM} aria-label="Zoom out">
+          −
+        </button>
+        <button type="button" className="stage-zoom__pct mono" onClick={resetZoom} disabled={view.zoom === MIN_ZOOM} aria-label="Reset zoom to 100%">
+          {Math.round(view.zoom * 100)}%
+        </button>
+        <button type="button" onClick={() => zoomBy(1.4)} disabled={view.zoom >= MAX_ZOOM} aria-label="Zoom in">
+          +
+        </button>
       </div>
+      {ctx.menu}
     </div>
   );
 });

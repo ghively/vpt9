@@ -5,7 +5,6 @@ import {
   useReducer,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import {
@@ -731,12 +730,10 @@ export function App() {
   // mode, rather than switching back to layer mode on a layer hit — a stray click
   // switching targets mid-drag would be more surprising than a no-op.
   const onBackgroundPointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
+    (point: { x: number; y: number }) => {
       if (selection.editTarget === "screen") return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const p = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
       const topFirst = Object.values(stateRef.current.layers).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
-      selection.setSelectedLayerId(pickTopLayer(topFirst, p));
+      selection.setSelectedLayerId(pickTopLayer(topFirst, point));
     },
     [selection],
   );
