@@ -1,0 +1,70 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  unit-tests:
+    name: Unit tests (server + cast-receiver)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install server dependencies
+        working-directory: control-panel/server
+        run: npm install
+
+      - name: Run server tests
+        working-directory: control-panel/server
+        run: node --test test/*.test.js
+
+      - name: Install cast-receiver dependencies
+        working-directory: control-panel/cast-receiver
+        run: npm install
+
+      - name: Run cast-receiver tests
+        working-directory: control-panel/cast-receiver
+        run: node --test
+
+  e2e-tests:
+    name: End-to-end tests (Playwright)
+    runs-on: ubuntu-latest
+    # Headless Chromium + WebGL2 is a documented source of flakiness for this suite even on
+    # developer machines (see CLAUDE.md); don't let a flaky e2e run block the unit-tests signal.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Each e2e spec spawns its own control-plane server / static file server on a fixed
+      # port (see control-panel/e2e/playwright.config.js: workers: 1, run serially), so we
+      # only need the dependencies installed, not the services running ahead of time.
+      - name: Install server dependencies
+        working-directory: control-panel/server
+        run: npm install
+
+      - name: Install panel dependencies
+        working-directory: control-panel/panel
+        run: npm install
+
+      - name: Install e2e dependencies
+        working-directory: control-panel/e2e
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: control-panel/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        working-directory: control-panel/e2e
+        run: npx playwright test
