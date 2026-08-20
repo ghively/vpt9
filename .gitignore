@@ -1,1 +1,12 @@
 .worktrees/
+
+# Editor / agent local state
+.claude/
+.env
+
+# Node (defense-in-depth; each package also has its own .gitignore)
+node_modules/
+dist/
+build/
+coverage/
+.DS_Store
