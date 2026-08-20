@@ -41,8 +41,7 @@ Write/Edit produce the docs.
   for `.js`/`.jxs`/`.glsl` files, or a unique JSON key path / surrounding string for `.maxpat` JSON
   (line numbers in `.maxpat` files are fragile — a nearby unique string like an object's `varname` or
   `text` field is a more durable citation).
-- Git identity is already configured in this repo (`Gene Hively` / `genehively@gmail.com`); commit
-  after every task.
+- Git identity is already configured in this repo; commit after every task.
 - Never delete or rewrite the *source* `vpt8 source code/` tree in this plan — this is a read-only
   audit. Only files under `docs/` and `CLAUDE.md` are created/modified.
 
