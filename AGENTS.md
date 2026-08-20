@@ -4,44 +4,57 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## What this is
 
-This is the source code for **VPT (VideoProjectionTool) 8**, a free live video-projection/VJ
-application by HC Gilje, released May 2018, 64-bit only (Mac and Windows). It is licensed under
-Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported (see
-`vpt8 source code/VPT8-sourcecode-readme.rtf`).
+**The project is `control-panel/`** — a browser-based Node/React/WebGL2 live video-projection/VJ
+application. It began as a reimplementation of **VPT (VideoProjectionTool) 8**, a free live
+video-projection/VJ app by HC Gilje built in Cycling '74 Max/MSP/Jitter and released May 2018, and
+now stands on its own at full feature parity with it. **The original VPT8 Max/MSP source is no
+longer in the working tree** — it was archived and removed on 2026-07-12 (it used to live under
+`vpt8 source code/`); it is preserved in full in git history at tag `vpt8-source-archive`
+(`git show vpt8-source-archive` / `git checkout vpt8-source-archive -- "vpt8 source code"` to
+retrieve it, including `VPT8-sourcecode-readme.rtf`, its CC BY-NC-SA 3.0 Unported license text).
+Nothing in `control-panel/` depends on it.
+
+There is no Max/MSP anymore: this is a conventional text codebase with npm, a dev server, typecheck,
+lint, unit tests, and Playwright e2e. If you're working in `control-panel/`, read
+`control-panel/README.md` (architecture, state shape, protocol, build/run) and
+`control-panel/OPERATOR_GUIDE.md` (how to run a show from the panel). See `docs/ROADMAP.md` for
+project history and status.
+
+## Build / run / gates
+
+Per-package `npm install`, then (from `control-panel/`):
+
+- Server tests: `cd server && node --test`
+- Cast-receiver tests: `cd cast-receiver && node --test`
+- Panel typecheck + lint: `cd panel && npx tsc --noEmit && npx eslint .`
+- End-to-end: `cd e2e && npx playwright test` (see `control-panel/README.md` for details).
+
+## Historical reference: the archived VPT8 Max/MSP source
+
+The rest of this file describes the original VPT8 Max/MSP/Jitter project as it existed **before**
+the 2026-07-12 removal. It no longer describes anything in this working tree, but it's kept here to
+document what's retrievable from the `vpt8-source-archive` tag and to explain why `control-panel/`
+is shaped the way it is. For a full reverse-engineered, file-by-file map, see
+`docs/architecture/00-overview.md` and `docs/TECH_DEBT.md`.
 
 VPT is built entirely in **Cycling '74 Max/MSP/Jitter** — a visual, dataflow programming
 environment, not a conventional text-based codebase. There is no compiler, package manager, linter,
-or test suite for the project as a whole. "Running" or "editing" this project means opening it in
-the Max application (with the Jitter GL extensions), not executing a shell command.
-
-All VPT8 Max/MSP content lives under `vpt8 source code/`.
-
-## Also in this repo: `control-panel/` (the browser-based replacement)
-
-This repository also contains `control-panel/` — an actively developed, independent
-Node/React project that replaces VPT8 with a browser-based control panel, a WebGL2
-render client, and a WebSocket/OSC control-plane. It does not use Max/MSP and is not
-covered by the rest of this file. If you're working in `control-panel/`, read
-`control-panel/README.md` (architecture, state shape, protocol, build/run) and
-`control-panel/OPERATOR_GUIDE.md` (how to run a show from the panel) instead — and see
-`docs/ROADMAP.md` for how the two projects relate and which one is under active
-development.
-
-## Opening / working with the project
+or test suite for the project as a whole. "Running" or "editing" it means opening it in the Max
+application (with the Jitter GL extensions), not executing a shell command.
 
 - Requires **Cycling '74 Max** (with Jitter) installed to open, edit, or run.
-- The project file is `vpt8 source code/vpt8.maxproj`. Opening it in Max loads the whole project
+- The project file was `vpt8 source code/vpt8.maxproj`. Opening it in Max loads the whole project
   and its search path.
-- The top-level ("toplevel") patchers, per `vpt8.maxproj`, are:
+- The top-level ("toplevel") patchers, per `vpt8.maxproj`, were:
   - `patchers/vpt7project.maxpat` — the main application patcher.
   - `patchers/hapsource.maxpat` — HAP codec video source patcher.
-- `.maxpat` files are JSON internally and can be diffed/read as text, but they should normally be
+- `.maxpat` files are JSON internally and can be diffed/read as text, but they were normally
   edited by opening them in the Max patcher GUI — hand-editing the JSON is error-prone (box IDs,
   patchline connections, saved `pattrstorage` state, etc. all have to stay internally consistent).
-- There is no build step to "compile" the app; a Max standalone/collective would be produced via
-  Max's own File > Build Collective/Application, which is outside this repo.
+- There was no build step to "compile" the app; a Max standalone/collective would be produced via
+  Max's own File > Build Collective/Application.
 
-## Repository layout
+## Archived repository layout (tag `vpt8-source-archive`)
 
 - `patchers/*.maxpat` — Max patcher files (the actual program graph: objects, subpatchers,
   bpatchers, connections). ~49 patchers, one per major module/UI panel (mixer, layer engine, presets,
