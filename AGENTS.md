@@ -47,17 +47,16 @@ The primary active application in this repository is **LumaMap Studio** located 
 ## 🚦 Roadmap & Next Feature Targets
 
 ### ✅ Completed
+- **5-Tab Workflow & Dedicated AI Studio (`5. ✦ AI`)**:
+  - Unifies all intelligent room features into a dedicated, always-open 5th inspector tab (`#sectionAi`) while keeping contextual shortcuts in Steps 1 & 2 and the Scenes/Surface strips.
+  - Supports deep linking via URL query parameters: `?tab=ai`, `?tab=source`, `?tab=warp`, `?tab=mask`, `?tab=blend`, alongside `?mode=projector` and `?mode=remote`.
+- **Prompt-Based "Vibez" (AI Room Theme Generator)** (`#vibezDrawer`, 10 semantic room archetypes, 4 new procedural 60fps shaders `fireflies`, `biolum`, `lofiRain`, `emberGlow`, modifier parser, "Keep Wall Map" geometry lock, and optional LLM/Ollama endpoint `POST /api/vibez/generate`).
+- **AI Auto-Room Mapping via Camera / Webcam** (`#autoMapModal`, client-side CV pipeline with Sobel + Integral-Image adaptive thresholding, morphological closing, connected-component contour tracing, RDP polygon simplification, Projector Flash Diff calibration, and Synthetic Demo Room).
+- **Auto-Show / Ambient Scene Sequencer** (`#sceneSequencerBar`, 10s–10m interval timer, loop/shuffle modes, pool selector, live progress bar/countdown, and multi-property scene morphing across corners, polygons, blend, color grading, crop, and keep-out masks).
 - **Built-in Text, Signage & Live Clock Overlay Source** (`#srcPaneText`, neon bloom, marquees, digital clock, event countdowns).
 - **Dual-Source Audio Beat Reactivity** (Web Audio API FFT analysis of internal video audio + room mic, live VU meter, kick brightness & subwoofer scale).
 - **Persistent Layer Opacity Controls** (Quick-access 0–100% layer fader in surface header).
-
-### ⏳ Upcoming Priorities
-1. **Auto-Show / Ambient Scene Sequencer**:
-   - Add an auto-play timer in the Room Scenes drawer to cycle through saved scenes every $N$ minutes with smooth interpolation.
-2. **Prompt-Based "Vibez" (AI Room Theme Generator)**:
-   - Provide prompt-driven scene composition where a user prompt (e.g. "cyberpunk alley", "lo-fi study", "mystic forest") automatically configures harmonious shader colors, loops, and surface layouts.
-3. **AI Auto-Room Mapping via Camera / Webcam**:
-   - Camera-based automatic edge/corner detection to detect walls, framed art, and doors, auto-generating aligned polygon surfaces.
+- **Hardware-Grade UI Streamlining & De-Cluttering** (Anodized obsidian palette, tabular monospace numerals, collapsible inspector modules, compact single-row active surface channel strip, and monochrome vector SVGs).
 
 ---
 

@@ -322,6 +322,98 @@ async def delete_scene(scene_id: str) -> JSONResponse:
 
 
 # ============================================================================
+# PROMPT-BASED "VIBEZ" AI ROOM THEME GENERATOR (OPTIONAL LLM / OLLAMA BRIDGE)
+# ============================================================================
+VIBEZ_LLM_SYSTEM_PROMPT = """You are the LumaMap Studio AI Room Theme ("Vibez") Designer.
+Given a user prompt describing a room mood, return ONLY a JSON object with this exact schema:
+{
+  "vibeName": "Short Title",
+  "masterBrightness": 88,
+  "palette": ["#hex1", "#hex2", "#hex3", "#hex4"],
+  "washColor": "#hex1",
+  "colorGrade": {"brightness": 100, "contrast": 115, "saturation": 135, "hue": 0},
+  "blendMode": "screen|normal|plus-lighter|overlay",
+  "edgeSoftness": 18,
+  "speed": 1.0,
+  "tileGrid": 1,
+  "textOverlay": {"mode": "neon|marquee|clock|countdown|minimal", "text": "SHORT SIGN TEXT", "font": "sans-serif|monospace|serif|cursive|impact", "color": "#hex1", "size": 42, "glow": 24, "marqueeSpeed": 4, "clockFormat": "12h"},
+  "audioReactivity": {"pulseBrightness": 28, "pulseZoom": 4, "sensitivity": 12, "target": "all"},
+  "archetype": {
+    "templateKey": "triptych",
+    "heroSources": [{"engine": "shader", "sourceTab": "art", "shaderTheme": "neonGrid"}],
+    "accentSources": [{"engine": "shader", "sourceTab": "art", "shaderTheme": "fireflies"}]
+  }
+}"""
+
+
+def _call_optional_llm_vibez(prompt: str, variation: int = 0) -> Optional[Dict[str, Any]]:
+    """If LUMAMAP_LLM_API_KEY / OPENAI_API_KEY or LUMAMAP_OLLAMA_URL is set, query the LLM for a custom Vibe blueprint."""
+    ollama_url = os.environ.get("LUMAMAP_OLLAMA_URL", "").strip()
+    api_key = (os.environ.get("LUMAMAP_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not ollama_url and not api_key:
+        return None
+    try:
+        if ollama_url:
+            model = os.environ.get("LUMAMAP_OLLAMA_MODEL", "llama3.2").strip()
+            payload = json.dumps({
+                "model": model,
+                "prompt": f"{VIBEZ_LLM_SYSTEM_PROMPT}\nUser prompt: {prompt} (variation {variation})",
+                "format": "json",
+                "stream": False,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                ollama_url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                raw = json.loads(resp.read().decode("utf-8"))
+                return json.loads(raw.get("response", "{}"))
+        if api_key:
+            base_url = os.environ.get("LUMAMAP_LLM_BASE_URL", "https://api.openai.com/v1/chat/completions").strip()
+            model = os.environ.get("LUMAMAP_LLM_MODEL", "gpt-4o-mini").strip()
+            payload = json.dumps({
+                "model": model,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": VIBEZ_LLM_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Prompt: {prompt} (variation #{variation})"},
+                ],
+                "temperature": 0.7,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                base_url,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=4.5) as resp:
+                raw = json.loads(resp.read().decode("utf-8"))
+                content = raw["choices"][0]["message"]["content"]
+                return json.loads(content)
+    except Exception:
+        return None
+    return None
+
+
+@app.post("/api/vibez/generate")
+async def generate_vibez_theme(request: Request) -> JSONResponse:
+    body = await request.json()
+    prompt = str(body.get("prompt") or "cyberpunk alley").strip()
+    variation = int(body.get("variation") or 0)
+    blueprint = await asyncio.to_thread(_call_optional_llm_vibez, prompt, variation)
+    if isinstance(blueprint, dict) and blueprint.get("archetype"):
+        blueprint["variationOffset"] = variation
+        return JSONResponse({"ok": True, "llmGenerated": True, "blueprint": blueprint})
+    return JSONResponse({"ok": True, "llmGenerated": False, "blueprint": None})
+
+
+
+# ============================================================================
 # LOCAL MEDIA LIBRARY UPLOAD & STREAMING WITH HTTP RANGE SUPPORT
 # ============================================================================
 @app.get("/api/media")

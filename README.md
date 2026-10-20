@@ -18,12 +18,16 @@
 - **Interactive Visual Studio (`/`)**: Drag-and-drop 3D corner-pinning, real-time stage calibration, 12 instant room presets, and contextual inspector controls.
 - **Dedicated Projector Window (`/?mode=projector`)**: 100% chromeless, edge-to-edge hardware-accelerated canvas for your projector (`F` for true fullscreen).
 - **Wi-Fi Mobile Remote (`/?mode=remote`)**: Instant smartphone control with a precision thumb-trackpad, corner switcher, and scene recall.
+- **Dedicated 5-Tab Workflow & AI Studio (`5. ✦ AI`)**:
+  - **✦ Prompt-Based "Vibez" AI Theme Generator**: Natural language room theme generator with 10 semantic archetypes (*Cyberpunk Alley, Lo-Fi Study, Mystic Forest, Deep Ocean Bioluminescence, 90s Rave Warehouse, Cozy Hearth, Cosmic Space, Zen Spa, Liquid 70s, Retro Arcade*), 4 new 60fps procedural shaders (`fireflies`, `biolum`, `lofiRain`, `emberGlow`), modifier parser, `🔒 Keep Wall Map` geometry lock, and optional LLM/Ollama backend (`POST /api/vibez/generate`).
+  - **⌖ AI Camera Room Auto-Mapper**: In-browser computer vision pipeline (Sobel gradients, integral-image adaptive thresholding, morphological closing, contour tracing, and RDP simplification) to automatically detect physical walls, framed art, doors, and TVs from a webcam feed or room photo snapshot. Includes Projector Flash Diff calibration and a Synthetic Demo Room.
+  - **⟳ Auto-Show / Ambient Scene Sequencer**: Hands-free timer sequencer (`10s`–`10m`) that cycles through saved room looks with smooth multi-property scene morphing across quad corners, polygon cutouts, opacity, blend modes, and color grading.
 - **Rich Source Engine**:
   - **💬 Dynamic Text, Neon Signage & Live Clock**: Glowing neon signs with multi-pass bloom, scrolling marquee tickers, live digital clock & date, and event countdown timers.
   - **📁 Local Media Library**: Native MP4, WebM, MOV, GIF, PNG, JPG, and WebP playback with playlist auto-advance.
   - **▶️ YouTube Integration**: Dual-engine playback (instant iframe loops + clean background MP4 streaming via `yt-dlp`).
   - **📺 Emby Media Server**: Connect directly to your Emby server or pull the currently playing movie in 1 tap.
-  - **✨ Procedural Shaders & Color**: 7 built-in 60fps GLSL shaders and architectural mood wash lighting.
+  - **✨ Procedural Shaders & Color**: 11 built-in 60fps GLSL shaders and architectural mood wash lighting.
   - **📷 Live Camera / Capture Card**: Ultra-low latency webcam and USB HDMI capture card input.
 - **Dual-Source Audio Beat Reactivity**:
   - Live 256-bin FFT spectrum analyzer reacting either to **internal video/stream sound** directly OR to **room music via microphone/line-in**.
@@ -34,6 +38,10 @@
   - N-point arbitrary polygon mask cutouts with edge feathering and invert (hole-punch) modes.
   - 4-edge independent soft-edge blending (linear / smoothstep) with gamma correction.
 - **Single-File Portability**: Runs either via Python (`server.py`) or as a standalone zero-install HTML5 file (`lumamap_studio_v2.html`).
+
+<p align="center">
+  <img src="docs/screenshots/lumamap_ai_studio.png" alt="LumaMap AI Studio" width="850" />
+</p>
 
 <p align="center">
   <img src="docs/screenshots/lumamap_phone_remote.png" alt="LumaMap Phone Remote" width="320" />
@@ -67,20 +75,13 @@ Double-click **`lumamap_studio_v2.html`** in any web browser. No server, termina
 
 ## 🗺️ Project Roadmap
 
-### ✅ Recently Completed
+### ✅ Completed Features
+- [x] **Prompt-Based "Vibez" (AI Room Theme Generator)** (Natural-language prompt theme synthesis, 10 room archetypes, 4 new shaders, Keep Wall Map geometry lock, and optional LLM/Ollama backend).
+- [x] **AI Auto-Room Mapping via Camera / Webcam** (In-browser CV pipeline with Sobel + adaptive thresholding, contour tracing, quad approximation, Projector Flash Diff calibration, and Demo Room).
+- [x] **Auto-Show / Ambient Scene Sequencer** (Hands-free interval timer, multi-property scene morphing across corners, cutouts, blend, color grading, loop/shuffle modes, and live progress bar).
 - [x] **Built-in Text, Signage & Live Clock Overlay Source** (Neon tube glow, scrolling marquees, live clock & date, event countdown timers).
 - [x] **Dual-Source Audio Beat Reactivity** (Internal video sound + room mic FFT analyzer with kick brightness, subwoofer scale, and shader tempo modulation).
-- [x] **Persistent Layer Opacity Controls** (Quick-access 0–100% layer fader directly in the surface header).
-
-### ⏳ Upcoming Feature Targets
-- [ ] **1. Auto-Show / Ambient Scene Sequencer**
-  - Hands-free playlist sequencer for saved Room Scenes.
-  - Timed automatic switching (every $N$ minutes) with configurable smooth morph/fade transitions between scenes.
-- [ ] **2. Prompt-Based "Vibez" (AI Room Theme Generator)**
-  - Natural language prompt-driven scene composition (e.g. *"cyberpunk ramen bar"*, *"cozy rainy autumn cabin"*, *"deep space nebula meditation"*) to automatically configure matching shaders, mood washes, loops, and surface setups.
-- [ ] **3. AI Auto-Room Mapping via Camera / Webcam**
-  - Computer-vision & AI edge/corner detection via webcam or phone camera.
-  - Automatically identifies physical picture frames, walls, doorways, and obstacles in the projection field and snaps calibrated polygon surfaces onto them with one tap.
+- [x] **Hardware-Grade UI & 5-Step Workflow Streamlining** (Anodized obsidian palette, tabular numerals, 5 clear workflow tabs: `1. Source`, `2. Fit Wall`, `3. Cutout`, `4. Blend`, `5. ✦ AI`).
 
 ---
 
