@@ -1579,6 +1579,12 @@
                 <button id="togglePanelVisibleBtn" type="button" class="btn-secondary active-selection" title="Show or hide this surface">👁 Shown</button>
               </div>
             </div>
+            <!-- Quick Surface Layer Opacity Slider (Always reachable across all steps) -->
+            <div style="display:flex;align-items:center;gap:10px;background:var(--bg-input);padding:5px 10px;border-radius:8px;border:1px solid var(--border-subtle);margin-top:2px;">
+              <span class="strip-label" style="font-size:11px;min-width:72px;">Layer Opacity</span>
+              <input id="headerOpacityRange" type="range" min="0" max="100" value="100" style="flex:1;" />
+              <span id="headerOpacityVal" class="slider-val" style="min-width:38px;text-align:right;">100%</span>
+            </div>
           </div>
 
           <!-- ===============================================================
@@ -5236,6 +5242,7 @@
           setSlider('blendGammaRange', 'blendGammaVal', b.gamma ?? 1.8, '');
           setSlider('edgeBlurRange', 'edgeBlurVal', b.blur ?? 0, 'px');
           setSlider('panelOpacityRange', 'panelOpacityVal', b.opacity ?? 100, '%');
+          setSlider('headerOpacityRange', 'headerOpacityVal', b.opacity ?? 100, '%');
           document.getElementById('blendModeSelect').value = b.mode || 'screen';
 
           const col = panel.color || {};
@@ -6947,6 +6954,7 @@
         bindBlendSlider('blendGammaRange', 'gamma', true);
         bindBlendSlider('edgeBlurRange', 'blur', false);
         bindBlendSlider('panelOpacityRange', 'opacity', false);
+        bindBlendSlider('headerOpacityRange', 'opacity', false);
 
         document.getElementById('blendModeSelect').addEventListener('change', ev => {
           const p = getSelectedPanel();
