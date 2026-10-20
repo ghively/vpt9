@@ -19,13 +19,18 @@
 - **Dedicated Projector Window (`/?mode=projector`)**: 100% chromeless, edge-to-edge hardware-accelerated canvas for your projector (`F` for true fullscreen).
 - **Wi-Fi Mobile Remote (`/?mode=remote`)**: Instant smartphone control with a precision thumb-trackpad, corner switcher, and scene recall.
 - **Rich Source Engine**:
+  - **💬 Dynamic Text, Neon Signage & Live Clock**: Glowing neon signs with multi-pass bloom, scrolling marquee tickers, live digital clock & date, and event countdown timers.
   - **📁 Local Media Library**: Native MP4, WebM, MOV, GIF, PNG, JPG, and WebP playback with playlist auto-advance.
   - **▶️ YouTube Integration**: Dual-engine playback (instant iframe loops + clean background MP4 streaming via `yt-dlp`).
   - **📺 Emby Media Server**: Connect directly to your Emby server or pull the currently playing movie in 1 tap.
   - **✨ Procedural Shaders & Color**: 7 built-in 60fps GLSL shaders and architectural mood wash lighting.
   - **📷 Live Camera / Capture Card**: Ultra-low latency webcam and USB HDMI capture card input.
-- **Geometric Warping & Cutouts**:
+- **Dual-Source Audio Beat Reactivity**:
+  - Live 256-bin FFT spectrum analyzer reacting either to **internal video/stream sound** directly OR to **room music via microphone/line-in**.
+  - Dynamic modulation: bass kick brightness strobe, subwoofer kick scale, procedural shader acceleration, and neon text glow pulse.
+- **Geometric Warping, Cutouts & Opacity**:
   - 4-corner perspective warping with internal video pan/zoom/rotation.
+  - Quick-access **Layer Opacity fader (0–100%)** persistent across all inspector steps.
   - N-point arbitrary polygon mask cutouts with edge feathering and invert (hole-punch) modes.
   - 4-edge independent soft-edge blending (linear / smoothstep) with gamma correction.
 - **Single-File Portability**: Runs either via Python (`server.py`) or as a standalone zero-install HTML5 file (`lumamap_studio_v2.html`).
@@ -62,20 +67,18 @@ Double-click **`lumamap_studio_v2.html`** in any web browser. No server, termina
 
 ## 🗺️ Project Roadmap
 
-The core projection mapping engine is feature-complete. The following items are planned for future releases:
+### ✅ Recently Completed
+- [x] **Built-in Text, Signage & Live Clock Overlay Source** (Neon tube glow, scrolling marquees, live clock & date, event countdown timers).
+- [x] **Dual-Source Audio Beat Reactivity** (Internal video sound + room mic FFT analyzer with kick brightness, subwoofer scale, and shader tempo modulation).
+- [x] **Persistent Layer Opacity Controls** (Quick-access 0–100% layer fader directly in the surface header).
 
-- [ ] **1. Audio-Reactive / Microphone Beat Pulse**
-  - Real-time Web Audio API FFT analysis of room audio via microphone or line-in.
-  - Audio-reactive parameter modulation: pulse brightness, zoom scale, edge feather, or shader speed to the bass/beat of room music.
-- [ ] **2. Built-in Text, Signage & Live Clock Overlay Source**
-  - Dedicated 5th visual source generator for dynamic text rendering on any surface.
-  - Customizable fonts, neon glowing outlines, scrolling ticker marquees, and live digital clock / countdown timers.
-- [ ] **3. Auto-Show / Ambient Scene Sequencer**
+### ⏳ Upcoming Feature Targets
+- [ ] **1. Auto-Show / Ambient Scene Sequencer**
   - Hands-free playlist sequencer for saved Room Scenes.
   - Timed automatic switching (every $N$ minutes) with configurable smooth morph/fade transitions between scenes.
-- [ ] **4. Prompt-Based "Vibez" (AI Room Theme Generator)**
-  - Type a text prompt (e.g. *"cyberpunk ramen bar"*, *"cozy rainy autumn cabin"*, *"deep space nebula meditation"*) and let AI generate or select matching shaders, mood color washes, video loops, and surface configs to instantly transform the entire room's vibe.
-- [ ] **5. AI Auto-Room Mapping via Camera / Webcam**
+- [ ] **2. Prompt-Based "Vibez" (AI Room Theme Generator)**
+  - Natural language prompt-driven scene composition (e.g. *"cyberpunk ramen bar"*, *"cozy rainy autumn cabin"*, *"deep space nebula meditation"*) to automatically configure matching shaders, mood washes, loops, and surface setups.
+- [ ] **3. AI Auto-Room Mapping via Camera / Webcam**
   - Computer-vision & AI edge/corner detection via webcam or phone camera.
   - Automatically identifies physical picture frames, walls, doorways, and obstacles in the projection field and snaps calibrated polygon surfaces onto them with one tap.
 

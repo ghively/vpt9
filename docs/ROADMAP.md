@@ -5,16 +5,19 @@ remains. It supersedes the earlier `docs/ROADMAP.md` (written 2026-07-04, first 
 `docs/TECH_DEBT.md` and `docs/CONTROL_PANEL_SPEC_AUDIT.md` remain as closed historical audit
 records — this doc doesn't repeat their findings, it points to them.
 
-**Current status (2026-10-19):** **LumaMap Studio (`lumamap-portable/`)** is now the primary, active application in this repository. It achieves complete functional parity with real-world projection mapping needs, featuring a unified Split-View Studio, dedicated Projector Window, Wi-Fi Phone Remote with precision thumb-trackpad, 12 instant room templates, custom arbitrary polygon mask cutouts with invert/feather, local media library with playlist auto-advance, dual YouTube engines (iframe + background `yt-dlp` MP4 extraction), Emby media server integration, 7 GLSL procedural shaders, and live webcam capture.
+**Current status (2026-10-19):** **LumaMap Studio (`lumamap-portable/`)** is the active, primary projection mapping suite in this repository. It features an interactive Split-View Studio, dedicated chromeless Projector Window, Wi-Fi Phone Remote with precision thumb-trackpad, 12 instant room templates, custom arbitrary polygon cutouts with feather/invert, local media library with playlist queue, dual YouTube engines (iframe + background `yt-dlp` MP4 extraction), Emby integration, 7 GLSL procedural shaders, live webcam capture, a 6th source mode for **dynamic glowing neon text, scrolling marquees, and live clock/countdown timers**, **dual-source real-time audio reactivity** (internal video sound + room mic FFT), and persistent **layer opacity controls**.
 
-The Node/React/WebGL2 **`control-panel/`** codebase is now marked as **Legacy Reference** and kept intact as an architectural reference.
+The Node/React/WebGL2 **`control-panel/`** codebase is marked as **Legacy Reference** and retained as an architectural and algorithmic reference.
 
-### Active Roadmap Items (LumaMap Studio)
-1. **Audio-Reactive / Microphone Beat Pulse**: Real-time Web Audio API FFT analysis of room audio to pulse surface brightness, scale/zoom, or procedural shader speeds to room music.
-2. **Built-in Text, Signage & Live Clock Overlay Source**: 5th visual source generator for dynamic glowing neon text, scrolling marquees, and live digital clock/countdown timers.
-3. **Auto-Show / Ambient Scene Sequencer**: Hands-free scene sequencer that automatically cycles through saved Room Scenes every $N$ minutes with smooth morph transitions.
-4. **Prompt-Based "Vibez" (AI Room Theme Generator)**: Natural language prompt-driven scene composition (e.g., *"cyberpunk ramen shop"*, *"cozy autumn fireplace"*, *"deep space chillout"*) to automatically configure matching shaders, mood washes, loops, and surface setups.
-5. **AI Auto-Room Mapping via Camera / Webcam**: Computer-vision / AI corner and edge detection via webcam or phone camera to automatically locate picture frames, walls, and architectural features and snap calibrated polygon projection surfaces directly onto them.
+### ✅ Completed Features
+- **Built-in Text, Signage & Live Clock Overlay Source**: 6th source mode supporting Glowing Neon Signs with bloom, Scrolling Marquee Tickers, Live Digital Clock & Date (12h/24h), and Event Countdown Timers.
+- **Dual-Source Audio Beat Reactivity**: Real-time Web Audio API FFT analysis with 3-way input switcher (Internal Video Sound / Room Mic / Off), live VU meter, kick brightness strobe, subwoofer scale kick, and shader tempo acceleration.
+- **Persistent Layer Opacity Controls**: Quick-access 0–100% layer fader integrated into the surface header across all inspector steps.
+
+### ⏳ Upcoming Roadmap Targets (LumaMap Studio)
+1. **Auto-Show / Ambient Scene Sequencer**: Hands-free playlist sequencer that automatically cycles through saved Room Scenes every $N$ minutes with smooth morph transitions.
+2. **Prompt-Based "Vibez" (AI Room Theme Generator)**: Natural language prompt-driven scene composition (e.g., *"cyberpunk ramen shop"*, *"cozy autumn fireplace"*, *"deep space chillout"*) to automatically configure matching shaders, mood washes, loops, and surface setups.
+3. **AI Auto-Room Mapping via Camera / Webcam**: Computer-vision / AI corner and edge detection via webcam or phone camera to automatically locate picture frames, walls, and architectural features and snap calibrated polygon projection surfaces directly onto them.
 
 ---
 

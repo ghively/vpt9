@@ -46,20 +46,17 @@ The primary active application in this repository is **LumaMap Studio** located 
 
 ## 🚦 Roadmap & Next Feature Targets
 
-When prompted to implement upcoming features, refer to these prioritized items:
+### ✅ Completed
+- **Built-in Text, Signage & Live Clock Overlay Source** (`#srcPaneText`, neon bloom, marquees, digital clock, event countdowns).
+- **Dual-Source Audio Beat Reactivity** (Web Audio API FFT analysis of internal video audio + room mic, live VU meter, kick brightness & subwoofer scale).
+- **Persistent Layer Opacity Controls** (Quick-access 0–100% layer fader in surface header).
 
-1. **Audio-Reactive / Microphone Beat Pulse**:
-   - Add real-time Web Audio API `AudioContext` and `AnalyserNode` in `index.html`.
-   - Provide a 1-tap "React to Music (Mic)" toggle.
-   - Modulate surface brightness, scale/zoom, or procedural shader speeds based on low-frequency (bass) energy.
-2. **Built-in Text, Signage & Live Clock Overlay Source**:
-   - Add a 5th source tab to the surface inspector.
-   - Render customizable glowing neon text, scrolling marquees, or digital countdowns to an offscreen canvas and pipe as a surface texture.
-3. **Auto-Show / Ambient Scene Sequencer**:
+### ⏳ Upcoming Priorities
+1. **Auto-Show / Ambient Scene Sequencer**:
    - Add an auto-play timer in the Room Scenes drawer to cycle through saved scenes every $N$ minutes with smooth interpolation.
-4. **Prompt-Based "Vibez" (AI Room Theme Generator)**:
+2. **Prompt-Based "Vibez" (AI Room Theme Generator)**:
    - Provide prompt-driven scene composition where a user prompt (e.g. "cyberpunk alley", "lo-fi study", "mystic forest") automatically configures harmonious shader colors, loops, and surface layouts.
-5. **AI Auto-Room Mapping via Camera / Webcam**:
+3. **AI Auto-Room Mapping via Camera / Webcam**:
    - Camera-based automatic edge/corner detection to detect walls, framed art, and doors, auto-generating aligned polygon surfaces.
 
 ---
