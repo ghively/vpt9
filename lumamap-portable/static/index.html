@@ -910,10 +910,10 @@
       margin: 2px 0 0 0;
     }
 
-    /* Source Type 5-Pill Selector */
+    /* Source Type 6-Pill Selector */
     .source-type-tabs {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: 5px;
       background: var(--bg-input);
       padding: 4px;
@@ -1609,6 +1609,9 @@
                 <button type="button" data-src-tab="camera" class="source-type-btn">
                   <span>📷</span><span>Camera</span>
                 </button>
+                <button type="button" data-src-tab="text" class="source-type-btn">
+                  <span>💬</span><span>Text/Clock</span>
+                </button>
               </div>
 
               <!-- SUB-PANE A: LOCAL FILES (MP4, WEBM, GIF, PNG, JPG) + WEB LINK DOWNLOADER -->
@@ -1788,6 +1791,95 @@
                 </div>
                 <button id="startCameraBtn" type="button" class="btn-primary">📷 Activate Live Camera on Surface</button>
               </div>
+
+              <!-- SUB-PANE F: DYNAMIC TEXT, NEON SIGNAGE & LIVE CLOCK / COUNTDOWN -->
+              <div id="srcPaneText" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+                <div>
+                  <label for="textModeSelect" class="strip-label" style="display:block;margin-bottom:5px;">Overlay Generator Mode</label>
+                  <select id="textModeSelect" class="text-input" style="width:100%;">
+                    <option value="neon">💡 Glowing Neon Sign</option>
+                    <option value="marquee">📢 Scrolling Marquee Ticker</option>
+                    <option value="clock">🕒 Live Digital Clock &amp; Date</option>
+                    <option value="countdown">⏳ Event Countdown Timer</option>
+                    <option value="minimal">🖋️ Minimalist Sans Banner</option>
+                  </select>
+                </div>
+
+                <div id="textMessageGroup">
+                  <label for="textContentInput" class="strip-label" style="display:block;margin-bottom:5px;">Custom Signage Text</label>
+                  <textarea id="textContentInput" rows="2" class="text-input" style="width:100%;resize:vertical;font-size:13px;" placeholder="LUMAMAP STUDIO&#10;NOW LIVE"></textarea>
+                </div>
+
+                <!-- Clock / Countdown Customization -->
+                <div id="textClockConfigGroup" class="hidden" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                  <div>
+                    <label for="clockFormatSelect" class="strip-label" style="display:block;margin-bottom:4px;">Clock Format</label>
+                    <select id="clockFormatSelect" class="text-input" style="width:100%;">
+                      <option value="12h">12-Hour (AM/PM)</option>
+                      <option value="24h">24-Hour Military</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="countdownTargetInput" class="strip-label" style="display:block;margin-bottom:4px;">Countdown Target</label>
+                    <input id="countdownTargetInput" type="time" class="text-input" value="00:00" style="width:100%;" />
+                  </div>
+                </div>
+
+                <!-- Typography, Neon Color & Marquee Speed Controls -->
+                <div style="background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:9px;">
+                  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:8px;align-items:center;">
+                    <div>
+                      <label for="textFontSelect" class="strip-label" style="display:block;margin-bottom:4px;">Typography Style</label>
+                      <select id="textFontSelect" class="text-input" style="width:100%;font-size:11.5px;">
+                        <option value="sans-serif">Futuristic Modern Sans</option>
+                        <option value="monospace">Retro Terminal / Monospace</option>
+                        <option value="serif">Cinematic Serif</option>
+                        <option value="cursive">Neon Script Handwriting</option>
+                        <option value="impact">Bold Ultra-Heavy Impact</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                        <span class="strip-label">Neon Glow Color</span>
+                        <input id="textColorPicker" type="color" value="#38bdf8" style="width:28px;height:20px;border:none;background:transparent;cursor:pointer;" />
+                      </div>
+                      <div class="color-swatch-row" style="gap:4px;">
+                        <button type="button" data-text-color="#38bdf8" class="color-swatch-btn" style="background:#38bdf8;width:18px;height:18px;" title="Cyan Neon"></button>
+                        <button type="button" data-text-color="#f43f5e" class="color-swatch-btn" style="background:#f43f5e;width:18px;height:18px;" title="Hot Pink Neon"></button>
+                        <button type="button" data-text-color="#a855f7" class="color-swatch-btn" style="background:#a855f7;width:18px;height:18px;" title="Purple Glow"></button>
+                        <button type="button" data-text-color="#f59e0b" class="color-swatch-btn" style="background:#f59e0b;width:18px;height:18px;" title="Warm Amber"></button>
+                        <button type="button" data-text-color="#10b981" class="color-swatch-btn" style="background:#10b981;width:18px;height:18px;" title="Emerald Green"></button>
+                        <button type="button" data-text-color="#ffffff" class="color-swatch-btn" style="background:#ffffff;width:18px;height:18px;" title="Pure White"></button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div class="slider-group">
+                      <div class="slider-label-row">
+                        <span>Text Size</span>
+                        <span id="textSizeVal" class="slider-val">42px</span>
+                      </div>
+                      <input id="textSizeRange" type="range" min="16" max="96" value="42" />
+                    </div>
+                    <div class="slider-group">
+                      <div class="slider-label-row">
+                        <span>Glow Intensity</span>
+                        <span id="textGlowVal" class="slider-val">20px</span>
+                      </div>
+                      <input id="textGlowRange" type="range" min="0" max="50" value="20" />
+                    </div>
+                  </div>
+
+                  <div id="marqueeSpeedRow" class="slider-group">
+                    <div class="slider-label-row">
+                      <span>Marquee Scroll Speed</span>
+                      <span id="marqueeSpeedVal" class="slider-val">Medium</span>
+                    </div>
+                    <input id="marqueeSpeedRange" type="range" min="0" max="10" value="4" />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Playback, Timeline Scrub Bar & Loop Trimmer Card -->
@@ -1842,6 +1934,72 @@
                     <option value="1" selected>1.0x Normal</option>
                     <option value="1.5">1.5x Fast</option>
                     <option value="2">2.0x Double</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- DUAL-INPUT AUDIO REACTIVITY ENGINE (INTERNAL MEDIA + ROOM MIC) -->
+            <div class="ui-card" style="border:1px solid rgba(56,189,248,0.3);background:radial-gradient(ellipse at top, rgba(56,189,248,0.06), transparent 80%);">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title" style="display:flex;align-items:center;gap:6px;">
+                    <span>🎵 Real-Time Audio Beat Reactivity</span>
+                    <span id="audioLiveBadge" class="pill-btn" style="background:rgba(100,116,139,0.3);color:var(--text-muted);font-size:9.5px;padding:2px 7px;">Off</span>
+                  </h3>
+                  <p class="card-subtitle">Pulse surface brightness, kick scale, and glow to music bass or room mic</p>
+                </div>
+              </div>
+
+              <!-- Audio Input Source Switcher: Off / Internal / Mic -->
+              <div style="display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:6px;">
+                <button id="audioSrcOffBtn" type="button" class="btn-secondary active-selection">❌ Off</button>
+                <button id="audioSrcInternalBtn" type="button" class="btn-secondary" title="React directly to video/music audio playing inside LumaMap">🎵 Video Sound</button>
+                <button id="audioSrcMicBtn" type="button" class="btn-secondary" title="Listen to room music through your microphone or line-in">🎙️ Room Mic</button>
+              </div>
+
+              <!-- Live Frequency Meter VU Bar -->
+              <div style="background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:8px;padding:7px 10px;display:flex;flex-direction:column;gap:5px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;">
+                  <span style="color:var(--text-muted);">Bass Kick / Energy VU</span>
+                  <span id="audioMeterVal" style="font-weight:700;color:#38bdf8;font-family:monospace;">0%</span>
+                </div>
+                <div style="width:100%;height:8px;background:rgba(255,255,255,0.08);border-radius:999px;overflow:hidden;position:relative;">
+                  <div id="audioMeterBar" style="width:0%;height:100%;background:linear-gradient(90deg, #38bdf8 0%, #a855f7 65%, #f43f5e 100%);transition:width 0.05s ease;border-radius:999px;"></div>
+                </div>
+              </div>
+
+              <!-- Reactivity Targets: Brightness Pulse, Scale Kick, Shader Speed -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div class="slider-group">
+                  <div class="slider-label-row">
+                    <span>Kick Brightness</span>
+                    <span id="audioPulseBrVal" class="slider-val">+25%</span>
+                  </div>
+                  <input id="audioPulseBrRange" type="range" min="0" max="80" value="25" />
+                </div>
+                <div class="slider-group">
+                  <div class="slider-label-row">
+                    <span>Subwoofer Scale</span>
+                    <span id="audioPulseZoomVal" class="slider-val">+4%</span>
+                  </div>
+                  <input id="audioPulseZoomRange" type="range" min="0" max="20" value="4" />
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center;">
+                <div class="slider-group">
+                  <div class="slider-label-row">
+                    <span>Beat Sensitivity</span>
+                    <span id="audioSensVal" class="slider-val">1.2x</span>
+                  </div>
+                  <input id="audioSensRange" type="range" min="5" max="30" value="12" />
+                </div>
+                <div>
+                  <label for="audioPulseTargetSelect" class="strip-label" style="display:block;margin-bottom:4px;">Modulate Target</label>
+                  <select id="audioPulseTargetSelect" class="text-input" style="width:100%;font-size:11px;padding:5px 8px;">
+                    <option value="selected" selected>Selected Surface Only</option>
+                    <option value="all">All Surfaces (Global Room)</option>
                   </select>
                 </div>
               </div>
@@ -2563,7 +2721,15 @@
           items: []
         },
         masks: [],
-        panels: JSON.parse(JSON.stringify(PRESET_SCENES.triptych.panels))
+        panels: JSON.parse(JSON.stringify(PRESET_SCENES.triptych.panels)),
+        audioReactivity: {
+          enabled: false,
+          source: 'off', // 'off' | 'internal' | 'mic'
+          pulseBrightness: 25,
+          pulseZoom: 4,
+          sensitivity: 12,
+          target: 'selected' // 'selected' | 'all'
+        }
       };
 
       function normalizeMask(m, idx = 0) {
@@ -2612,10 +2778,24 @@
         if (typeof p.playlistInterval === 'undefined') p.playlistInterval = 0;
         if (typeof p.playlistIndex === 'undefined') p.playlistIndex = 0;
         if (!p.solidColor) p.solidColor = '#38bdf8';
+        if (!p.textConfig) {
+          p.textConfig = {
+            mode: 'neon',
+            text: 'LUMAMAP STUDIO\nNOW LIVE',
+            font: 'sans-serif',
+            color: '#38bdf8',
+            size: 42,
+            glow: 20,
+            marqueeSpeed: 4,
+            clockFormat: '12h',
+            countdownTarget: '00:00'
+          };
+        }
         if (!p.sourceTab) {
           if (p.engine === 'file') p.sourceTab = 'file';
           else if (p.engine === 'stream') p.sourceTab = 'emby';
           else if (p.engine === 'camera') p.sourceTab = 'camera';
+          else if (p.engine === 'text') p.sourceTab = 'text';
           else if (p.engine === 'shader' || p.engine === 'color') p.sourceTab = 'art';
           else p.sourceTab = 'youtube';
         }
@@ -2874,6 +3054,9 @@
         if (typeof remoteState.testGrid === 'boolean') appState.testGrid = remoteState.testGrid;
         if (typeof remoteState.wallGuides === 'boolean') appState.wallGuides = remoteState.wallGuides;
         if (typeof remoteState.masterBrightness === 'number') appState.masterBrightness = remoteState.masterBrightness;
+        if (remoteState.audioReactivity && typeof remoteState.audioReactivity === 'object') {
+          Object.assign(appState.audioReactivity, remoteState.audioReactivity);
+        }
         if (!appState.panels.some(p => p.id === appState.selectedPanelId)) {
           appState.selectedPanelId = remoteState.selectedPanelId || appState.panels[0].id;
         }
@@ -2887,6 +3070,7 @@
           testGrid: appState.testGrid,
           blackout: appState.blackout,
           masterBrightness: appState.masterBrightness,
+          audioReactivity: appState.audioReactivity,
           masks: appState.masks,
           panels: appState.panels
         };
@@ -3088,6 +3272,261 @@
       }
 
       // =========================================================================
+      // DUAL-SOURCE AUDIO REACTIVITY ENGINE (INTERNAL VIDEO/AUDIO + ROOM MIC)
+      // =========================================================================
+      let audioCtx = null;
+      let audioAnalyser = null;
+      let micMediaStream = null;
+      let micSourceNode = null;
+      const mediaElementSourceNodes = new WeakMap();
+      let audioBassEnergy = 0;   // 0.0 to 1.0 (bass frequency band ~40-140Hz)
+      let audioOverallEnergy = 0; // 0.0 to 1.0 (full spectrum RMS)
+      let audioFreqData = null;
+
+      function initAudioContext() {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            audioCtx = new AudioContextClass();
+            audioAnalyser = audioCtx.createAnalyser();
+            audioAnalyser.fftSize = 256;
+            audioAnalyser.smoothingTimeConstant = 0.75;
+            audioFreqData = new Uint8Array(audioAnalyser.frequencyBinCount);
+          }
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+      }
+
+      async function setAudioReactivitySource(source) {
+        initAudioContext();
+        if (!audioCtx || !audioAnalyser) return;
+        appState.audioReactivity.source = source;
+        appState.audioReactivity.enabled = (source !== 'off');
+
+        if (micSourceNode) {
+          try { micSourceNode.disconnect(); } catch (e) {}
+          micSourceNode = null;
+        }
+        if (micMediaStream) {
+          try { micMediaStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+          micMediaStream = null;
+        }
+
+        if (source === 'mic') {
+          try {
+            if (!navigator.mediaDevices?.getUserMedia) {
+              showToast('Microphone not supported on this browser');
+              appState.audioReactivity.source = 'off';
+              appState.audioReactivity.enabled = false;
+              syncAudioDom();
+              return;
+            }
+            micMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            micSourceNode = audioCtx.createMediaStreamSource(micMediaStream);
+            micSourceNode.connect(audioAnalyser);
+            showToast('🎙️ Room Mic Audio Reactivity ON');
+          } catch (err) {
+            showToast('Microphone access denied');
+            appState.audioReactivity.source = 'off';
+            appState.audioReactivity.enabled = false;
+          }
+        } else if (source === 'internal') {
+          attachInternalAudioNodes();
+          showToast('🎵 Video Sound Reactivity ON');
+        } else {
+          showToast('Audio Reactivity OFF');
+        }
+        syncAudioDom();
+        broadcastStateChange(true);
+      }
+
+      function attachInternalAudioNodes() {
+        if (!audioCtx || !audioAnalyser || appState.audioReactivity.source !== 'internal') return;
+        domPanelMap.forEach((entry) => {
+          const video = entry.videoEl;
+          if (video && video instanceof HTMLMediaElement) {
+            if (!mediaElementSourceNodes.has(video)) {
+              try {
+                const srcNode = audioCtx.createMediaElementSource(video);
+                srcNode.connect(audioAnalyser);
+                srcNode.connect(audioCtx.destination);
+                mediaElementSourceNodes.set(video, srcNode);
+              } catch (e) {}
+            }
+          }
+        });
+      }
+
+      function pollAudioReactivityFrame() {
+        if (!audioAnalyser || !appState.audioReactivity.enabled || appState.audioReactivity.source === 'off') {
+          audioBassEnergy = audioBassEnergy * 0.88;
+          audioOverallEnergy = audioOverallEnergy * 0.88;
+          return;
+        }
+        if (!audioFreqData) audioFreqData = new Uint8Array(audioAnalyser.frequencyBinCount);
+        audioAnalyser.getByteFrequencyData(audioFreqData);
+
+        let bassSum = 0;
+        const bassCount = 5;
+        for (let b = 1; b <= bassCount; b++) {
+          bassSum += audioFreqData[b] || 0;
+        }
+        const rawBass = (bassSum / (bassCount * 255));
+
+        let allSum = 0;
+        for (let k = 0; k < audioFreqData.length; k++) allSum += audioFreqData[k];
+        const rawOverall = allSum / (audioFreqData.length * 255);
+
+        const sens = (Number(appState.audioReactivity.sensitivity) || 12) / 10;
+        const targetBass = Math.min(1.0, rawBass * sens);
+        if (targetBass > audioBassEnergy) {
+          audioBassEnergy = targetBass;
+        } else {
+          audioBassEnergy = audioBassEnergy * 0.82 + targetBass * 0.18;
+        }
+        audioOverallEnergy = audioOverallEnergy * 0.85 + Math.min(1.0, rawOverall * sens) * 0.15;
+      }
+
+      // =========================================================================
+      // DYNAMIC TEXT, NEON SIGNAGE & LIVE CLOCK CANVAS GENERATOR
+      // =========================================================================
+      function drawTextAndClockFrame(ctx, w, h, panel, t) {
+        ctx.clearRect(0, 0, w, h);
+        const cfg = panel.textConfig || {
+          mode: 'neon',
+          text: 'LUMAMAP STUDIO\nNOW LIVE',
+          font: 'sans-serif',
+          color: '#38bdf8',
+          size: 42,
+          glow: 20,
+          marqueeSpeed: 4,
+          clockFormat: '12h',
+          countdownTarget: '00:00'
+        };
+
+        const mode = cfg.mode || 'neon';
+        const color = cfg.color || '#38bdf8';
+        const glowRadius = Math.max(0, Number(cfg.glow) || 0);
+        const fontSize = Math.max(16, Math.min(96, Number(cfg.size) || 42));
+
+        const audioBoost = (appState.audioReactivity.enabled && (appState.audioReactivity.target === 'all' || panel.id === appState.selectedPanelId))
+          ? audioBassEnergy * 25 : 0;
+        const effectiveGlow = glowRadius + audioBoost;
+
+        let fontFace = 'sans-serif';
+        if (cfg.font === 'monospace') fontFace = '"Courier New", Courier, monospace';
+        else if (cfg.font === 'serif') fontFace = 'Georgia, "Times New Roman", serif';
+        else if (cfg.font === 'cursive') fontFace = '"Brush Script MT", cursive, sans-serif';
+        else if (cfg.font === 'impact') fontFace = 'Impact, "Arial Black", sans-serif';
+        else fontFace = 'system-ui, -apple-system, sans-serif';
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.fillStyle = '#05070f';
+        ctx.fillRect(0, 0, w, h);
+
+        if (mode === 'clock') {
+          const now = new Date();
+          let hrs = now.getHours();
+          const mins = String(now.getMinutes()).padStart(2, '0');
+          const secs = String(now.getSeconds()).padStart(2, '0');
+          let ampm = '';
+          if (cfg.clockFormat === '12h') {
+            ampm = hrs >= 12 ? ' PM' : ' AM';
+            hrs = hrs % 12 || 12;
+          }
+          const timeStr = `${hrs}:${mins}:${secs}${ampm}`;
+          const dateStr = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+          ctx.font = `800 ${fontSize * 1.3}px ${fontFace}`;
+          ctx.shadowColor = color;
+          ctx.shadowBlur = effectiveGlow;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(timeStr, w / 2, h / 2 - 14);
+
+          ctx.font = `600 ${Math.max(12, fontSize * 0.45)}px ${fontFace}`;
+          ctx.shadowBlur = effectiveGlow * 0.5;
+          ctx.fillStyle = color;
+          ctx.fillText(dateStr.toUpperCase(), w / 2, h / 2 + fontSize * 0.7);
+          return;
+        }
+
+        if (mode === 'countdown') {
+          const targetStr = cfg.countdownTarget || '00:00';
+          const [tH, tM] = targetStr.split(':').map(n => parseInt(n, 10) || 0);
+          const now = new Date();
+          const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), tH, tM, 0);
+          let diffMs = target.getTime() - now.getTime();
+          if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000;
+
+          const totalSec = Math.floor(diffMs / 1000);
+          const cH = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+          const cM = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+          const cS = String(totalSec % 60).padStart(2, '0');
+          const countStr = `${cH}:${cM}:${cS}`;
+
+          ctx.font = `900 ${fontSize * 1.4}px ${fontFace}`;
+          ctx.shadowColor = color;
+          ctx.shadowBlur = effectiveGlow * 1.2;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(countStr, w / 2, h / 2 - 12);
+
+          ctx.font = `700 ${Math.max(12, fontSize * 0.42)}px ${fontFace}`;
+          ctx.shadowBlur = effectiveGlow * 0.4;
+          ctx.fillStyle = color;
+          ctx.fillText(`COUNTDOWN TO ${targetStr}`, w / 2, h / 2 + fontSize * 0.72);
+          return;
+        }
+
+        if (mode === 'marquee') {
+          const text = (cfg.text || 'LUMAMAP STUDIO LIVE PROJECTION').replace(/\n/g, '  ★  ');
+          ctx.font = `800 ${fontSize}px ${fontFace}`;
+          const textMetrics = ctx.measureText(text);
+          const textW = textMetrics.width;
+          const speed = (Number(cfg.marqueeSpeed) ?? 4) * 55;
+          const loopW = textW + 120;
+          const scrollX = (w - (t * speed) % loopW);
+
+          ctx.textAlign = 'left';
+          ctx.shadowColor = color;
+          ctx.shadowBlur = effectiveGlow;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(text, scrollX, h / 2);
+          ctx.fillText(text, scrollX + loopW, h / 2);
+          return;
+        }
+
+        // Default: Neon / Minimalist Signage
+        const lines = (cfg.text || 'LUMAMAP STUDIO\nNOW LIVE').split('\n');
+        const lineH = fontSize * 1.22;
+        const startY = h / 2 - ((lines.length - 1) * lineH) / 2;
+
+        ctx.font = `800 ${fontSize}px ${fontFace}`;
+        lines.forEach((line, idx) => {
+          const y = startY + idx * lineH;
+          if (mode === 'neon') {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = effectiveGlow * 1.5;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = Math.max(3, fontSize * 0.08);
+            ctx.strokeText(line, w / 2, y);
+
+            ctx.shadowBlur = effectiveGlow * 0.6;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(line, w / 2, y);
+          } else {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = effectiveGlow * 0.4;
+            ctx.fillStyle = color;
+            ctx.fillText(line, w / 2, y);
+          }
+        });
+      }
+
+      // =========================================================================
       // 60FPS PROCEDURAL VISUAL SHADERS, SOLID MOOD LIGHT & TILE GRID
       // =========================================================================
       const activeCanvases = new Map();
@@ -3235,6 +3674,11 @@
       const offscreenTileCtx = offscreenTileCanvas.getContext('2d');
 
       function drawProceduralShaderFrame(ctx, w, h, panel, t, panelIdx) {
+        if (panel.engine === 'text' || panel.sourceTab === 'text') {
+          drawTextAndClockFrame(ctx, w, h, panel, t);
+          return;
+        }
+
         const tile = Math.max(1, Math.min(4, parseInt(panel.crop?.tile, 10) || 1));
         const domEntry = domPanelMap.get(panel.id);
 
@@ -3267,16 +3711,58 @@
       function startAnimationLoop() {
         function frame(nowMs) {
           const t = nowMs * 0.001;
+          pollAudioReactivityFrame();
+
+          // Live audio VU meter and dynamic brightness/kick scaling
+          if (appState.audioReactivity.enabled) {
+            const meterBar = document.getElementById('audioMeterBar');
+            const meterVal = document.getElementById('audioMeterVal');
+            const pct = Math.round(audioBassEnergy * 100);
+            if (meterBar) meterBar.style.width = `${pct}%`;
+            if (meterVal) meterVal.textContent = `${pct}%`;
+
+            const pulseBr = Number(appState.audioReactivity.pulseBrightness) || 0;
+            const pulseZoom = (Number(appState.audioReactivity.pulseZoom) || 0) / 100;
+            const isGlobal = appState.audioReactivity.target === 'all';
+
+            domPanelMap.forEach((entry, panelId) => {
+              if (isGlobal || panelId === appState.selectedPanelId) {
+                const p = entry.panelRef;
+                if (!p) return;
+                if (pulseBr > 0 && entry.polyWrap) {
+                  const baseBr = Number(p.color?.brightness ?? 100);
+                  const dynamicBr = baseBr + audioBassEnergy * pulseBr;
+                  const ct = Number(p.color?.contrast ?? 100);
+                  const sat = Number(p.color?.saturation ?? 100);
+                  const hue = Number(p.color?.hue ?? 0);
+                  const blurPx = Number(p.blend.blur) || 0;
+                  entry.polyWrap.style.filter = `brightness(${dynamicBr.toFixed(1)}%) contrast(${ct}%) saturate(${sat}%) hue-rotate(${hue}deg)${blurPx > 0 ? ` blur(${blurPx}px)` : ''}`;
+                }
+                if (pulseZoom > 0 && entry.innerCropWrap) {
+                  const baseZoom = (Number(p.crop?.zoom ?? 100) / 100);
+                  const dynamicZoom = baseZoom * (1 + audioBassEnergy * pulseZoom);
+                  const panX = Number(p.crop?.panX ?? 0);
+                  const panY = Number(p.crop?.panY ?? 0);
+                  const rot = Number(p.crop?.rotate ?? 0);
+                  const flipX = p.crop?.flipH ? -1 : 1;
+                  const flipY = p.crop?.flipV ? -1 : 1;
+                  entry.innerCropWrap.style.transform = `translate(${panX}%, ${panY}%) scale(${(dynamicZoom * flipX).toFixed(3)}, ${(dynamicZoom * flipY).toFixed(3)}) rotate(${rot}deg)`;
+                }
+              }
+            });
+          }
+
           let i = 0;
           activeCanvases.forEach(entry => {
             if (entry.panelRef.visible) {
               const spd = Number(entry.panelRef.speed) || 1;
+              const audioSpdMod = (appState.audioReactivity.enabled && entry.panelRef.engine === 'shader') ? (audioOverallEnergy * 1.5) : 0;
               drawProceduralShaderFrame(
                 entry.ctx,
                 entry.canvas.width,
                 entry.canvas.height,
                 entry.panelRef,
-                entry.panelRef.playing ? t * spd : 1.2,
+                entry.panelRef.playing ? t * (spd + audioSpdMod) : 1.2,
                 i
               );
             }
@@ -4568,6 +5054,37 @@
           if (s) s.classList.toggle('hidden', !active);
         });
 
+      function syncAudioDom() {
+        const ar = appState.audioReactivity || { enabled: false, source: 'off', pulseBrightness: 25, pulseZoom: 4, sensitivity: 12, target: 'selected' };
+        const badge = document.getElementById('audioLiveBadge');
+        if (badge) {
+          badge.textContent = ar.source === 'mic' ? '🎙️ Mic Active' : ar.source === 'internal' ? '🎵 Sound Active' : 'Off';
+          badge.style.background = ar.source !== 'off' ? 'rgba(56,189,248,0.25)' : 'rgba(100,116,139,0.3)';
+          badge.style.color = ar.source !== 'off' ? '#7dd3fc' : 'var(--text-muted)';
+        }
+        document.getElementById('audioSrcOffBtn')?.classList.toggle('active-selection', ar.source === 'off');
+        document.getElementById('audioSrcInternalBtn')?.classList.toggle('active-selection', ar.source === 'internal');
+        document.getElementById('audioSrcMicBtn')?.classList.toggle('active-selection', ar.source === 'mic');
+
+        const brInp = document.getElementById('audioPulseBrRange');
+        if (brInp) brInp.value = ar.pulseBrightness ?? 25;
+        const brVal = document.getElementById('audioPulseBrVal');
+        if (brVal) brVal.textContent = `+${ar.pulseBrightness ?? 25}%`;
+
+        const zmInp = document.getElementById('audioPulseZoomRange');
+        if (zmInp) zmInp.value = ar.pulseZoom ?? 4;
+        const zmVal = document.getElementById('audioPulseZoomVal');
+        if (zmVal) zmVal.textContent = `+${ar.pulseZoom ?? 4}%`;
+
+        const sensInp = document.getElementById('audioSensRange');
+        if (sensInp) sensInp.value = ar.sensitivity ?? 12;
+        const sensVal = document.getElementById('audioSensVal');
+        if (sensVal) sensVal.textContent = `${((ar.sensitivity ?? 12) / 10).toFixed(1)}x`;
+
+        const tgtSel = document.getElementById('audioPulseTargetSelect');
+        if (tgtSel) tgtSel.value = ar.target || 'selected';
+      }
+
         // Populate Current Surface Controls
         const panel = getSelectedPanel();
         if (panel) {
@@ -4597,6 +5114,7 @@
           document.getElementById('srcPaneEmby').classList.toggle('hidden', activeSrcTab !== 'emby');
           document.getElementById('srcPaneArt').classList.toggle('hidden', activeSrcTab !== 'art');
           document.getElementById('srcPaneCamera').classList.toggle('hidden', activeSrcTab !== 'camera');
+          document.getElementById('srcPaneText').classList.toggle('hidden', activeSrcTab !== 'text');
 
           renderMediaLibraryGrid();
 
@@ -4618,6 +5136,43 @@
           document.querySelectorAll('.color-swatch-btn').forEach(sw => {
             sw.className = 'color-swatch-btn' + (sw.getAttribute('data-color') === panel.solidColor ? ' active' : '');
           });
+
+          // Text / Signage / Clock Controls Sync
+          const textCfg = panel.textConfig || { mode: 'neon', text: 'LUMAMAP STUDIO\nNOW LIVE', font: 'sans-serif', color: '#38bdf8', size: 42, glow: 20, marqueeSpeed: 4, clockFormat: '12h', countdownTarget: '00:00' };
+          const modeSel = document.getElementById('textModeSelect');
+          if (modeSel) modeSel.value = textCfg.mode || 'neon';
+          const txtInp = document.getElementById('textContentInput');
+          if (txtInp && document.activeElement !== txtInp) txtInp.value = textCfg.text || '';
+          const fontSel = document.getElementById('textFontSelect');
+          if (fontSel) fontSel.value = textCfg.font || 'sans-serif';
+          const colPicker = document.getElementById('textColorPicker');
+          if (colPicker) colPicker.value = textCfg.color || '#38bdf8';
+          document.querySelectorAll('[data-text-color]').forEach(sw => {
+            sw.className = 'color-swatch-btn' + (sw.getAttribute('data-text-color') === textCfg.color ? ' active' : '');
+          });
+          const szRange = document.getElementById('textSizeRange');
+          if (szRange) szRange.value = textCfg.size || 42;
+          const szVal = document.getElementById('textSizeVal');
+          if (szVal) szVal.textContent = `${textCfg.size || 42}px`;
+          const glowRange = document.getElementById('textGlowRange');
+          if (glowRange) glowRange.value = textCfg.glow ?? 20;
+          const glowVal = document.getElementById('textGlowVal');
+          if (glowVal) glowVal.textContent = `${textCfg.glow ?? 20}px`;
+          const spdRange = document.getElementById('marqueeSpeedRange');
+          if (spdRange) spdRange.value = textCfg.marqueeSpeed ?? 4;
+          const spdVal = document.getElementById('marqueeSpeedVal');
+          if (spdVal) spdVal.textContent = (textCfg.marqueeSpeed === 0) ? 'Stopped' : (textCfg.marqueeSpeed > 7) ? 'Fast' : (textCfg.marqueeSpeed < 4) ? 'Slow' : 'Medium';
+          const clkFmtSel = document.getElementById('clockFormatSelect');
+          if (clkFmtSel) clkFmtSel.value = textCfg.clockFormat || '12h';
+          const cntInp = document.getElementById('countdownTargetInput');
+          if (cntInp && document.activeElement !== cntInp) cntInp.value = textCfg.countdownTarget || '00:00';
+
+          const isClockOrCount = (textCfg.mode === 'clock' || textCfg.mode === 'countdown');
+          document.getElementById('textClockConfigGroup')?.classList.toggle('hidden', !isClockOrCount);
+          document.getElementById('textMessageGroup')?.classList.toggle('hidden', isClockOrCount);
+          document.getElementById('marqueeSpeedRow')?.classList.toggle('hidden', textCfg.mode !== 'marquee');
+
+          syncAudioDom();
 
           const playBtn = document.getElementById('panelPlayPauseBtn');
           if (playBtn) {
@@ -5157,7 +5712,7 @@
           });
         });
 
-        // Source Type 5-Pill Tabs
+        // Source Type 6-Pill Tabs
         document.querySelectorAll('.source-type-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             const p = getSelectedPanel();
@@ -5165,6 +5720,7 @@
             const tab = btn.getAttribute('data-src-tab');
             p.sourceTab = tab;
             if (tab === 'art' && p.engine !== 'shader') p.engine = 'shader';
+            if (tab === 'text') p.engine = 'text';
             if (tab === 'youtube' && p.engine !== 'iframe' && p.engine !== 'ytdlp') p.engine = 'iframe';
             if (tab === 'camera') populateCameraDevices();
             renderAll();
@@ -5846,7 +6402,137 @@
             if (lbl) lbl.textContent = `${formatSec(sec)}`;
           }
         });
+        // Text / Neon Signage / Clock Controls
+        document.getElementById('textModeSelect')?.addEventListener('change', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.mode = ev.target.value;
+          p.engine = 'text';
+          p.sourceTab = 'text';
+          renderAll();
+          broadcastStateChange(true);
+        });
 
+        document.getElementById('textContentInput')?.addEventListener('input', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.text = ev.target.value;
+          renderAll();
+          broadcastStateChange(false);
+        });
+
+        document.getElementById('textFontSelect')?.addEventListener('change', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.font = ev.target.value;
+          renderAll();
+          broadcastStateChange(true);
+        });
+
+        document.getElementById('textColorPicker')?.addEventListener('input', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.color = ev.target.value;
+          renderAll();
+          broadcastStateChange(false);
+        });
+
+        document.querySelectorAll('[data-text-color]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const p = getSelectedPanel();
+            if (!p) return;
+            if (!p.textConfig) p.textConfig = {};
+            p.textConfig.color = btn.getAttribute('data-text-color');
+            renderAll();
+            broadcastStateChange(true);
+          });
+        });
+
+        document.getElementById('textSizeRange')?.addEventListener('input', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.size = parseInt(ev.target.value, 10) || 42;
+          const valEl = document.getElementById('textSizeVal');
+          if (valEl) valEl.textContent = `${p.textConfig.size}px`;
+          renderAll();
+          broadcastStateChange(false);
+        });
+
+        document.getElementById('textGlowRange')?.addEventListener('input', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.glow = parseInt(ev.target.value, 10) ?? 20;
+          const valEl = document.getElementById('textGlowVal');
+          if (valEl) valEl.textContent = `${p.textConfig.glow}px`;
+          renderAll();
+          broadcastStateChange(false);
+        });
+
+        document.getElementById('marqueeSpeedRange')?.addEventListener('input', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.marqueeSpeed = parseInt(ev.target.value, 10) ?? 4;
+          const valEl = document.getElementById('marqueeSpeedVal');
+          if (valEl) valEl.textContent = (p.textConfig.marqueeSpeed === 0) ? 'Stopped' : (p.textConfig.marqueeSpeed > 7) ? 'Fast' : (p.textConfig.marqueeSpeed < 4) ? 'Slow' : 'Medium';
+          renderAll();
+          broadcastStateChange(false);
+        });
+
+        document.getElementById('clockFormatSelect')?.addEventListener('change', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.clockFormat = ev.target.value;
+          renderAll();
+          broadcastStateChange(true);
+        });
+
+        document.getElementById('countdownTargetInput')?.addEventListener('change', ev => {
+          const p = getSelectedPanel();
+          if (!p) return;
+          if (!p.textConfig) p.textConfig = {};
+          p.textConfig.countdownTarget = ev.target.value;
+          renderAll();
+          broadcastStateChange(true);
+        });
+
+        // Dual-Source Audio Reactivity Events (Off / Internal / Mic)
+        document.getElementById('audioSrcOffBtn')?.addEventListener('click', () => setAudioReactivitySource('off'));
+        document.getElementById('audioSrcInternalBtn')?.addEventListener('click', () => setAudioReactivitySource('internal'));
+        document.getElementById('audioSrcMicBtn')?.addEventListener('click', () => setAudioReactivitySource('mic'));
+
+        document.getElementById('audioPulseBrRange')?.addEventListener('input', ev => {
+          appState.audioReactivity.pulseBrightness = parseInt(ev.target.value, 10) || 0;
+          const el = document.getElementById('audioPulseBrVal');
+          if (el) el.textContent = `+${appState.audioReactivity.pulseBrightness}%`;
+          broadcastStateChange(false);
+        });
+
+        document.getElementById('audioPulseZoomRange')?.addEventListener('input', ev => {
+          appState.audioReactivity.pulseZoom = parseInt(ev.target.value, 10) || 0;
+          const el = document.getElementById('audioPulseZoomVal');
+          if (el) el.textContent = `+${appState.audioReactivity.pulseZoom}%`;
+          broadcastStateChange(false);
+        });
+
+        document.getElementById('audioSensRange')?.addEventListener('input', ev => {
+          appState.audioReactivity.sensitivity = parseInt(ev.target.value, 10) || 12;
+          const el = document.getElementById('audioSensVal');
+          if (el) el.textContent = `${(appState.audioReactivity.sensitivity / 10).toFixed(1)}x`;
+          broadcastStateChange(false);
+        });
+
+        document.getElementById('audioPulseTargetSelect')?.addEventListener('change', ev => {
+          appState.audioReactivity.target = ev.target.value;
+          broadcastStateChange(true);
+        });
         // Surface Playlist Queue Controls
         document.getElementById('addCurrentToPlaylistBtn')?.addEventListener('click', () => {
           const p = getSelectedPanel();
