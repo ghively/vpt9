@@ -10,3 +10,18 @@ dist/
 build/
 coverage/
 .DS_Store
+
+# Python & LumaMap local files
+__pycache__/
+*.pyc
+.venv/
+venv/
+lumamap-portable/.venv/
+lumamap-portable/media/*
+!lumamap-portable/media/.gitkeep
+lumamap-portable/scenes.json
+lumamap-portable/cache/*.mp4
+!lumamap-portable/cache/Oy9E1RL5muM.mp4
+!lumamap-portable/cache/0bzY7dLQhy8.mp4
+!lumamap-portable/cache/CNW93WaoMYE.mp4
+!lumamap-portable/cache/-AzsWaE6QAQ.mp4

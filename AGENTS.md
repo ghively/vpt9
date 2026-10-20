@@ -1,141 +1,95 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides architectural context, rules, and development guidelines for AI assistants and autonomous coding agents working in this repository.
 
-## What this is
+---
 
-**The project is `control-panel/`** — a browser-based Node/React/WebGL2 live video-projection/VJ
-application. It began as a reimplementation of **VPT (VideoProjectionTool) 8**, a free live
-video-projection/VJ app by HC Gilje built in Cycling '74 Max/MSP/Jitter and released May 2018, and
-now stands on its own at full feature parity with it. **The original VPT8 Max/MSP source is no
-longer in the working tree** — it was archived and removed on 2026-07-12 (it used to live under
-`vpt8 source code/`); it is preserved in full in git history at tag `vpt8-source-archive`
-(`git show vpt8-source-archive` / `git checkout vpt8-source-archive -- "vpt8 source code"` to
-retrieve it, including `VPT8-sourcecode-readme.rtf`, its CC BY-NC-SA 3.0 Unported license text).
-Nothing in `control-panel/` depends on it.
+## 🎯 Current Project Structure & Focus
 
-There is no Max/MSP anymore: this is a conventional text codebase with npm, a dev server, typecheck,
-lint, unit tests, and Playwright e2e. If you're working in `control-panel/`, read
-`control-panel/README.md` (architecture, state shape, protocol, build/run) and
-`control-panel/OPERATOR_GUIDE.md` (how to run a show from the panel). See `docs/ROADMAP.md` for
-project history and status.
+The primary active application in this repository is **LumaMap Studio** located in [`lumamap-portable/`](lumamap-portable/).
 
-## Build / run / gates
+### Repository Layout
 
-Per-package `npm install`, then (from `control-panel/`):
+| Directory / File | Role | Description |
+|---|---|---|
+| **`lumamap-portable/`** | **Active Project** | Self-contained, portable projection mapping studio with Python FastAPI backend and HTML5/Canvas/WebGL front-end. |
+| ├── `server.py` | Backend | FastAPI server, WebSocket hub (`/ws`), local media library manager (`/api/media`), Emby bridge, and `yt-dlp` stream resolver. |
+| ├── `static/index.html` | Front-end | Unified Studio Split View, Projector Window (`?mode=projector`), and Phone Remote (`?mode=remote`). |
+| ├── `cache/` | Cache | Pre-cached seamless HD VJ loops and stream artifacts. |
+| ├── `media/` | Storage | User-uploaded local videos, GIFs, and images. |
+| ├── `run.sh` / `run.bat` | Launchers | One-click startup scripts for Linux/macOS and Windows. |
+| **`lumamap_studio_v2.html`** | **Standalone Dist** | Single-file zero-install edition of LumaMap Studio. Must stay in sync with `static/index.html`. |
+| **`control-panel/`** | **Legacy Reference** | Node/React/WebGL2 reimplementation of VPT8. Kept intact as an algorithmic, shader, and testing reference. |
+| **`docs/`** | **Documentation** | Historical parity audits, specifications, screenshots, and roadmap. |
+| **`vpt8-source-archive`** (git tag) | **Archived** | Original Cycling '74 Max/MSP source code (preserved in git history at tag `vpt8-source-archive`). |
 
-- Server tests: `cd server && node --test`
-- Cast-receiver tests: `cd cast-receiver && node --test`
-- Panel typecheck + lint: `cd panel && npx tsc --noEmit && npx eslint .`
-- End-to-end: `cd e2e && npx playwright test` (see `control-panel/README.md` for details).
+---
 
-## Historical reference: the archived VPT8 Max/MSP source
+## 🧭 Where AI Agents Should Work
 
-The rest of this file describes the original VPT8 Max/MSP/Jitter project as it existed **before**
-the 2026-07-12 removal. It no longer describes anything in this working tree, but it's kept here to
-document what's retrievable from the `vpt8-source-archive` tag and to explain why `control-panel/`
-is shaped the way it is. For a full reverse-engineered, file-by-file map, see
-`docs/architecture/00-overview.md` and `docs/TECH_DEBT.md`.
+### Modifying LumaMap Studio
+- **Front-End & UI**: Edit [`lumamap-portable/static/index.html`](lumamap-portable/static/index.html).
+  - Contains the canvas rendering loop, polygon mask editor, perspective warping equations, phone remote UI, and YouTube/Emby integrations.
+- **Backend & Media API**: Edit [`lumamap-portable/server.py`](lumamap-portable/server.py).
+  - Handles `/ws` synchronization, chunked media streaming, YouTube stream extraction, and scene persistence.
+- **Always Keep Distributions Synced**:
+  - Whenever you modify `lumamap-portable/static/index.html`, copy it to `lumamap_studio_v2.html`:
+    ```bash
+    cp lumamap-portable/static/index.html lumamap_studio_v2.html
+    ```
+  - And update the release archive:
+    ```bash
+    cd lumamap-portable && zip -q -r ../lumamap_portable_v2.zip server.py requirements.txt README.md static/ cache/
+    ```
 
-VPT is built entirely in **Cycling '74 Max/MSP/Jitter** — a visual, dataflow programming
-environment, not a conventional text-based codebase. There is no compiler, package manager, linter,
-or test suite for the project as a whole. "Running" or "editing" it means opening it in the Max
-application (with the Jitter GL extensions), not executing a shell command.
+---
 
-- Requires **Cycling '74 Max** (with Jitter) installed to open, edit, or run.
-- The project file was `vpt8 source code/vpt8.maxproj`. Opening it in Max loads the whole project
-  and its search path.
-- The top-level ("toplevel") patchers, per `vpt8.maxproj`, were:
-  - `patchers/vpt7project.maxpat` — the main application patcher.
-  - `patchers/hapsource.maxpat` — HAP codec video source patcher.
-- `.maxpat` files are JSON internally and can be diffed/read as text, but they were normally
-  edited by opening them in the Max patcher GUI — hand-editing the JSON is error-prone (box IDs,
-  patchline connections, saved `pattrstorage` state, etc. all have to stay internally consistent).
-- There was no build step to "compile" the app; a Max standalone/collective would be produced via
-  Max's own File > Build Collective/Application.
+## 🚦 Roadmap & Next Feature Targets
 
-## Archived repository layout (tag `vpt8-source-archive`)
+When prompted to implement upcoming features, refer to these prioritized items:
 
-- `patchers/*.maxpat` — Max patcher files (the actual program graph: objects, subpatchers,
-  bpatchers, connections). ~49 patchers, one per major module/UI panel (mixer, layer engine, presets,
-  MIDI/OSC/serial control surfaces, LFOs, cue lists, edge-blending, etc.).
-- `code/*.js` — scripts run inside Max `[js]` objects. These use **Max's embedded JS engine and its
-  object model** (`this.patcher`, `outlet()`, `mgraphics`, `setoutletassist`, etc.), *not* Node.js —
-  there's no `require`/npm ecosystem here.
-- `shaders/*.jxs` — Jitter GL shader definitions (XML wrapping GLSL vertex/fragment source in
-  `<program>` CDATA blocks), used by `jit.gl.slab` objects for color correction, transitions, masking,
-  and layer mixing.
-  - `shaders/v001 Mixers/` — one `.jxs` + companion `.fp.glsl` pair per blend mode (multiply, screen,
-    overlay, dodge, burn, difference, etc.), used by the layer compositor.
-  - `shaders/shared/{arb,cg,glsl}/` — reusable shader includes referenced from `.jxs` files via
-    `<program source="...">` (e.g. `sh.passthru.xform.vp.glsl`).
-  - `shaders/shared/licenses/` — third-party shader license attributions (3Dlabs, LightworkDesign).
-    Keep these attached if shaders are reused elsewhere.
-- `data/*.json` — `pattrstorage` snapshot dumps (`gui.json`, `presets.json`, `sources.json`): slot-
-  indexed serialized UI/preset state written by Max's `pattrstorage` object. These are generated
-  data/state files, not hand-authored source — treat edits to them as data surgery, not coding.
-- `externals/*.mxo` — precompiled **Mac-only** Max external binaries bundled with the project:
-  Syphon client/server (GPU texture sharing), Art-Net/DMX (`imp.artnet.node`), plus small custom
-  logic externals (`o.route`, `Label`, `Ldiv`, `Lmult`). These are binaries, not buildable from
-  source in this repo; there are no Windows externals (`.mxe64`) present here even though VPT itself
-  ships for both platforms.
-- `media/` — app icons and the CC license image.
+1. **Audio-Reactive / Microphone Beat Pulse**:
+   - Add real-time Web Audio API `AudioContext` and `AnalyserNode` in `index.html`.
+   - Provide a 1-tap "React to Music (Mic)" toggle.
+   - Modulate surface brightness, scale/zoom, or procedural shader speeds based on low-frequency (bass) energy.
+2. **Built-in Text, Signage & Live Clock Overlay Source**:
+   - Add a 5th source tab to the surface inspector.
+   - Render customizable glowing neon text, scrolling marquees, or digital countdowns to an offscreen canvas and pipe as a surface texture.
+3. **Auto-Show / Ambient Scene Sequencer**:
+   - Add an auto-play timer in the Room Scenes drawer to cycle through saved scenes every $N$ minutes with smooth interpolation.
 
-## Architecture: the layer system
+---
 
-VPT's core concept is a stack of video **layers**, each independently sourced, processed, and
-composited. Understanding it requires reading across three files that stay in sync via a common
-"add/delete/startup" pattern, each instantiating a different **bpatcher** representation of the same
-logical layer:
+## 🧪 Validation & Testing Rules
 
-| Concern | Driver script | Bpatcher instantiated | Host patcher(s) |
-|---|---|---|---|
-| Video-processing engine per layer | `code/vlayer2.js` | `vlayer` (`patchers/vlayer.maxpat`) | `patchers/enginetab.maxpat` |
-| Per-layer GUI controls | `code/dummylayers02c.js` | `layergui` (`patchers/layergui.maxpat`) | `patchers/layersbank.maxpat` |
-| Per-layer tab/selector UI | `code/tabs.js` | `layertab` (`patchers/layertab.maxpat`) | `patchers/vpt7project.maxpat`, `patchers/activelayer.maxpat`, `patchers/controltabs.maxpat` |
+Before submitting or committing changes:
 
-All three follow the same lifecycle, driven from the top-level patcher:
-- `addLayer()` — dynamically creates one more bpatcher instance via `this.patcher.newdefault(...)`,
-  increments a layer count, and sends an init message out (`outlet(1, "send N..._init")`) so the new
-  layer's state gets seeded.
-- `startupLayers(n)` — recreates `n` layers at project load time (used to restore a saved session).
-- `deleteLayer()` — removes the most recently added instance.
-- `vlayer2.js` additionally tracks **layer order** (independent of layer identity) via a `layers[]`
-  array and `movelayer(layerid, newpos)` / `layerprint()`, so layers can be reordered in the stack
-  without recreating them.
+1. **JavaScript Syntax Check**:
+   Validate that `index.html` contains valid JavaScript:
+   ```bash
+   node -e '
+   const fs = require("fs");
+   const html = fs.readFileSync("lumamap-portable/static/index.html", "utf8");
+   const m = html.match(/<script>([\s\S]*?)<\/script>/g);
+   const script = m[m.length - 1].replace(/^<script>|<\/script>$/g, "");
+   new Function(script);
+   console.log("JS syntax check passed!");
+   '
+   ```
+2. **Python Server Check**:
+   Confirm `server.py` starts cleanly and passes syntax checks:
+   ```bash
+   python3 -m py_compile lumamap-portable/server.py
+   ```
+3. **Render Performance**:
+   Ensure 60fps rendering without memory leaks (clean up object URLs, disconnect inactive media players, and reuse canvas rendering contexts).
 
-When adding/modifying layer behavior, changes typically need to be mirrored across the engine
-(`vlayer`), the GUI bank (`layergui`), and the tab selector (`layertab`) to keep the three in sync.
+---
 
-## Architecture: masking & warping (`mgraphics` point editors)
+## 📜 Legacy Reference: `control-panel/`
 
-`code/pointmask01.js` and `code/pointgrid01b.js` implement interactive, draggable-point overlays
-using Max's `mgraphics` drawing API and a manual mouse-event state machine (`button_down`,
-`button_up`, `mouse_loc`, `bang` driven by `mouse.down`/`mouse.hit`). These back the masking and
-geometric-correction/projection-warping grid editors used in `patchers/pointmask.maxpat`,
-`patchers/gridcontroller.maxpat`, `patchers/controltabs.maxpat`, and `patchers/activelayer.maxpat`.
-`pointgrid01b.js` works on an NxN grid (`create_points(gridsize)`); `pointmask01.js` works on a fixed
-aspect-ratio point set. Both draw via `outlet(0, ...)` messages consumed by an `mgraphics` object and
-report point/hit info on outlet 1.
-
-## Architecture: shaders and compositing
-
-GL effects are implemented as Jitter shaders (`.jxs`) rather than JS/patcher logic:
-- Color correction: `cc.*.jxs` (brightness, contrast, saturation, alpha glue, colorspace conversion).
-- Transitions/mixing: `co.xfade.jxs`, `tr.edgeblend*.jxs`, and the full blend-mode set in
-  `shaders/v001 Mixers/`.
-- Distortion/geometry: `td.rota.jxs` (rotation), `tp.slide.jxs` (slide/pan), `cf.gaussian.2p.jxs`
-  (blur), `ab.spotmask_mod01.jxs` (spot masking).
-- Each `.jxs` declares its `<param>`s (bound to `vp`/`fp` programs) and its GLSL source either inline
-  in a `<program>` CDATA block or via `source="filename.glsl"` pointing into `shaders/shared/`.
-
-## Deep architecture reference
-
-The sections above are a high-level orientation. For a complete, file-by-file map of all 49
-patchers (grouped into 11 functional clusters: app shell, layer engine core, per-layer engine
-instance, layer select/masking/warping, layer GUI/mixing/clips, core video sources, secondary
-video sources, presets/cues, control surfaces, modulation, and scripting/shaders/data), see
-`docs/architecture/00-overview.md` and the per-cluster docs it links to. For a categorized
-inventory of technical debt (platform gaps, toolchain/version debt, closed-source dependencies,
-dead code, naming inconsistencies, architectural fragility, hardcoded limits, missing tests/CI,
-and licensing constraints) to weigh before any modernization work, see `docs/TECH_DEBT.md`.
+`control-panel/` was the previous Node/React reimplementation of VPT8. It is kept in the repository for reference.
+If working in `control-panel/`:
+- Server tests: `cd control-panel/server && node --test`
+- Panel typecheck: `cd control-panel/panel && npx tsc --noEmit && npx eslint .`
+- End-to-end: `cd control-panel/e2e && npx playwright test`

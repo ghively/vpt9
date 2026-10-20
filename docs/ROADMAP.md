@@ -5,7 +5,18 @@ remains. It supersedes the earlier `docs/ROADMAP.md` (written 2026-07-04, first 
 `docs/TECH_DEBT.md` and `docs/CONTROL_PANEL_SPEC_AUDIT.md` remain as closed historical audit
 records — this doc doesn't repeat their findings, it points to them.
 
-**Current status (2026-07-12):** the panel UI is a **"projection deck"** (dominant live-preview
+**Current status (2026-10-19):** **LumaMap Studio (`lumamap-portable/`)** is now the primary, active application in this repository. It achieves complete functional parity with real-world projection mapping needs, featuring a unified Split-View Studio, dedicated Projector Window, Wi-Fi Phone Remote with precision thumb-trackpad, 12 instant room templates, custom arbitrary polygon mask cutouts with invert/feather, local media library with playlist auto-advance, dual YouTube engines (iframe + background `yt-dlp` MP4 extraction), Emby media server integration, 7 GLSL procedural shaders, and live webcam capture.
+
+The Node/React/WebGL2 **`control-panel/`** codebase is now marked as **Legacy Reference** and kept intact as an architectural reference.
+
+### Active Roadmap Items (LumaMap Studio)
+1. **Audio-Reactive / Microphone Beat Pulse**: Real-time Web Audio API FFT analysis of room audio to pulse surface brightness, scale/zoom, or procedural shader speeds to room music.
+2. **Built-in Text, Signage & Live Clock Overlay Source**: 5th visual source generator for dynamic glowing neon text, scrolling marquees, and live digital clock/countdown timers.
+3. **Auto-Show / Ambient Scene Sequencer**: Hands-free scene sequencer that automatically cycles through saved Room Scenes every $N$ minutes with smooth morph transitions.
+
+---
+
+**Historical Status (2026-07-12):** the panel UI is a **"projection deck"** (dominant live-preview
 Stage with click-to-select and on-stage warp/mask handles, a contextual Warp·Mask·FX Inspector,
 compact LayerStack/SlotGrid rails, a Show drawer, a screen selector, mobile layout — see the
 2026-07-12 update near the bottom of this file and `control-panel/README.md` for the current,

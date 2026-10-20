@@ -1,4 +1,9 @@
-# VPT control panel — the browser-based VPT8 replacement
+> [!NOTE]
+> **Status: Legacy Reference**  
+> The primary, active projection mapping application in this repository is now **LumaMap Studio** located in [`lumamap-portable/`](../lumamap-portable/).  
+> This `control-panel/` directory is retained as an architectural, algorithmic, and testing reference.
+
+# VPT control panel — the browser-based VPT8 replacement (Legacy Reference)
 
 A browser-based, Docker-deployable replacement for the Max/MSP VPT8 application: it
 runs headless, projector outputs are fullscreen browsers, and warping/layer control

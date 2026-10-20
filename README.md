@@ -1,54 +1,109 @@
-# vpt9
+# README
 
-**vpt9** is a from-scratch, browser-based replacement for **VPT8** (VideoProjectionTool 8) — a free
-live video-projection/VJ application built by HC Gilje in Cycling '74 Max/MSP/Jitter and released in
-May 2018. VPT8 is discontinued and Max/MSP/Jitter-only; this repo reimplements it as a
-Node/WebSocket/WebGL2 web app, at full feature parity with the original, so no Max/MSP install is
-required. "vpt9" is this project's working name as VPT8's unofficial successor — it isn't a version
-string used anywhere in the code, just the repository's name.
+<p align="center">
+  <img src="docs/screenshots/lumamap_studio.png" alt="LumaMap Studio" width="850" />
+</p>
 
-What it does: real-time compositing of multiple video/camera/image layers, per-layer warp
-(corner-pin/mesh) and masking, cue-list/timer/LFO automation, bidirectional OSC and MIDI control, and
-casting a phone's YouTube video into a picture-in-picture layer over DIAL/SSDP (like a physical
-Chromecast).
+# LumaMap Studio (vpt9)
 
-## What's in this repository
+> **Simple, high-performance, and beautiful live projection mapping.**  
+> Map multiple 3D perspective-warped surfaces, polygon cutouts, and soft-edge blending onto walls, canvases, or physical structures — with real-time phone remote control over local Wi-Fi.
 
-- **`control-panel/`** — the actively developed application described above: a
-  Node/WebSocket state server with a cue-list/timer/LFO automation engine and an OSC
-  listener, a WebGL2 render client (one instance per physical screen), a React
-  operator panel, and a DIAL/SSDP receiver so a phone can "Cast" YouTube into it. No
-  Max/MSP required — runs via Docker or as plain Node/Vite processes. Start here:
-  - [`control-panel/README.md`](control-panel/README.md) — architecture, state shape,
-    WebSocket/OSC protocol, build & run instructions. *(developers)*
-  - [`control-panel/OPERATOR_GUIDE.md`](control-panel/OPERATOR_GUIDE.md) — how to run
-    an actual show from the panel once it's running. *(operators)*
+---
 
-- **The original VPT8 Max/MSP/Jitter source** that `control-panel/` replaces is **not** in this
-  working tree — it was archived and removed on 2026-07-12 once `control-panel/` reached full
-  parity with it. It's preserved in full in git history at tag `vpt8-source-archive`
-  (`git checkout vpt8-source-archive -- "vpt8 source code"` to retrieve it), including its own
-  license file, `VPT8-sourcecode-readme.rtf` (CC BY-NC-SA 3.0 Unported). See
-  [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) for how it was organized, and
-  [`docs/architecture/00-overview.md`](docs/architecture/00-overview.md) for a full
-  reverse-engineered map of it.
+## ⚡ Active Application: `lumamap-portable/`
 
-## Documentation map
+**LumaMap Studio** is the flagship application in this repository. It is a lightweight, zero-jargon projection mapping suite designed for ease of use, instant setup, and rock-solid live performance:
 
-| Doc | Audience | Covers |
+- **Interactive Visual Studio (`/`)**: Drag-and-drop 3D corner-pinning, real-time stage calibration, 12 instant room presets, and contextual inspector controls.
+- **Dedicated Projector Window (`/?mode=projector`)**: 100% chromeless, edge-to-edge hardware-accelerated canvas for your projector (`F` for true fullscreen).
+- **Wi-Fi Mobile Remote (`/?mode=remote`)**: Instant smartphone control with a precision thumb-trackpad, corner switcher, and scene recall.
+- **Rich Source Engine**:
+  - **📁 Local Media Library**: Native MP4, WebM, MOV, GIF, PNG, JPG, and WebP playback with playlist auto-advance.
+  - **▶️ YouTube Integration**: Dual-engine playback (instant iframe loops + clean background MP4 streaming via `yt-dlp`).
+  - **📺 Emby Media Server**: Connect directly to your Emby server or pull the currently playing movie in 1 tap.
+  - **✨ Procedural Shaders & Color**: 7 built-in 60fps GLSL shaders and architectural mood wash lighting.
+  - **📷 Live Camera / Capture Card**: Ultra-low latency webcam and USB HDMI capture card input.
+- **Geometric Warping & Cutouts**:
+  - 4-corner perspective warping with internal video pan/zoom/rotation.
+  - N-point arbitrary polygon mask cutouts with edge feathering and invert (hole-punch) modes.
+  - 4-edge independent soft-edge blending (linear / smoothstep) with gamma correction.
+- **Single-File Portability**: Runs either via Python (`server.py`) or as a standalone zero-install HTML5 file (`lumamap_studio_v2.html`).
+
+<p align="center">
+  <img src="docs/screenshots/lumamap_phone_remote.png" alt="LumaMap Phone Remote" width="320" />
+</p>
+
+---
+
+## 🚀 Quick Start
+
+### 1. Python Server (Recommended for Media Library, Emby & YouTube Caching)
+
+```bash
+# Clone the repository
+git clone https://github.com/ghively/vpt9.git
+cd vpt9/lumamap-portable
+
+# Install dependencies (FastAPI, Uvicorn, yt-dlp, qrcode, pillow)
+pip install -r requirements.txt
+
+# Run server
+python server.py
+# (On macOS/Linux: ./run.sh | On Windows: double-click run.bat)
+```
+
+Open **`http://localhost:8080`** in your browser.
+
+### 2. Standalone Zero-Install Mode
+Double-click **`lumamap_studio_v2.html`** in any web browser. No server, terminal, or dependencies required!
+
+---
+
+## 🗺️ Project Roadmap
+
+The core projection mapping engine is feature-complete. The following items are planned for future releases:
+
+- [ ] **1. Audio-Reactive / Microphone Beat Pulse**
+  - Real-time Web Audio API FFT analysis of room audio via microphone or line-in.
+  - Audio-reactive parameter modulation: pulse brightness, zoom scale, edge feather, or shader speed to the bass/beat of room music.
+- [ ] **2. Built-in Text, Signage & Live Clock Overlay Source**
+  - Dedicated 5th visual source generator for dynamic text rendering on any surface.
+  - Customizable fonts, neon glowing outlines, scrolling ticker marquees, and live digital clock / countdown timers.
+- [ ] **3. Auto-Show / Ambient Scene Sequencer**
+  - Hands-free playlist sequencer for saved Room Scenes.
+  - Timed automatic switching (every $N$ minutes) with configurable smooth morph/fade transitions between scenes.
+
+---
+
+## 🏛️ Repository Architecture & Status
+
+| Directory / Component | Status | Description |
 |---|---|---|
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Both | Why `control-panel/` exists, what's built, what's left |
-| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | Developers | The archived VPT8 Max/MSP source (tag `vpt8-source-archive`) — how it was organized |
-| [`docs/architecture/00-overview.md`](docs/architecture/00-overview.md) | Developers | Full module-by-module map of VPT8's 49 Max patchers |
-| [`docs/TECH_DEBT.md`](docs/TECH_DEBT.md) | Developers | Categorized technical debt in the original VPT8 source |
-| [`docs/CONTROL_PANEL_SPEC_AUDIT.md`](docs/CONTROL_PANEL_SPEC_AUDIT.md) | Developers | Closed spec-compliance audit of `control-panel/` |
-| [`docs/CONTROL_PANEL_CODE_QUALITY.md`](docs/CONTROL_PANEL_CODE_QUALITY.md) | Developers | Code-quality audit of `control-panel/`: error handling, data-integrity, and test/lint gaps, with reproduced bugs |
-| [`control-panel/README.md`](control-panel/README.md) | Developers | `control-panel/` architecture, protocol, build/run, verification log |
-| [`control-panel/OPERATOR_GUIDE.md`](control-panel/OPERATOR_GUIDE.md) | Operators | Running a show from the panel |
+| **`lumamap-portable/`** | **Active / Current** | Python FastAPI + WebSockets + WebGL/Canvas projection studio, phone remote, and media server. |
+| **`lumamap_studio_v2.html`** | **Active / Standalone** | Self-contained single-file HTML5 distribution of LumaMap Studio. |
+| **`control-panel/`** | **Legacy Reference** | Node/React/WebGL2 reimplementation of VPT8. Maintained as an architectural and algorithmic reference. |
+| **`docs/`** | **Reference & Specs** | Documentation, parity audits, and historical specifications. |
+| **`vpt8-source-archive`** (git tag) | **Archived** | Original Cycling '74 Max/MSP source code (preserved at tag `vpt8-source-archive`). |
 
-## License
+---
 
-The archived VPT8 Max/MSP source (git tag `vpt8-source-archive`) is licensed CC BY-NC-SA 3.0
-Unported — see `VPT8-sourcecode-readme.rtf` within that tag. Everything else in this repository,
-including `control-panel/`, is MIT-licensed — see [`LICENSE`](LICENSE) and
-[`control-panel/LICENSE`](control-panel/LICENSE).
+## 🤖 AI Development & Contributor Guide
+
+If you are an AI assistant or human developer working on this codebase:
+
+- **Primary Working Directory**: [`lumamap-portable/`](lumamap-portable/)
+  - Main application logic & UI: [`lumamap-portable/static/index.html`](lumamap-portable/static/index.html)
+  - Backend server & WebSocket sync: [`lumamap-portable/server.py`](lumamap-portable/server.py)
+  - Standalone release bundle: [`lumamap_studio_v2.html`](lumamap_studio_v2.html)
+- **Guidelines**:
+  - Always keep `lumamap-portable/static/index.html` and `lumamap_studio_v2.html` synchronized when updating front-end capabilities.
+  - Follow [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md) for repository rules, AI conventions, and test commands.
+  - Keep changes performant: ensure 60fps rendering in the WebGL and Canvas compositors.
+
+---
+
+## 📄 License
+
+- LumaMap Studio and `control-panel/` are licensed under the **MIT License** — see [`LICENSE`](LICENSE).
+- The archived VPT8 Max/MSP historical source (git tag `vpt8-source-archive`) is licensed CC BY-NC-SA 3.0 Unported.
