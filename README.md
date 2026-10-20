@@ -73,6 +73,11 @@ The core projection mapping engine is feature-complete. The following items are 
 - [ ] **3. Auto-Show / Ambient Scene Sequencer**
   - Hands-free playlist sequencer for saved Room Scenes.
   - Timed automatic switching (every $N$ minutes) with configurable smooth morph/fade transitions between scenes.
+- [ ] **4. Prompt-Based "Vibez" (AI Room Theme Generator)**
+  - Type a text prompt (e.g. *"cyberpunk ramen bar"*, *"cozy rainy autumn cabin"*, *"deep space nebula meditation"*) and let AI generate or select matching shaders, mood color washes, video loops, and surface configs to instantly transform the entire room's vibe.
+- [ ] **5. AI Auto-Room Mapping via Camera / Webcam**
+  - Computer-vision & AI edge/corner detection via webcam or phone camera.
+  - Automatically identifies physical picture frames, walls, doorways, and obstacles in the projection field and snaps calibrated polygon surfaces onto them with one tap.
 
 ---
 

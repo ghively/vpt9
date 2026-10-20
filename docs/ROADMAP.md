@@ -13,6 +13,8 @@ The Node/React/WebGL2 **`control-panel/`** codebase is now marked as **Legacy Re
 1. **Audio-Reactive / Microphone Beat Pulse**: Real-time Web Audio API FFT analysis of room audio to pulse surface brightness, scale/zoom, or procedural shader speeds to room music.
 2. **Built-in Text, Signage & Live Clock Overlay Source**: 5th visual source generator for dynamic glowing neon text, scrolling marquees, and live digital clock/countdown timers.
 3. **Auto-Show / Ambient Scene Sequencer**: Hands-free scene sequencer that automatically cycles through saved Room Scenes every $N$ minutes with smooth morph transitions.
+4. **Prompt-Based "Vibez" (AI Room Theme Generator)**: Natural language prompt-driven scene composition (e.g., *"cyberpunk ramen shop"*, *"cozy autumn fireplace"*, *"deep space chillout"*) to automatically configure matching shaders, mood washes, loops, and surface setups.
+5. **AI Auto-Room Mapping via Camera / Webcam**: Computer-vision / AI corner and edge detection via webcam or phone camera to automatically locate picture frames, walls, and architectural features and snap calibrated polygon projection surfaces directly onto them.
 
 ---
 

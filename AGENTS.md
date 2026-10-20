@@ -57,6 +57,10 @@ When prompted to implement upcoming features, refer to these prioritized items:
    - Render customizable glowing neon text, scrolling marquees, or digital countdowns to an offscreen canvas and pipe as a surface texture.
 3. **Auto-Show / Ambient Scene Sequencer**:
    - Add an auto-play timer in the Room Scenes drawer to cycle through saved scenes every $N$ minutes with smooth interpolation.
+4. **Prompt-Based "Vibez" (AI Room Theme Generator)**:
+   - Provide prompt-driven scene composition where a user prompt (e.g. "cyberpunk alley", "lo-fi study", "mystic forest") automatically configures harmonious shader colors, loops, and surface layouts.
+5. **AI Auto-Room Mapping via Camera / Webcam**:
+   - Camera-based automatic edge/corner detection to detect walls, framed art, and doors, auto-generating aligned polygon surfaces.
 
 ---
 

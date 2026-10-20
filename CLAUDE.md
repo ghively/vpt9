@@ -52,3 +52,5 @@ The primary active application in this repository is **LumaMap Studio** located 
 1. **Audio-Reactive Mode**: Web Audio API FFT analysis of room mic to pulse surface brightness/zoom/feathering.
 2. **Built-in Text / Clock Source**: 5th source tab for live glowing signage, ticker marquees, and digital clocks.
 3. **Auto-Show / Scene Sequencer**: Automated scene switcher that morphs between saved looks on a timer.
+4. **Prompt-Based "Vibez" (AI Room Theme Generator)**: Natural language prompt-to-scene generator for ambient shaders, mood wash colors, and video playlists.
+5. **AI Auto-Room Mapping**: Webcam/camera edge-detection to automatically find frames, walls, and corners and map surfaces onto them.
