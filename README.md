@@ -1,5 +1,3 @@
-# README
-
 <p align="center">
   <img src="docs/screenshots/lumamap_studio.png" alt="LumaMap Studio" width="850" />
 </p>
